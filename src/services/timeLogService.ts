@@ -31,6 +31,29 @@ export async function logSortieGarage(itemId: string, garageId: string) {
     .eq('id', log.id);
 }
 
+export async function logJobTemporaire(params: {
+  typeJob: string;
+  titre: string;
+  garageId: string;
+  slotId: string;
+  heureEntree: string;
+}) {
+  const sortie = new Date();
+  const dureeMinutes = Math.round(
+    (sortie.getTime() - new Date(params.heureEntree).getTime()) / 60000
+  );
+  return supabase.from('prod_time_logs').insert({
+    item_id: null,
+    type_job: params.typeJob,
+    titre: params.titre,
+    garage_id: params.garageId,
+    slot_id: params.slotId,
+    heure_entree: params.heureEntree,
+    heure_sortie: sortie.toISOString(),
+    duree_minutes: dureeMinutes,
+  });
+}
+
 export async function getStatsByGarage() {
   const { data } = await supabase
     .from('prod_time_logs')

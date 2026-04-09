@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
 
 function fromDB(row: any): VehiculeInventaire {
   return {
@@ -22,6 +22,9 @@ function fromDB(row: any): VehiculeInventaire {
     descriptionTravail: row.description_travail ?? undefined,
     descriptionTravaux: row.description_travaux ?? undefined,
     photoUrl: row.photo_url ?? undefined,
+    etapesFaites: row.etapes_faites ?? [],
+    aUnReservoir: row.a_un_reservoir ?? false,
+    reservoirId: row.reservoir_id ?? undefined,
   };
 }
 
@@ -46,6 +49,9 @@ function toDB(v: VehiculeInventaire): any {
     description_travail: v.descriptionTravail ?? null,
     description_travaux: v.descriptionTravaux ?? null,
     photo_url: v.photoUrl ?? null,
+    etapes_faites: v.etapesFaites ?? [],
+    a_un_reservoir: v.aUnReservoir ?? false,
+    reservoir_id: v.reservoirId ?? null,
   };
 }
 
@@ -107,6 +113,30 @@ export const inventaireService = {
         photo_url: photoUrl,
         updated_at: new Date().toISOString(),
       })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async mettreAJourType(id: string, type: 'eau' | 'detail'): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ type, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async mettreAJourEtapes(id: string, etapesFaites: EtapeFaite[]): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ etapes_faites: etapesFaites, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async mettreAJourReservoir(id: string, aUnReservoir: boolean, reservoirId: string | null): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ a_un_reservoir: aUnReservoir, reservoir_id: reservoirId, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },

@@ -84,6 +84,16 @@ export const itemsService = {
   },
 
   async ajouter(item: Item): Promise<void> {
+    if (item.inventaireId) {
+      const { data: existants } = await supabase
+        .from('prod_items')
+        .select('id, etat')
+        .eq('inventaire_id', item.inventaireId)
+        .neq('etat', 'termine');
+      if (existants && existants.length > 0) {
+        throw new Error('Ce véhicule est déjà en production');
+      }
+    }
     const { error } = await supabase
       .from('prod_items')
       .insert(toDB(item));
@@ -92,6 +102,7 @@ export const itemsService = {
 
   async mettreAJour(id: string, patch: Partial<Item>): Promise<void> {
     const partiel: any = {};
+    if (patch.type !== undefined)              partiel.type = patch.type;
     if (patch.etat !== undefined)              partiel.etat = patch.etat;
     if (patch.slotId !== undefined)            partiel.slot_id = patch.slotId ?? null;
     if (patch.stationActuelle !== undefined)   partiel.station_actuelle = patch.stationActuelle ?? null;
