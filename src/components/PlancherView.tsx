@@ -70,12 +70,14 @@ export function PlancherView() {
     } else if (item) {
       setModalState({ type: 'occupe', item, slot, position });
     } else if (!slot.futur) {
-  setModalState({ type: 'assign', slot, position });
-}
+      setModalState({ type: 'assign', slot, position });
+    }
   };
 
   const handleWaitingItemClick = (e: React.MouseEvent, item: Item, garageId: string) => {
     e.stopPropagation();
+    // Si l'item est déjà dans un slot, ne rien faire
+    if (item.slotId) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
     const station = STATIONS.find((s) => s.id === garageId);
@@ -162,7 +164,6 @@ export function PlancherView() {
 
       <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '3', gridRow: '1' }} />
 
-      {/* ── HORLOGE ── */}
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
@@ -175,18 +176,18 @@ export function PlancherView() {
       </div>
 
       {modalState?.type === 'assign' && (
-      <SlotAssignModal
-  slot={modalState.slot}
-  enAttente={enAttente}
-  onAssign={assignerSlot}
-  onClose={() => setModalState(null)}
-  position={modalState.position}
-  preSelectedItem={modalState.preSelectedItem}
-  onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
-  itemOccupant={slotMap[modalState.slot.id]}
-  onRetirerOccupant={retirerVersAttente}
-  onTerminerOccupant={terminerItem}
-/>
+        <SlotAssignModal
+          slot={modalState.slot}
+          enAttente={enAttente}
+          onAssign={assignerSlot}
+          onClose={() => setModalState(null)}
+          position={modalState.position}
+          preSelectedItem={modalState.preSelectedItem}
+          onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
+          itemOccupant={slotMap[modalState.slot.id]}
+          onRetirerOccupant={retirerVersAttente}
+          onTerminerOccupant={terminerItem}
+        />
       )}
 
       {modalState?.type === 'occupe' && (
@@ -244,8 +245,6 @@ export function PlancherView() {
   );
 }
 
-// ── ModalJobType ──────────────────────────────────────────────
-
 function ModalJobType({ slot, position, onSelect, onClose }: {
   slot: Slot;
   position: { x: number; y: number };
@@ -298,8 +297,6 @@ function ModalJobType({ slot, position, onSelect, onClose }: {
     </div>
   );
 }
-
-// ── ModalJobTitre ─────────────────────────────────────────────
 
 function ModalJobTitre({ slot, typeJob, position, onConfirm, onClose }: {
   slot: Slot;
@@ -365,8 +362,6 @@ function ModalJobTitre({ slot, typeJob, position, onConfirm, onClose }: {
   );
 }
 
-// ── ModalJobOccupe ────────────────────────────────────────────
-
 function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
   job: JobTemporaire;
   slot: Slot;
@@ -428,8 +423,6 @@ function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
   );
 }
 
-// ── HorlogeWidget ─────────────────────────────────────────────
-
 function HorlogeWidget() {
   const [now, setNow] = useState(new Date());
 
@@ -478,8 +471,6 @@ function HorlogeWidget() {
     </div>
   );
 }
-
-// ── StationBlock ──────────────────────────────────────────────
 
 interface StationBlockProps {
   station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
@@ -572,16 +563,22 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                     background: `${couleur}18`,
                     border: `1px solid ${couleur}55`,
                     borderRadius: 4, padding: '3px 7px',
-                    cursor: 'pointer',
+                    cursor: item.slotId ? 'default' : 'pointer',
                     fontSize: 'clamp(9px, 0.9vw, 11px)',
                     fontFamily: 'monospace', color: couleur, fontWeight: 700,
                     transition: 'transform 0.15s, background 0.15s',
+                    opacity: item.slotId ? 0.5 : 1,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}25`; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}18`; }}
+                  onMouseEnter={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}25`; } }}
+                  onMouseLeave={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}18`; } }}
                 >
                   {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(10px, 1vw, 12px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
                   <span>#{item.numero}</span>
+                  {item.slotId && (
+                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#dbeafe', color: '#1e40af', padding: '1px 3px', borderRadius: 2 }}>
+                      SLOT
+                    </span>
+                  )}
                   {item.urgence && (
                     <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 3px', borderRadius: 2 }}>
                       URG
@@ -606,8 +603,6 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     </div>
   );
 }
-
-// ── SlotCardSimple ────────────────────────────────────────────
 
 interface SlotCardSimpleProps {
   slot: Slot;
@@ -712,14 +707,14 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
             {item.label.split(' ').slice(0, 3).join(' ')}
           </span>
           {item.type === 'eau' && (
-  <div style={{
-    fontSize: 'clamp(7px, 0.7vw, 9px)', fontWeight: 700,
-    color: (item as any).aUnReservoir ? '#22c55e' : '#f59e0b',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-  }}>
-    {(item as any).aUnReservoir ? '💧 TANK' : '⚠️ SANS TANK'}
-  </div>
-)}
+            <div style={{
+              fontSize: 'clamp(7px, 0.7vw, 9px)', fontWeight: 700,
+              color: (item as any).aUnReservoir ? '#22c55e' : '#f59e0b',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              {(item as any).aUnReservoir ? '💧 TANK' : '⚠️ SANS TANK'}
+            </div>
+          )}
           {item.urgence && (
             <div style={{ fontSize: 'clamp(7px, 0.7vw, 9px)', color: '#ef4444', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               ⚡ URGENT
