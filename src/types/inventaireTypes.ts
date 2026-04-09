@@ -1,5 +1,11 @@
 export type StatutInventaire = 'disponible' | 'en-production' | 'archive';
 
+export interface EtapeFaite {
+  stationId: string;
+  fait: boolean;
+  date: string;
+}
+
 export interface VehiculeInventaire {
   id: string;
   statut: StatutInventaire;
@@ -19,7 +25,10 @@ export interface VehiculeInventaire {
   vehicule?: string;
   descriptionTravail?: string;
   descriptionTravaux?: string;
-  photoUrl?: string;  // ← AJOUT
+  photoUrl?: string;
   clientId?: string;
   email?: string;
+  etapesFaites?: EtapeFaite[];
+  aUnReservoir?: boolean;
+  reservoirId?: string;
 }
