@@ -10,8 +10,9 @@ import { VueCamionsDetail } from './components/VueCamionsDetail';
 import { VueInventaire } from './components/VueInventaire';
 import { VueArchive } from './components/VueArchive';
 import { VueClients } from './components/VueClients';
+import { VueReservoirs } from './components/VueReservoirs';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'inventaire' | 'baseclients' | 'archive';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'inventaire' | 'reservoirs' | 'baseclients' | 'archive';
 
 export default function App() {
   const { profile, loading } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
         {currentTab === 'clients'     && <VueClientsExternes />}
         {currentTab === 'detail'      && <VueCamionsDetail />}
         {currentTab === 'inventaire'  && <VueInventaire />}
+        {currentTab === 'reservoirs'  && <VueReservoirs />}
         {currentTab === 'baseclients' && <VueClients />}
         {currentTab === 'archive'     && <VueArchive />}
       </div>
