@@ -102,16 +102,17 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
 
-  const terminerItem = async (itemId: string) => {
-    const patch = {
-      etat: 'termine' as EtatItem,
-      slotId: undefined,
-      dernierSlotId: undefined,
-      dernierGarageId: undefined,
-    };
-    await itemsService.mettreAJour(itemId, patch);
-    setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+ const terminerItem = async (itemId: string) => {
+  const patch = {
+    etat: 'termine' as EtatItem,
+    slotId: undefined,
+    dernierSlotId: undefined,
+    dernierGarageId: undefined,
+    dateArchive: new Date().toISOString(),
   };
+  await itemsService.mettreAJour(itemId, patch);
+  setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+};
 
   const updateStationStatus = async (
     itemId: string,
