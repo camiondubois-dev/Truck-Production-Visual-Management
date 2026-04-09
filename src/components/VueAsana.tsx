@@ -10,6 +10,7 @@ import { photoService } from '../services/photoService';
 import { inventaireService } from '../services/inventaireService';
 import type { Item, TypeItem, Document, EtatCommercial } from '../types/item.types';
 import { useClients } from '../contexts/ClientContext';
+
 interface StationConfig {
   id: string;
   label: string;
@@ -173,29 +174,29 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
         />
       )}
 
-   {showModal && (
-  <CreateWizardModal
-    initialType={type}
-    onClose={() => setShowModal(false)}
-    onCreate={(item) => {
-      const typeVue = type;
-      const typeItem = item.type;
-      if ((typeVue === 'eau' && typeItem === 'detail') || (typeVue === 'detail' && typeItem === 'eau')) {
-        const destLabel = typeVue === 'eau' ? 'eau' : 'détail';
-        const srcLabel = typeVue === 'eau' ? 'détail' : 'eau';
-        const confirme = window.confirm(`Ce camion est destiné à ${srcLabel}. Voulez-vous changer sa destination pour ${destLabel}?`);
-        if (confirme) {
-          ajouterItem({ ...item, type: typeVue });
-        } else {
-          ajouterItem(item);
-        }
-      } else {
-        ajouterItem(item);
-      }
-      setShowModal(false);
-    }}
-  />
-)}
+      {showModal && (
+        <CreateWizardModal
+          initialType={type}
+          onClose={() => setShowModal(false)}
+          onCreate={(item) => {
+            const typeVue = type;
+            const typeItem = item.type;
+            if ((typeVue === 'eau' && typeItem === 'detail') || (typeVue === 'detail' && typeItem === 'eau')) {
+              const destLabel = typeVue === 'eau' ? 'eau' : 'détail';
+              const srcLabel = typeVue === 'eau' ? 'détail' : 'eau';
+              const confirme = window.confirm(`Ce camion est destiné à ${srcLabel}. Voulez-vous changer sa destination pour ${destLabel}?`);
+              if (confirme) {
+                ajouterItem({ ...item, type: typeVue });
+              } else {
+                ajouterItem(item);
+              }
+            } else {
+              ajouterItem(item);
+            }
+            setShowModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -277,23 +278,28 @@ function LigneItem({ item, stations, colonnesInfo, selected, onClick }: LigneIte
 function ColonneValeur({ item, colKey }: { item: Item; colKey: string }) {
   switch (colKey) {
     case 'numero':
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>#{item.numero}</span>
-      {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
-        <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
-      )}
-      {item.type === 'eau' && (
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content',
-          background: (item as any).aUnReservoir ? '#dcfce7' : '#fff7ed',
-          color: (item as any).aUnReservoir ? '#166534' : '#c2410c',
-        }}>
-          {(item as any).aUnReservoir ? '💧 Réservoir' : '⚠️ Sans réservoir'}
-        </span>
-      )}
-    </div>
-  );
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>#{item.numero}</span>
+          {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
+            <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
+          )}
+          {item.dateLivraisonPlanifiee && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content', background: '#eff6ff', color: '#1d4ed8' }}>
+              📅 {new Date(item.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}
+            </span>
+          )}
+          {item.type === 'eau' && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content',
+              background: (item as any).aUnReservoir ? '#dcfce7' : '#fff7ed',
+              color: (item as any).aUnReservoir ? '#166534' : '#c2410c',
+            }}>
+              {(item as any).aUnReservoir ? '💧 Réservoir' : '⚠️ Sans réservoir'}
+            </span>
+          )}
+        </div>
+      );
     case 'annee':   return <span style={{ color: '#6b7280' }}>{item.annee}</span>;
     case 'marque':  return <span style={{ fontWeight: 600 }}>{item.marque}</span>;
     case 'modele':  return <span style={{ color: '#6b7280' }}>{item.modele}</span>;
@@ -404,8 +410,6 @@ function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onCl
   );
 }
 
-// ── PanneauDetail ─────────────────────────────────────────────
-
 function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSupprimer }: {
   item: Item; stations: StationConfig[];
   onClose: () => void;
@@ -422,9 +426,9 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
   const { marquerDisponible, mettreAJourPhotoInventaire } = useInventaire();
   const { profile: session } = useAuth();
   const { clients } = useClients();
-const { items: tousLesItems } = useGarage();
-const clientLie = item.clientId ? clients.find(c => c.id === item.clientId) : null;
-const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.clientId && i.id !== item.id) : [];
+  const { items: tousLesItems } = useGarage();
+  const clientLie = item.clientId ? clients.find(c => c.id === item.clientId) : null;
+  const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.clientId && i.id !== item.id) : [];
   const typeColor = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
   const isGestion = session?.role === 'gestion';
 
@@ -450,7 +454,6 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
     onClose();
   };
 
-  // ── PHOTO ────────────────────────────────────────────────────
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fichier = e.target.files?.[0];
     if (!fichier) return;
@@ -460,10 +463,7 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
       if (item.photoUrl) await photoService.supprimerPhoto(item.photoUrl);
       const url = await photoService.uploaderPhoto(fichier, 'items');
       await mettreAJourItem(item.id, { photoUrl: url });
-      // Synchroniser vers l'inventaire si lié
-      if (item.inventaireId) {
-        await mettreAJourPhotoInventaire(item.inventaireId, url);
-      }
+      if (item.inventaireId) await mettreAJourPhotoInventaire(item.inventaireId, url);
     } catch (err) {
       console.error('Erreur upload photo:', err);
       alert("Erreur lors de l'upload de la photo");
@@ -477,10 +477,7 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
     if (!item.photoUrl) return;
     await photoService.supprimerPhoto(item.photoUrl);
     await mettreAJourItem(item.id, { photoUrl: undefined });
-    // Synchroniser suppression vers l'inventaire
-    if (item.inventaireId) {
-      await mettreAJourPhotoInventaire(item.inventaireId, null);
-    }
+    if (item.inventaireId) await mettreAJourPhotoInventaire(item.inventaireId, null);
   };
 
   return (
@@ -520,7 +517,7 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
             </div>
           </div>
 
-          {/* ── PHOTO DU CAMION ── */}
+          {/* Photo */}
           <div style={{ marginBottom: 20 }}>
             {item.photoUrl ? (
               <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
@@ -591,10 +588,23 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
                 ))}
               </div>
               {(etatCommercial === 'reserve' || etatCommercial === 'vendu') && (
-                <input type="text" value={item.clientAcheteur ?? ''} onChange={e => changerClientAcheteur(e.target.value)}
-                  placeholder="Nom du client (optionnel)"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input type="text" value={item.clientAcheteur ?? ''} onChange={e => changerClientAcheteur(e.target.value)}
+                    placeholder="Nom du client (optionnel)"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
+                      📅 Date de livraison planifiée
+                    </label>
+                    <input
+                      type="date"
+                      value={item.dateLivraisonPlanifiee ?? ''}
+                      onChange={e => mettreAJourItem(item.id, { dateLivraisonPlanifiee: e.target.value || undefined })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -643,7 +653,16 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
                                 setPopupStation(stationId);
                               } else if (val === 'termine') {
                                 onStationStatusChange(item.id, stationId, 'termine');
-                                retirerVersAttente(item.id);
+                                if (stationId === 'livraison') {
+                                  mettreAJourItem(item.id, {
+                                    dateLivraisonReelle: new Date().toISOString(),
+                                    dateArchive: new Date().toISOString(),
+                                  });
+                                  archiverItem(item.id);
+                                  onClose();
+                                } else {
+                                  retirerVersAttente(item.id);
+                                }
                               } else {
                                 onStationStatusChange(item.id, stationId, val);
                               }
@@ -662,6 +681,19 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
                         );
                       })}
                     </div>
+                    {stationId === 'livraison' && (
+                      <div style={{ marginTop: 8 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
+                          📅 Date de livraison planifiée
+                        </label>
+                        <input
+                          type="date"
+                          value={item.dateLivraisonPlanifiee ?? ''}
+                          onChange={e => mettreAJourItem(item.id, { dateLivraisonPlanifiee: e.target.value || undefined })}
+                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -681,61 +713,57 @@ const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.
               {item.stationActuelle && <div><span style={{ fontWeight: 600 }}>Station actuelle:</span> {item.stationActuelle}</div>}
             </div>
           </div>
-{/* ── FICHE CLIENT ── */}
-{clientLie && (
-  <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-    <div style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-      👤 Fiche client
-    </div>
-    <div style={{ fontSize: 13, color: '#374151', lineHeight: 2 }}>
-      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{clientLie.nom}</div>
-      {clientLie.telephone && <div>📞 {clientLie.telephone}</div>}
-      {clientLie.email     && <div>✉️ {clientLie.email}</div>}
-      {clientLie.adresse   && <div>📍 {clientLie.adresse}</div>}
-    </div>
 
-    {jobsClient.length > 0 && (
-      <div style={{ marginTop: 12, borderTop: '1px solid #bae6fd', paddingTop: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 8 }}>
-          Historique — {jobsClient.length} job{jobsClient.length > 1 ? 's' : ''} antérieur{jobsClient.length > 1 ? 's' : ''}
-        </div>
-        {jobsClient.map(j => {
-          const etatCfg = {
-            'en-attente': { bg: '#fef3c7', color: '#92400e', label: 'En attente' },
-            'en-slot':    { bg: '#dbeafe', color: '#1e40af', label: 'En slot' },
-            'termine':    { bg: '#dcfce7', color: '#166534', label: 'Terminé' },
-          }[j.etat] || { bg: '#f3f4f6', color: '#374151', label: j.etat };
-          return (
-            <div key={j.id} style={{
-              padding: '8px 10px', borderRadius: 6, marginBottom: 6,
-              background: 'white', border: '1px solid #e0f2fe',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  #{j.numero} — {j.descriptionTravail ?? j.label}
-                </div>
-                <div style={{ fontSize: 11, color: '#6b7280' }}>
-                  {new Date(j.dateCreation).toLocaleDateString('fr-CA')}
-                  {j.vehicule && ` · ${j.vehicule}`}
-                </div>
+          {/* Fiche client */}
+          {clientLie && (
+            <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                👤 Fiche client
               </div>
-              <span style={{ fontSize: 10, background: etatCfg.bg, color: etatCfg.color, padding: '2px 8px', borderRadius: 10, fontWeight: 700, flexShrink: 0 }}>
-                {etatCfg.label}
-              </span>
+              <div style={{ fontSize: 13, color: '#374151', lineHeight: 2 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{clientLie.nom}</div>
+                {clientLie.telephone && <div>📞 {clientLie.telephone}</div>}
+                {clientLie.email     && <div>✉️ {clientLie.email}</div>}
+                {clientLie.adresse   && <div>📍 {clientLie.adresse}</div>}
+              </div>
+              {jobsClient.length > 0 && (
+                <div style={{ marginTop: 12, borderTop: '1px solid #bae6fd', paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 8 }}>
+                    Historique — {jobsClient.length} job{jobsClient.length > 1 ? 's' : ''} antérieur{jobsClient.length > 1 ? 's' : ''}
+                  </div>
+                  {jobsClient.map(j => {
+                    const etatCfg = {
+                      'en-attente': { bg: '#fef3c7', color: '#92400e', label: 'En attente' },
+                      'en-slot':    { bg: '#dbeafe', color: '#1e40af', label: 'En slot' },
+                      'termine':    { bg: '#dcfce7', color: '#166534', label: 'Terminé' },
+                    }[j.etat] || { bg: '#f3f4f6', color: '#374151', label: j.etat };
+                    return (
+                      <div key={j.id} style={{ padding: '8px 10px', borderRadius: 6, marginBottom: 6, background: 'white', border: '1px solid #e0f2fe', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            #{j.numero} — {j.descriptionTravail ?? j.label}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>
+                            {new Date(j.dateCreation).toLocaleDateString('fr-CA')}
+                            {j.vehicule && ` · ${j.vehicule}`}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 10, background: etatCfg.bg, color: etatCfg.color, padding: '2px 8px', borderRadius: 10, fontWeight: 700, flexShrink: 0 }}>
+                          {etatCfg.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {jobsClient.length === 0 && (
+                <div style={{ marginTop: 10, fontSize: 11, color: '#0369a1', fontStyle: 'italic' }}>
+                  Premier job pour ce client
+                </div>
+              )}
             </div>
-          );
-        })}
-      </div>
-    )}
+          )}
 
-    {jobsClient.length === 0 && (
-      <div style={{ marginTop: 10, fontSize: 11, color: '#0369a1', fontStyle: 'italic' }}>
-        Premier job pour ce client
-      </div>
-    )}
-  </div>
-)}
           {/* Notes */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Notes</label>
