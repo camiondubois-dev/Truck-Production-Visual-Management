@@ -1,0 +1,350 @@
+import type { Station, SubTask, Truck } from '../types/progression.types';
+
+export const STATIONS: Station[] = [
+  { id: 'evaluation', label: 'À évaluer', labelCourt: 'Éval.', color: '#64748b', ordre: 0 },
+  { id: 'soudure-generale', label: 'Soudure générale', labelCourt: 'Soudure G.', color: '#f97316', ordre: 1 },
+  { id: 'sous-traitants', label: 'Sous-traitants', labelCourt: 'S-Trait.', color: '#a855f7', ordre: 2 },
+  { id: 'mecanique-moteur', label: 'Mécanique moteur', labelCourt: 'Méc. Mot.', color: '#3b82f6', ordre: 3 },
+  { id: 'mecanique-generale', label: 'Mécanique générale', labelCourt: 'Méc. Gén.', color: '#3b82f6', ordre: 4 },
+  { id: 'soudure-eau', label: 'Soudure camions à eau', labelCourt: 'Soudure Eau', color: '#f97316', ordre: 5 },
+  { id: 'peinture', label: 'Peinture', labelCourt: 'Peinture', color: '#6b7280', ordre: 6 },
+  { id: 'mecanique-electrique', label: 'Mécanique électrique', labelCourt: 'Méc. Élec.', color: '#3b82f6', ordre: 7 },
+  { id: 'livraison', label: 'Livraison', labelCourt: 'Livraison', color: '#22c55e', ordre: 8 },
+  { id: 'vendu', label: 'Vendu', labelCourt: 'Vendu', color: '#22c55e', ordre: 9 },
+];
+
+export const SUBTASKS: Record<string, SubTask[]> = {
+  'evaluation': [
+    { id: 'reception', label: 'Réception du véhicule', done: false },
+    { id: 'evaluation', label: 'Évaluation', done: false },
+  ],
+  'soudure-generale': [
+    { id: 'prep-chassis', label: 'Préparation du châssis', done: false },
+    { id: 'soudure-structure', label: 'Soudure de la structure', done: false },
+    { id: 'verification-soudures', label: 'Vérification des soudures', done: false },
+    { id: 'enlever-boite', label: 'Enlever boite ou équipement', done: false },
+    { id: 'raccourcir-chassis', label: 'Raccourcir le châssis', done: false },
+    { id: 'relocalisation-battenes', label: 'Relocalisation des battenes', done: false },
+    { id: 'fabrication-coffre', label: 'Fabrication coffre dans le châssis', done: false },
+    { id: 'drive-shaft', label: 'Modification du drive shaft', done: false },
+    { id: 'reservoir-diesel', label: 'Modification du réservoir diesel', done: false },
+    { id: 'dpf', label: 'Modification du DPF', done: false },
+  ],
+  'sous-traitants': [
+    { id: 'envoi', label: 'Envoi chez sous-traitant', done: false },
+    { id: 'travaux', label: 'Travaux spécialisés', done: false },
+    { id: 'retour', label: 'Retour à l\'atelier', done: false },
+  ],
+  'mecanique-moteur': [
+    { id: 'diagnostic', label: 'Diagnostic moteur', done: false },
+    { id: 'reparations', label: 'Réparations mécaniques', done: false },
+    { id: 'test-moteur', label: 'Test moteur', done: false },
+  ],
+  'mecanique-generale': [
+    { id: 'suspension', label: 'Suspension et freins', done: false },
+    { id: 'direction', label: 'Direction', done: false },
+    { id: 'verification-gen', label: 'Vérification générale', done: false },
+  ],
+  'soudure-eau': [
+    { id: 'citerne', label: 'Installation citerne', done: false },
+    { id: 'pompes', label: 'Pompes et raccords', done: false },
+    { id: 'soudure-finale', label: 'Soudure finale citerne', done: false },
+    { id: 'test-etancheite', label: 'Test d\'étanchéité', done: false },
+  ],
+  'peinture': [
+    { id: 'sablage', label: 'Sablage / préparation', done: false },
+    { id: 'appret', label: 'Couche d\'apprêt', done: false },
+    { id: 'peinture-finale', label: 'Peinture finale', done: false },
+    { id: 'logos', label: 'Logos et décalques', done: false },
+  ],
+  'mecanique-electrique': [
+    { id: 'electrique-citerne', label: 'Électrique citerne', done: false },
+    { id: 'panneau-controle', label: 'Panneau de contrôle', done: false },
+    { id: 'test-final', label: 'Test final complet', done: false },
+    { id: 'livraison', label: 'Préparation livraison', done: false },
+  ],
+  'livraison': [
+    { id: 'test-final', label: 'Test final route', done: false },
+    { id: 'nettoyage', label: 'Nettoyage complet', done: false },
+    { id: 'documents', label: 'Documents de livraison', done: false },
+    { id: 'photos', label: 'Photos avant livraison', done: false },
+    { id: 'remise-cles', label: 'Remise des clés client', done: false },
+  ],
+  'vendu': [],
+};
+
+export const MOCK_PROGRESSION_TRUCKS: Truck[] = [
+  {
+    id: '1',
+    numero: '35518',
+    annee: 2016,
+    marque: 'Western Star',
+    modele: '4700',
+    type: 'Camion à eau',
+    variante: 'Usagé',
+    status: 'en-attente',
+    stationActuelle: 'sous-traitants',
+    slotActuel: 'S-01',
+    progression: [
+      {
+        stationId: 'evaluation',
+        status: 'termine',
+        subTasks: SUBTASKS['evaluation'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'soudure-generale',
+        status: 'termine',
+        subTasks: SUBTASKS['soudure-generale'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'sous-traitants',
+        status: 'en-cours',
+        subTasks: SUBTASKS['sous-traitants'].map((t, i) => ({ ...t, done: i === 0 })),
+      },
+      {
+        stationId: 'mecanique-moteur',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-moteur'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-generale',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-generale'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'soudure-eau',
+        status: 'non-commence',
+        subTasks: SUBTASKS['soudure-eau'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'peinture',
+        status: 'non-commence',
+        subTasks: SUBTASKS['peinture'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-electrique',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-electrique'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'livraison',
+        status: 'non-commence',
+        subTasks: SUBTASKS['livraison'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'vendu',
+        status: 'non-commence',
+        subTasks: [],
+      },
+    ],
+  },
+  {
+    id: '2',
+    numero: '35391',
+    annee: 2026,
+    marque: 'Kenworth',
+    modele: 'T-480',
+    type: 'Camion à eau',
+    variante: 'Neuf',
+    status: 'en-cours',
+    stationActuelle: 'soudure-generale',
+    slotActuel: '17',
+    progression: [
+      {
+        stationId: 'evaluation',
+        status: 'termine',
+        subTasks: SUBTASKS['evaluation'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'soudure-generale',
+        status: 'en-cours',
+        subTasks: SUBTASKS['soudure-generale'].map((t, i) => ({ ...t, done: i < 3 })),
+      },
+      {
+        stationId: 'sous-traitants',
+        status: 'non-commence',
+        subTasks: SUBTASKS['sous-traitants'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-moteur',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-moteur'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-generale',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-generale'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'soudure-eau',
+        status: 'non-commence',
+        subTasks: SUBTASKS['soudure-eau'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'peinture',
+        status: 'non-commence',
+        subTasks: SUBTASKS['peinture'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-electrique',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-electrique'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'livraison',
+        status: 'non-commence',
+        subTasks: SUBTASKS['livraison'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'vendu',
+        status: 'non-commence',
+        subTasks: [],
+      },
+    ],
+  },
+  {
+    id: '3',
+    numero: '35107',
+    annee: 2011,
+    marque: 'Freightliner',
+    modele: 'M2 106',
+    type: 'Camion à eau',
+    variante: 'Usagé',
+    status: 'en-cours',
+    stationActuelle: 'mecanique-generale',
+    slotActuel: '9A',
+    progression: [
+      {
+        stationId: 'evaluation',
+        status: 'termine',
+        subTasks: SUBTASKS['evaluation'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'soudure-generale',
+        status: 'termine',
+        subTasks: SUBTASKS['soudure-generale'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'sous-traitants',
+        status: 'termine',
+        subTasks: SUBTASKS['sous-traitants'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'mecanique-moteur',
+        status: 'termine',
+        subTasks: SUBTASKS['mecanique-moteur'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'mecanique-generale',
+        status: 'en-cours',
+        subTasks: SUBTASKS['mecanique-generale'].map((t, i) => ({ ...t, done: i < 1 })),
+      },
+      {
+        stationId: 'soudure-eau',
+        status: 'non-commence',
+        subTasks: SUBTASKS['soudure-eau'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'peinture',
+        status: 'non-commence',
+        subTasks: SUBTASKS['peinture'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-electrique',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-electrique'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'livraison',
+        status: 'non-commence',
+        subTasks: SUBTASKS['livraison'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'vendu',
+        status: 'non-commence',
+        subTasks: [],
+      },
+    ],
+  },
+  {
+    id: '4',
+    numero: '35622',
+    annee: 2024,
+    marque: 'Peterbilt',
+    modele: '567',
+    type: 'Camion à eau',
+    variante: 'Neuf',
+    status: 'bloque',
+    stationActuelle: 'mecanique-moteur',
+    slotActuel: '11',
+    progression: [
+      {
+        stationId: 'evaluation',
+        status: 'termine',
+        subTasks: SUBTASKS['evaluation'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'soudure-generale',
+        status: 'termine',
+        subTasks: SUBTASKS['soudure-generale'].map((t) => ({ ...t, done: true })),
+      },
+      {
+        stationId: 'sous-traitants',
+        status: 'non-commence',
+        subTasks: SUBTASKS['sous-traitants'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-moteur',
+        status: 'en-cours',
+        subTasks: SUBTASKS['mecanique-moteur'].map((t, i) => ({ ...t, done: i < 1 })),
+      },
+      {
+        stationId: 'mecanique-generale',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-generale'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'soudure-eau',
+        status: 'non-commence',
+        subTasks: SUBTASKS['soudure-eau'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'peinture',
+        status: 'non-commence',
+        subTasks: SUBTASKS['peinture'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'mecanique-electrique',
+        status: 'non-commence',
+        subTasks: SUBTASKS['mecanique-electrique'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'livraison',
+        status: 'non-commence',
+        subTasks: SUBTASKS['livraison'].map((t) => ({ ...t })),
+      },
+      {
+        stationId: 'vendu',
+        status: 'non-commence',
+        subTasks: [],
+      },
+    ],
+  },
+  {
+    id: '5',
+    numero: '34998',
+    annee: 2019,
+    marque: 'Peterbilt',
+    modele: '389',
+    type: 'Camion à eau',
+    variante: 'Usagé',
+    status: 'vendu',
+    stationActuelle: 'vendu',
+    slotActuel: '',
+    progression: STATIONS.map((s) => ({
+      stationId: s.id,
+      status: 'termine' as const,
+      subTasks: (SUBTASKS[s.id] || []).map((t) => ({ ...t, done: true })),
+    })),
+  },
+];
