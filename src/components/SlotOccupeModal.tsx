@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SLOT_TO_GARAGE, GARAGE_TO_SLOTS } from '../data/garageData';
+import { EauIcon } from './EauIcon';
 import type { Item, Slot } from '../types/item.types';
 
 interface StationConfig {
@@ -119,9 +120,6 @@ export function SlotOccupeModal({
   const couleur = item.type === 'eau'    ? '#f97316'
                 : item.type === 'client' ? '#3b82f6'
                 : '#22c55e';
-  const icon = item.type === 'eau'    ? '🚒'
-             : item.type === 'client' ? '🔧'
-             : '🏷️';
 
   const garageActuel = SLOT_TO_GARAGE[slot.id];
   const tousLesSlotsDuGarage = garageActuel ? (GARAGE_TO_SLOTS[garageActuel] ?? []) : [];
@@ -159,7 +157,7 @@ export function SlotOccupeModal({
         {/* Header fixe */}
         <div style={{ padding: 16, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 20 }}>{icon}</span>
+            {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 20 }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: 'monospace', fontWeight: 700, color: couleur, fontSize: 15 }}>
                 #{item.numero}

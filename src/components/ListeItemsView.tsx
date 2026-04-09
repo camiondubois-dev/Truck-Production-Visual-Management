@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { CreateWizardModal } from './CreateWizardModal';
+import { EauIcon } from './EauIcon';
 import type { Item, TypeItem } from '../types/item.types';
 
 interface ListeItemsViewProps {
@@ -28,7 +29,7 @@ export function ListeItemsView({ type }: ListeItemsViewProps) {
   const enSlot = filteredItems.filter((i) => i.etat === 'en-slot');
 
   const config = {
-    eau: { color: '#f97316', icon: '🚒', label: 'Camions à eau' },
+    eau: { color: '#f97316', icon: 'EAU_LOGO', label: 'Camions à eau' },
     client: { color: '#3b82f6', icon: '🔧', label: 'Jobs clients' },
     detail: { color: '#22c55e', icon: '🏷️', label: 'Camions détail' },
   }[type];
@@ -45,7 +46,7 @@ export function ListeItemsView({ type }: ListeItemsViewProps) {
     >
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <span style={{ fontSize: 32 }}>{config.icon}</span>
+          {config.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 32 }}>{config.icon}</span>}
           <h1
             style={{
               fontSize: 28,

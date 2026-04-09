@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EauIcon } from './EauIcon';
 import { Item, TypeItem, StationProgress, EtatCommercial } from '../types/item.types';
 import { TOUTES_STATIONS_COMMUNES, PIPELINE_EAU_USAGE, PIPELINE_EAU_NEUF, PIPELINE_CLIENT_DEFAUT, PIPELINE_DETAIL_DEFAUT } from '../data/mockData';
 import { useInventaire } from '../contexts/InventaireContext';
@@ -347,7 +348,7 @@ const [filtreType, setFiltreType] = useState<'tous' | 'eau' | 'client' | 'detail
               color: filtreType === t ? 'white' : '#6b7280',
               fontWeight: filtreType === t ? 700 : 400,
             }}>
-            {t === 'tous' ? 'Tous' : t === 'eau' ? '🚒 Eau' : t === 'client' ? '🔧 Client' : '🏷️ Détail'}
+            {t === 'tous' ? 'Tous' : t === 'eau' ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><EauIcon /> Eau</span> : t === 'client' ? '🔧 Client' : '🏷️ Détail'}
           </button>
         ))}
       </div>
@@ -405,13 +406,12 @@ const [filtreType, setFiltreType] = useState<'tous' | 'eau' | 'client' | 'detail
         {afficherInventaire && disponiblesInventaire.length > 0 && (
           <>
             {filtreType === 'tous' && (
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 2px', marginTop: 8 }}>
-                🚒 Inventaire
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 2px', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <EauIcon /> Inventaire
               </div>
             )}
             {disponiblesInventaire.map(v => {
               const typeColor = v.type === 'eau' ? '#f97316' : '#22c55e';
-              const typeIcon  = v.type === 'eau' ? '🚒' : '🏷️';
               return (
                 <div key={v.id} onClick={() => onSelect(v)}
                   style={{
@@ -422,7 +422,7 @@ const [filtreType, setFiltreType] = useState<'tous' | 'eau' | 'client' | 'detail
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = typeColor; (e.currentTarget as HTMLDivElement).style.background = `${typeColor}15`; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = `${typeColor}33`; (e.currentTarget as HTMLDivElement).style.background = `${typeColor}08`; }}
                 >
-                  <span style={{ fontSize: 22 }}>{typeIcon}</span>
+                  {v.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 22 }}>🏷️</span>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: typeColor }}>#{v.numero}</span>
@@ -457,7 +457,7 @@ function Etape1({ onSelect }: { onSelect: (type: TypeItem, stations: string[]) =
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
       {[
-        { type: 'eau' as TypeItem, icon: '🚒', label: 'Camion à eau', desc: 'Fabrication & transformation', color: '#f97316' },
+        { type: 'eau' as TypeItem, icon: 'EAU_LOGO', label: 'Camion à eau', desc: 'Fabrication & transformation', color: '#f97316' },
         { type: 'client' as TypeItem, icon: '🔧', label: 'Client externe', desc: 'Réparation & service rapide', color: '#3b82f6' },
         { type: 'detail' as TypeItem, icon: '🏷️', label: 'Camion détail', desc: 'Reconditionnement & revente', color: '#22c55e' },
       ].map(({ type, icon, label, desc, color }) => (
@@ -469,7 +469,7 @@ function Etape1({ onSelect }: { onSelect: (type: TypeItem, stations: string[]) =
           onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = color; }}
           onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = `${color}33`; }}
         >
-          <div style={{ fontSize: 36, marginBottom: 8 }}>{icon}</div>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>{icon === 'EAU_LOGO' ? <EauIcon /> : icon}</div>
           <div style={{ fontWeight: 700, fontSize: 15, color, marginBottom: 4 }}>{label}</div>
           <div style={{ fontSize: 12, color: '#6b7280' }}>{desc}</div>
         </div>

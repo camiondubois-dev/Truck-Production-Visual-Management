@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
@@ -162,10 +163,10 @@ const handleSelectClient = (client: Client) => {
             <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Type *</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {([
-                { val: 'eau' as const,    label: '🚒 Camion à eau',   color: '#f97316' },
-                { val: 'client' as const, label: '🔧 Client externe', color: '#3b82f6' },
-                { val: 'detail' as const, label: '🏷️ Camion détail',  color: '#22c55e' },
-              ]).map(({ val, label, color }) => (
+                { val: 'eau' as const,    color: '#f97316' },
+                { val: 'client' as const, color: '#3b82f6' },
+                { val: 'detail' as const, color: '#22c55e' },
+              ]).map(({ val, color }) => (
                 <button key={val} type="button" onClick={() => setF({ type: val, variante: '' })}
                   style={{
                     flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer',
@@ -174,8 +175,9 @@ const handleSelectClient = (client: Client) => {
                     color: form.type === val ? color : '#9ca3af',
                     fontWeight: form.type === val ? 700 : 400,
                     fontSize: 12, transition: 'all 0.15s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
-                  {label}
+                  {val === 'eau' ? <><EauIcon /> Camion à eau</> : val === 'client' ? '🔧 Client externe' : '🏷️ Camion détail'}
                 </button>
               ))}
             </div>
@@ -415,7 +417,7 @@ const handleSelectClient = (client: Client) => {
 // ── VueInventaire ─────────────────────────────────────────────
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule } = useInventaire();
+  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType } = useInventaire();
   const { ajouterItem, supprimerItem } = useGarage();
   const { profile: session } = useAuth();
   const isGestion = session?.role === 'gestion';
@@ -429,6 +431,8 @@ export function VueInventaire() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [erreurImport, setErreurImport] = useState<string | null>(null);
   const [showModalAjout, setShowModalAjout] = useState(false);
+  const [typeOverrides, setTypeOverrides] = useState<Record<string, 'eau' | 'detail'>>({});
+  const [submittingJobId, setSubmittingJobId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -443,7 +447,8 @@ export function VueInventaire() {
     return () => clearTimeout(timer);
   }, [recherche]);
 
-  const baseList = searchResults !== null ? searchResults : vehicules;
+  const baseList = (searchResults !== null ? searchResults : vehicules)
+    .map(v => typeOverrides[v.id] ? { ...v, type: typeOverrides[v.id]! } : v);
 
   const filtres = [...baseList]
     .filter(v => {
@@ -500,53 +505,63 @@ export function VueInventaire() {
     e.target.value = '';
   };
 
-const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
-  const now = new Date().toISOString();
-  const jobId = generateId();
+const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
+  if (submittingJobId === v.id) return;
+  setSubmittingJobId(v.id);
+  setErreurImport(null);
+  try {
+    const now = new Date().toISOString();
+    const jobId = generateId();
 
-  let stationsActives: string[];
-  if (v.type === 'eau') {
-    stationsActives = v.variante === 'Neuf' ? PIPELINE_EAU_NEUF : PIPELINE_EAU_USAGE;
-  } else if (v.type === 'client') {
-    stationsActives = PIPELINE_CLIENT_DEFAUT;
-  } else {
-    stationsActives = PIPELINE_DETAIL_DEFAUT;
+    let stationsActives: string[];
+    if (v.type === 'eau') {
+      stationsActives = v.variante === 'Neuf' ? PIPELINE_EAU_NEUF : PIPELINE_EAU_USAGE;
+    } else if (v.type === 'client') {
+      stationsActives = PIPELINE_CLIENT_DEFAUT;
+    } else {
+      stationsActives = PIPELINE_DETAIL_DEFAUT;
+    }
+
+    const progression: StationProgress[] = stationsActives.map(sid => ({
+      stationId: sid, status: 'non-commence' as const, subTasks: [],
+    }));
+
+    let label = '';
+    if (v.type === 'client') {
+      label = v.nomClient ? `${v.nomClient} — ${v.descriptionTravail ?? ''}` : v.vehicule ?? v.numero;
+    } else {
+      label = `${v.marque ?? ''} ${v.modele ?? ''} ${v.annee ?? ''}`.trim();
+    }
+
+    const nouvelItem: Item = {
+      id: jobId, type: v.type, numero: v.numero, label,
+      etat: 'en-attente', dateCreation: now,
+      stationsActives, progression,
+      stationActuelle: stationsActives[0],
+      inventaireId: v.id,
+      photoUrl: v.photoUrl ?? undefined,
+      ...(v.variante && { variante: v.variante }),
+      ...(v.marque && { marque: v.marque }),
+      ...(v.modele && { modele: v.modele }),
+      ...(v.annee && { annee: v.annee }),
+      ...(v.clientAcheteur && { clientAcheteur: v.clientAcheteur }),
+      ...(v.notes && { notes: v.notes }),
+      ...(v.nomClient && { nomClient: v.nomClient }),
+      ...(v.telephone && { telephone: v.telephone }),
+      ...(v.vehicule && { vehicule: v.vehicule }),
+      ...(v.descriptionTravail && { descriptionTravail: v.descriptionTravail }),
+      ...(v.descriptionTravaux && { descriptionTravaux: v.descriptionTravaux }),
+    };
+
+    await ajouterItem(nouvelItem);
+    await marquerEnProduction(v.id, jobId);
+    setSelectedId(null);
+    setFiltreStatut('tous');
+  } catch (err: any) {
+    setErreurImport(err?.message ?? 'Erreur lors de la création du job');
+  } finally {
+    setSubmittingJobId(null);
   }
-
-  const progression: StationProgress[] = stationsActives.map(sid => ({
-    stationId: sid, status: 'non-commence' as const, subTasks: [],
-  }));
-
-  let label = '';
-  if (v.type === 'client') {
-    label = v.nomClient ? `${v.nomClient} — ${v.descriptionTravail ?? ''}` : v.vehicule ?? v.numero;
-  } else {
-    label = `${v.marque ?? ''} ${v.modele ?? ''} ${v.annee ?? ''}`.trim();
-  }
-
-  const nouvelItem: Item = {
-    id: jobId, type: v.type, numero: v.numero, label,
-    etat: 'en-attente', dateCreation: now,
-    stationsActives, progression,
-    stationActuelle: stationsActives[0],
-    inventaireId: v.id,
-    photoUrl: v.photoUrl ?? undefined,  // ← photo suit depuis l'inventaire
-    ...(v.variante && { variante: v.variante }),
-    ...(v.marque && { marque: v.marque }),
-    ...(v.modele && { modele: v.modele }),
-    ...(v.annee && { annee: v.annee }),
-    ...(v.clientAcheteur && { clientAcheteur: v.clientAcheteur }),
-    ...(v.notes && { notes: v.notes }),
-    ...(v.nomClient && { nomClient: v.nomClient }),
-    ...(v.telephone && { telephone: v.telephone }),
-    ...(v.vehicule && { vehicule: v.vehicule }),
-    ...(v.descriptionTravail && { descriptionTravail: v.descriptionTravail }),
-    ...(v.descriptionTravaux && { descriptionTravaux: v.descriptionTravaux }),
-  };
-
-  ajouterItem(nouvelItem);
-  marquerEnProduction(v.id, jobId);
-  setSelectedId(null);
 };
 
   const retournerEnInventaire = async (v: VehiculeInventaire) => {
@@ -631,21 +646,17 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
             </button>
           ))}
           <div style={{ width: 1, background: '#e5e7eb', margin: '0 4px' }} />
-          {[
-            { id: 'tous'   as FiltreType, label: 'Tous types' },
-            { id: 'eau'    as FiltreType, label: '🚒 Eau' },
-            { id: 'client' as FiltreType, label: '🔧 Client' },
-            { id: 'detail' as FiltreType, label: '🏷️ Détail' },
-          ].map(f => (
-            <button key={f.id} onClick={() => setFiltreType(f.id)}
+          {(['tous', 'eau', 'client', 'detail'] as FiltreType[]).map(id => (
+            <button key={id} onClick={() => setFiltreType(id)}
               style={{
                 padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12,
-                border: filtreType === f.id ? 'none' : '1px solid #e5e7eb',
-                background: filtreType === f.id ? '#f97316' : 'white',
-                color: filtreType === f.id ? 'white' : '#6b7280',
-                fontWeight: filtreType === f.id ? 700 : 400,
+                border: filtreType === id ? 'none' : '1px solid #e5e7eb',
+                background: filtreType === id ? '#f97316' : 'white',
+                color: filtreType === id ? 'white' : '#6b7280',
+                fontWeight: filtreType === id ? 700 : 400,
+                display: 'flex', alignItems: 'center', gap: 4,
               }}>
-              {f.label}
+              {id === 'eau' ? <><EauIcon /> Eau</> : id === 'tous' ? 'Tous types' : id === 'client' ? '🔧 Client' : '🏷️ Détail'}
             </button>
           ))}
         </div>
@@ -676,7 +687,6 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
               <tbody>
                 {filtres.map(v => {
                   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
-                  const typeLabel = v.type === 'eau' ? '🚒 Eau' : v.type === 'client' ? '🔧 Client' : '🏷️ Détail';
                   const isSelected = selectedId === v.id;
                   const isEnProd = v.statut === 'en-production';
                   return (
@@ -694,8 +704,30 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: typeColor }}>#{v.numero}</span>
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ fontSize: 12, background: `${typeColor}18`, color: typeColor, padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{typeLabel}</span>
+                      <td style={{ padding: '8px 16px' }} onClick={e => e.stopPropagation()}>
+                        {v.type === 'client' ? (
+                          <span style={{ fontSize: 12, background: '#3b82f618', color: '#3b82f6', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔧 Client</span>
+                        ) : (
+                          <select
+                            value={v.type}
+                            onChange={async (e) => {
+                              const nouvelleValeur = e.target.value as 'eau' | 'detail';
+                              setTypeOverrides(prev => ({ ...prev, [v.id]: nouvelleValeur }));
+                              await mettreAJourType(v.id, nouvelleValeur);
+                              setTypeOverrides(prev => { const next = { ...prev }; delete next[v.id]; return next; });
+                            }}
+                            style={{
+                              fontSize: 12, fontWeight: 600, borderRadius: 10, padding: '2px 8px',
+                              border: `1px solid ${v.type === 'eau' ? '#f97316' : '#22c55e'}40`,
+                              background: `${v.type === 'eau' ? '#f97316' : '#22c55e'}18`,
+                              color: v.type === 'eau' ? '#f97316' : '#22c55e',
+                              cursor: 'pointer', outline: 'none',
+                            }}
+                          >
+                            <option value="eau">Eau</option>
+                            <option value="detail">🏷️ Détail</option>
+                          </select>
+                        )}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>{v.marque ?? '—'}</td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#6b7280' }}>{v.modele ?? '—'}</td>
@@ -711,12 +743,17 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
                         )}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        {v.statut === 'disponible' && (
-                          <button onClick={(e) => { e.stopPropagation(); creerJobDepuisInventaire(v); }}
-                            style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: '#f97316', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                            + Créer job
-                          </button>
-                        )}
+                        {v.statut === 'disponible' && (() => {
+                          const isSubmitting = submittingJobId === v.id;
+                          return (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); creerJobDepuisInventaire(v); }}
+                              disabled={isSubmitting}
+                              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: isSubmitting ? '#fdba74' : '#f97316', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>
+                              {isSubmitting ? 'Création...' : '+ Créer job'}
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -732,6 +769,7 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
           vehicule={selected}
           onClose={() => setSelectedId(null)}
           onCreerJob={() => creerJobDepuisInventaire(selected)}
+          isSubmitting={submittingJobId === selected.id}
           onRetourInventaire={() => retournerEnInventaire(selected)}
           onSupprimer={() => { supprimerVehicule(selected.id); setSelectedId(null); }}
           isGestion={isGestion}
@@ -750,10 +788,11 @@ const creerJobDepuisInventaire = (v: VehiculeInventaire) => {
 
 // ── PanneauDetailInventaire ───────────────────────────────────
 
-function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, onRetourInventaire, onSupprimer, isGestion }: {
+function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion }: {
   vehicule: VehiculeInventaire;
   onClose: () => void;
   onCreerJob: () => void;
+  isSubmitting: boolean;
   onRetourInventaire: () => void;
   onSupprimer: () => void;
   isGestion: boolean;
@@ -831,9 +870,9 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, onRetourInv
 
           {/* Créer job */}
           {v.statut === 'disponible' && (
-            <button onClick={onCreerJob}
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#f97316', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              🚛 Créer un job depuis ce véhicule
+            <button onClick={onCreerJob} disabled={isSubmitting}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: isSubmitting ? '#fdba74' : '#f97316', color: 'white', fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>
+              {isSubmitting ? 'Création...' : '🚛 Créer un job depuis ce véhicule'}
             </button>
           )}
 

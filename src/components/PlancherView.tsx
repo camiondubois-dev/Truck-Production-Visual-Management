@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useGarage } from '../hooks/useGarage';
+import { EauIcon } from './EauIcon';
 import { STATIONS } from '../data/stations';
 import { STATION_TO_GARAGE } from '../data/garageData';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
@@ -282,7 +283,6 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {itemsEnAttente.map((item) => {
               const couleur = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
-              const icon = item.type === 'eau' ? '🚒' : item.type === 'client' ? '🔧' : '🏷️';
               return (
                 <div
                   key={item.id}
@@ -301,7 +301,7 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}25`; }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}18`; }}
                 >
-                  <span style={{ fontSize: 'clamp(10px, 1vw, 12px)' }}>{icon}</span>
+                  {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(10px, 1vw, 12px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
                   <span>#{item.numero}</span>
                   {item.urgence && (
                     <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 3px', borderRadius: 2 }}>

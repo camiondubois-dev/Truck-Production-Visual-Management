@@ -1,5 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../contexts/GarageContext';
+import { EauIcon } from './EauIcon';
 import { useEffect, useState } from 'react';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { SlotAssignModal } from './SlotAssignModal';
@@ -262,9 +263,10 @@ export const VueDepartement = () => {
                     fontSize: 11, fontWeight: 700,
                     color: typeColor!, letterSpacing: '0.08em', marginBottom: 8,
                   }}>
-                    {item.type === 'eau'     ? '🚒 CAMION À EAU'
-                     : item.type === 'client' ? '🔧 CLIENT EXT.'
-                     : '🏷️ DÉTAIL'}
+                    {item.type === 'eau'
+                      ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><EauIcon /> CAMION À EAU</span>
+                      : item.type === 'client' ? '🔧 CLIENT EXT.'
+                      : '🏷️ DÉTAIL'}
                   </div>
 
                   <div style={{

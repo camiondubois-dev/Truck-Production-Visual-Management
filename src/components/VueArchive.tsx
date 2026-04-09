@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGarage } from '../hooks/useGarage';
+import { EauIcon } from './EauIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import type { Item } from '../types/item.types';
@@ -82,7 +83,7 @@ export function VueArchive() {
         }}>
           {[
             { id: 'tous'   as FiltreType, label: 'Tous',             icon: '📋' },
-            { id: 'eau'    as FiltreType, label: 'Camions à eau',    icon: '🚒' },
+            { id: 'eau'    as FiltreType, label: 'Camions à eau',    icon: 'EAU_LOGO' },
             { id: 'client' as FiltreType, label: 'Clients externes', icon: '🔧' },
             { id: 'detail' as FiltreType, label: 'Camions détail',   icon: '🏷️' },
           ].map(f => (
@@ -98,7 +99,7 @@ export function VueArchive() {
                 fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
               }}
             >
-              {f.icon} {f.label}
+              {f.icon === 'EAU_LOGO' ? <EauIcon /> : f.icon} {f.label}
               {f.id !== 'tous' && (
                 <span style={{
                   fontSize: 11, fontWeight: 700,
@@ -172,7 +173,6 @@ function CarteArchive({ item, selected, onClick, confirmerReouverture, setConfir
   onReouvrir: () => void;
 }) {
   const typeColor = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
-  const typeIcon  = item.type === 'eau' ? '🚒' : item.type === 'client' ? '🔧' : '🏷️';
   const typeLabel = item.type === 'eau' ? 'Camion à eau' : item.type === 'client' ? 'Client externe' : 'Camion détail';
 
   const dateArchive = item.dateArchive
@@ -196,7 +196,7 @@ function CarteArchive({ item, selected, onClick, confirmerReouverture, setConfir
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = 'white'; }}
     >
-      <div style={{ fontSize: 28, flexShrink: 0 }}>{typeIcon}</div>
+      <div style={{ fontSize: 28, flexShrink: 0 }}>{item.type === 'eau' ? <EauIcon /> : item.type === 'client' ? '🔧' : '🏷️'}</div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>

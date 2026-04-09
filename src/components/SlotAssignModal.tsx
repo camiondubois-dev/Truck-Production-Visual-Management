@@ -1,5 +1,6 @@
 import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
 import type { Item, Slot } from '../types/item.types';
+import { EauIcon } from './EauIcon';
 
 interface SlotAssignModalProps {
   slot: Slot;
@@ -27,7 +28,7 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
     });
 
   const tous = [
-    ...filtrerParGarage(enAttente.eau).map((i) => ({ ...i, couleur: '#f97316', icon: '🚒' })),
+    ...filtrerParGarage(enAttente.eau).map((i) => ({ ...i, couleur: '#f97316', icon: 'EAU_LOGO' })),
     ...filtrerParGarage(enAttente.client).map((i) => ({ ...i, couleur: '#3b82f6', icon: '🔧' })),
     ...filtrerParGarage(enAttente.detail).map((i) => ({ ...i, couleur: '#22c55e', icon: '🏷️' })),
   ];
@@ -38,7 +39,7 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
     const preSelectedWithColors = {
       ...preSelectedItem,
       couleur: preSelectedItem.type === 'eau' ? '#f97316' : preSelectedItem.type === 'client' ? '#3b82f6' : '#22c55e',
-      icon: preSelectedItem.type === 'eau' ? '🚒' : preSelectedItem.type === 'client' ? '🔧' : '🏷️',
+      icon: preSelectedItem.type === 'eau' ? 'EAU_LOGO' : preSelectedItem.type === 'client' ? '🔧' : '🏷️',
     };
 
     return (
@@ -61,7 +62,7 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
           border: `2px solid ${preSelectedWithColors.couleur}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 20 }}>{preSelectedWithColors.icon}</span>
+            {preSelectedWithColors.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 20 }}>{preSelectedWithColors.icon}</span>}
             <span style={{ fontFamily: 'monospace', fontWeight: 700, color: preSelectedWithColors.couleur, fontSize: 16 }}>
               #{preSelectedItem.numero}
             </span>
@@ -134,7 +135,7 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
           onMouseLeave={(e) => (e.currentTarget.style.background = `${item.couleur}15`)}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 16 }}>{item.icon}</span>
+            {item.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 16 }}>{item.icon}</span>}
             <span style={{ fontFamily: 'monospace', fontWeight: 700, color: item.couleur, fontSize: 13 }}>
               #{item.numero}
             </span>

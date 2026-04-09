@@ -1,5 +1,6 @@
 import { useGarage } from '../contexts/GarageContext';
 import { Item } from '../types/item.types';
+import { EauIcon } from './EauIcon';
 import { STATION_TO_SLOTS, STATION_LABEL } from '../data/garageData';
 
 interface Props {
@@ -133,9 +134,7 @@ export const PopupAssignationSlot = ({
                     {estOccupe ? (
                       <>
                         <div style={{ fontSize: 20, marginBottom: 4 }}>
-                          {occupant!.type === 'eau' ? '🚒'
-                            : occupant!.type === 'client' ? '🔧'
-                            : '🏷️'}
+                          {occupant!.type === 'eau' ? <EauIcon /> : occupant!.type === 'client' ? '🔧' : '🏷️'}
                         </div>
                         <div style={{
                           fontFamily: 'monospace',

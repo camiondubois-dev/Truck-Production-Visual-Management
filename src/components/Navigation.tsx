@@ -1,5 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../hooks/useGarage';
+import { EauIcon } from './EauIcon';
 
 interface NavigationProps {
   currentTab: string;
@@ -8,7 +9,7 @@ interface NavigationProps {
 
 const TABS = [
   { id: 'plancher', label: 'Vue Plancher', icon: '🏭' },
-  { id: 'eau', label: 'Camions à eau', icon: '🚒', color: '#f97316' },
+  { id: 'eau', label: 'Camions à eau', icon: 'EAU_LOGO', color: '#f97316' },
   { id: 'clients', label: 'Jobs clients', icon: '🔧', color: '#3b82f6' },
   { id: 'detail', label: 'Camions détail', icon: '🏷️', color: '#22c55e' },
   { id: 'inventaire', label: 'Inventaire', icon: '📋', color: '#1e293b' },
@@ -83,7 +84,7 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
               }
             }}
           >
-            <span style={{ fontSize: 16 }}>{tab.icon}</span>
+            {tab.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 16 }}>{tab.icon}</span>}
             <span>{tab.label}</span>
             {count !== undefined && count > 0 && (
               <span style={{

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGarage } from '../contexts/GarageContext';
+import { EauIcon } from './EauIcon';
 import { Item } from '../types/item.types';
 import { GARAGES_COLONNES } from '../data/garageData';
 import { PopupAssignationSlot } from './PopupAssignationSlot';
@@ -14,7 +15,6 @@ export const PanneauDetailClientDetail = ({ item, onClose }: Props) => {
   const [popupStation, setPopupStation] = useState<string | null>(null);
 
   const couleur = item.type === 'client' ? '#3b82f6' : item.type === 'eau' ? '#f97316' : '#22c55e';
-  const icon    = item.type === 'client' ? '🔧' : item.type === 'eau' ? '🚒' : '🏷️';
 
   const getProchaineStation = (stationId: string): string | null => {
     const stations = item.progression ?? [];
@@ -57,7 +57,7 @@ export const PanneauDetailClientDetail = ({ item, onClose }: Props) => {
 
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 20 }}>{icon}</span>
+            {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 20 }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
             <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 20, color: couleur }}>
               #{item.numero}
             </span>

@@ -19,7 +19,7 @@ export function VueCamionsEau() {
       ]}
       config={{
         color: '#f97316',
-        icon: '🚒',
+        icon: 'EAU_LOGO',
         label: 'Camions à eau',
       }}
     />

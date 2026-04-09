@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGarage } from '../hooks/useGarage';
+import { EauIcon } from './EauIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventaire } from '../contexts/InventaireContext';
 import { CreateWizardModal } from './CreateWizardModal';
@@ -77,7 +78,7 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 28 }}>{config.icon}</span>
+              {config.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 28 }}>{config.icon}</span>}
               <h1 style={{ fontSize: 22, fontWeight: 700, color: config.color, margin: 0 }}>{config.label}</h1>
             </div>
             <StatPill label="En slot" value={enSlot.length} color="#3b82f6" />
@@ -93,7 +94,7 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
           {mesItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9ca3af' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon}</div>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon === 'EAU_LOGO' ? <EauIcon /> : config.icon}</div>
               <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun item pour l'instant</div>
               <div style={{ fontSize: 14 }}>Clique sur "+ Nouveau" pour commencer</div>
             </div>
@@ -176,9 +177,25 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
   <CreateWizardModal
     initialType={type}
     onClose={() => setShowModal(false)}
-    onCreate={(item) => { ajouterItem(item); setShowModal(false); }}
+    onCreate={(item) => {
+      const typeVue = type;
+      const typeItem = item.type;
+      if ((typeVue === 'eau' && typeItem === 'detail') || (typeVue === 'detail' && typeItem === 'eau')) {
+        const destLabel = typeVue === 'eau' ? 'eau' : 'détail';
+        const srcLabel = typeVue === 'eau' ? 'détail' : 'eau';
+        const confirme = window.confirm(`Ce camion est destiné à ${srcLabel}. Voulez-vous changer sa destination pour ${destLabel}?`);
+        if (confirme) {
+          ajouterItem({ ...item, type: typeVue });
+        } else {
+          ajouterItem(item);
+        }
+      } else {
+        ajouterItem(item);
+      }
+      setShowModal(false);
+    }}
   />
-)} 
+)}
     </div>
   );
 }
