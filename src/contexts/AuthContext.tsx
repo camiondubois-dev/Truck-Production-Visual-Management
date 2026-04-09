@@ -17,21 +17,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Vérifier si une session existe déjà
-    authService.getProfileActuel()
-      .then(setProfile)
-      .catch(() => setProfile(null))
-      .finally(() => setLoading(false));
-
-    // Écouter les changements de session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setProfile(null);
-      } else if (event === 'SIGNED_IN' && session) {
-        const p = await authService.getProfileActuel();
-        setProfile(p);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        (async () => {
+          if (!session) {
+            setProfile(null);
+            setLoading(false);
+          } else {
+            const p = await authService.getProfileActuel();
+            setProfile(p);
+            setLoading(false);
+          }
+        })();
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
