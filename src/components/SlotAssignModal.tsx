@@ -14,6 +14,9 @@ interface SlotAssignModalProps {
   position: { x: number; y: number };
   preSelectedItem?: Item;
   onJobTemporaire?: () => void;
+itemOccupant?: Item;
+  onRetirerOccupant?: (itemId: string) => void;
+  onTerminerOccupant?: (itemId: string) => void;
 }
 
 export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire }: SlotAssignModalProps) {
