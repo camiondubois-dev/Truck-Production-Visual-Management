@@ -708,6 +708,15 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
           <span style={{ fontSize: 'clamp(9px, 0.9vw, 12px)', color: 'rgba(255,255,255,0.55)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {item.label.split(' ').slice(0, 3).join(' ')}
           </span>
+          {item.type === 'eau' && (
+  <div style={{
+    fontSize: 'clamp(7px, 0.7vw, 9px)', fontWeight: 700,
+    color: (item as any).aUnReservoir ? '#22c55e' : '#f59e0b',
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+  }}>
+    {(item as any).aUnReservoir ? '💧 TANK' : '⚠️ SANS TANK'}
+  </div>
+)}
           {item.urgence && (
             <div style={{ fontSize: 'clamp(7px, 0.7vw, 9px)', color: '#ef4444', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               ⚡ URGENT
