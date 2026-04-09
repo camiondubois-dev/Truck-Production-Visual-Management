@@ -3,6 +3,7 @@ import { Item, GarageContextType, EtatItem } from '../types/item.types';
 import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
 import { itemsService } from '../services/itemsService';
 import { logEntreeGarage, logSortieGarage } from '../services/timeLogService';
+import { supabase } from '../lib/supabase';
 
 const GarageContext = createContext<GarageContextType | null>(null);
 
@@ -11,10 +12,23 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    itemsService.getAll()
-      .then(setItems)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) {
+        setLoading(false);
+        return;
+      }
+      console.log('[GarageContext] Session found, calling itemsService.getAll()...');
+      try {
+        const data = await itemsService.getAll();
+        console.log('[GarageContext] itemsService.getAll() returned:', data?.length, 'items');
+        setItems(data);
+      } catch (err) {
+        console.error('[GarageContext] itemsService.getAll() threw:', err);
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
+    });
   }, []);
 
   const ajouterItem = async (item: Item) => {
@@ -188,7 +202,19 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     detail: items.filter(i => i.type === 'detail' && i.etat === 'en-attente'),
   };
 
-  if (loading) return null;
+ if (loading) return (
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    height: '100vh',
+    background: '#1a1a1a',
+    color: 'white',
+    fontSize: '18px'
+  }}>
+    Chargement...
+  </div>
+);
 
   return (
     <GarageContext.Provider value={{

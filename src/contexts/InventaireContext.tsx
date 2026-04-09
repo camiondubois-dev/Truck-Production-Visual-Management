@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
 import { inventaireService } from '../services/inventaireService';
 
 interface InventaireContextType {
@@ -10,6 +10,9 @@ interface InventaireContextType {
   marquerEnProduction: (id: string, jobId: string) => Promise<void>;
   marquerDisponible: (id: string) => Promise<void>;
   mettreAJourPhotoInventaire: (id: string, photoUrl: string | null) => Promise<void>;
+  mettreAJourType: (id: string, type: 'eau' | 'detail') => Promise<void>;
+  mettreAJourEtapes: (id: string, etapes: EtapeFaite[]) => Promise<void>;
+  mettreAJourReservoir: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
   supprimerVehicule: (id: string) => Promise<void>;
 }
 
@@ -64,6 +67,27 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  const mettreAJourType = async (id: string, type: 'eau' | 'detail') => {
+    await inventaireService.mettreAJourType(id, type);
+    setVehicules(prev => prev.map(v =>
+      v.id === id ? { ...v, type } : v
+    ));
+  };
+
+  const mettreAJourEtapes = async (id: string, etapes: EtapeFaite[]) => {
+    await inventaireService.mettreAJourEtapes(id, etapes);
+    setVehicules(prev => prev.map(v =>
+      v.id === id ? { ...v, etapesFaites: etapes } : v
+    ));
+  };
+
+  const mettreAJourReservoir = async (id: string, aUnReservoir: boolean, reservoirId: string | null) => {
+    await inventaireService.mettreAJourReservoir(id, aUnReservoir, reservoirId);
+    setVehicules(prev => prev.map(v =>
+      v.id === id ? { ...v, aUnReservoir, reservoirId: reservoirId ?? undefined } : v
+    ));
+  };
+
   const supprimerVehicule = async (id: string) => {
     await inventaireService.supprimer(id);
     setVehicules(prev => prev.filter(v => v.id !== id));
@@ -78,6 +102,9 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       marquerEnProduction,
       marquerDisponible,
       mettreAJourPhotoInventaire,
+      mettreAJourType,
+      mettreAJourEtapes,
+      mettreAJourReservoir,
       supprimerVehicule,
     }}>
       {children}
