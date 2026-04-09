@@ -80,6 +80,17 @@ export const itemsService = {
     const { data, error } = await supabase
       .from('prod_items')
       .select('*')
+      .neq('etat', 'termine')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(fromDB);
+  },
+
+  async getAllArchives(): Promise<Item[]> {
+    const { data, error } = await supabase
+      .from('prod_items')
+      .select('*')
+      .eq('etat', 'termine')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(fromDB);
@@ -106,12 +117,12 @@ export const itemsService = {
     const partiel: any = {};
     if (patch.type !== undefined)              partiel.type = patch.type;
     if (patch.etat !== undefined)              partiel.etat = patch.etat;
-    if (patch.slotId !== undefined)            partiel.slot_id = patch.slotId ?? null;
+    if ('slotId' in patch)                     partiel.slot_id = patch.slotId ?? null;
     if (patch.stationActuelle !== undefined)   partiel.station_actuelle = patch.stationActuelle ?? null;
-    if (patch.dernierGarageId !== undefined)   partiel.dernier_garage_id = patch.dernierGarageId ?? null;
-    if (patch.dernierSlotId !== undefined)     partiel.dernier_slot_id = patch.dernierSlotId ?? null;
-    if (patch.dateEntreeSlot !== undefined)    partiel.date_entree_slot = patch.dateEntreeSlot ?? null;
-    if (patch.dateArchive !== undefined)       partiel.date_archive = patch.dateArchive ?? null;
+    if ('dernierGarageId' in patch)            partiel.dernier_garage_id = patch.dernierGarageId ?? null;
+    if ('dernierSlotId' in patch)              partiel.dernier_slot_id = patch.dernierSlotId ?? null;
+    if ('dateEntreeSlot' in patch)             partiel.date_entree_slot = patch.dateEntreeSlot ?? null;
+    if ('dateArchive' in patch)                partiel.date_archive = patch.dateArchive ?? null;
     if (patch.urgence !== undefined)           partiel.urgence = patch.urgence;
     if (patch.notes !== undefined)             partiel.notes = patch.notes ?? null;
     if (patch.etatCommercial !== undefined)    partiel.etat_commercial = patch.etatCommercial ?? null;
