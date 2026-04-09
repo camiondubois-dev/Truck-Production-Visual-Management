@@ -10,7 +10,6 @@ function fromDB(row: any): Reservoir {
     camionId: row.camion_id ?? undefined,
     notes: row.notes ?? undefined,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -43,17 +42,15 @@ export const reservoirService = {
   },
 
   async installerSurCamion(reservoirId: string, camionId: string): Promise<void> {
-    const now = new Date().toISOString();
-
     const { error: rErr } = await supabase
       .from('prod_reservoirs')
-      .update({ etat: 'installe', camion_id: camionId, updated_at: now })
+      .update({ etat: 'installe', camion_id: camionId })
       .eq('id', reservoirId);
     if (rErr) throw rErr;
 
     const { error: iErr } = await supabase
       .from('prod_items')
-      .update({ a_un_reservoir: true, reservoir_id: reservoirId, updated_at: now })
+      .update({ a_un_reservoir: true, reservoir_id: reservoirId })
       .eq('id', camionId);
     if (iErr) throw iErr;
 
@@ -66,23 +63,21 @@ export const reservoirService = {
     if (itemData?.inventaire_id) {
       await supabase
         .from('prod_inventaire')
-        .update({ a_un_reservoir: true, reservoir_id: reservoirId, updated_at: now })
+        .update({ a_un_reservoir: true, reservoir_id: reservoirId })
         .eq('id', itemData.inventaire_id);
     }
   },
 
   async desinstallerDuCamion(reservoirId: string, camionId: string): Promise<void> {
-    const now = new Date().toISOString();
-
     const { error: rErr } = await supabase
       .from('prod_reservoirs')
-      .update({ etat: 'disponible', camion_id: null, updated_at: now })
+      .update({ etat: 'disponible', camion_id: null })
       .eq('id', reservoirId);
     if (rErr) throw rErr;
 
     const { error: iErr } = await supabase
       .from('prod_items')
-      .update({ a_un_reservoir: false, reservoir_id: null, updated_at: now })
+      .update({ a_un_reservoir: false, reservoir_id: null })
       .eq('id', camionId);
     if (iErr) throw iErr;
 
@@ -95,39 +90,35 @@ export const reservoirService = {
     if (itemData?.inventaire_id) {
       await supabase
         .from('prod_inventaire')
-        .update({ a_un_reservoir: false, reservoir_id: null, updated_at: now })
+        .update({ a_un_reservoir: false, reservoir_id: null })
         .eq('id', itemData.inventaire_id);
     }
   },
 
   async installerSurInventaire(reservoirId: string, inventaireId: string): Promise<void> {
-    const now = new Date().toISOString();
-
     const { error: rErr } = await supabase
       .from('prod_reservoirs')
-      .update({ etat: 'installe', camion_id: inventaireId, updated_at: now })
+      .update({ etat: 'installe', camion_id: inventaireId })
       .eq('id', reservoirId);
     if (rErr) throw rErr;
 
     const { error: iErr } = await supabase
       .from('prod_inventaire')
-      .update({ a_un_reservoir: true, reservoir_id: reservoirId, updated_at: now })
+      .update({ a_un_reservoir: true, reservoir_id: reservoirId })
       .eq('id', inventaireId);
     if (iErr) throw iErr;
   },
 
   async desinstallerDeInventaire(reservoirId: string, inventaireId: string): Promise<void> {
-    const now = new Date().toISOString();
-
     const { error: rErr } = await supabase
       .from('prod_reservoirs')
-      .update({ etat: 'disponible', camion_id: null, updated_at: now })
+      .update({ etat: 'disponible', camion_id: null })
       .eq('id', reservoirId);
     if (rErr) throw rErr;
 
     const { error: iErr } = await supabase
       .from('prod_inventaire')
-      .update({ a_un_reservoir: false, reservoir_id: null, updated_at: now })
+      .update({ a_un_reservoir: false, reservoir_id: null })
       .eq('id', inventaireId);
     if (iErr) throw iErr;
   },
