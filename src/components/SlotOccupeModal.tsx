@@ -75,8 +75,6 @@ function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onCl
   );
 }
 
-// ── Modal plein écran pour la photo ──────────────────────────
-
 function ModalPhoto({ url, numero, onClose }: { url: string; numero: string; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{
@@ -143,6 +141,27 @@ export function SlotOccupeModal({
   if (top + MAX_HEIGHT + MARGIN > window.innerHeight) top = MARGIN;
   if (top < MARGIN) top = MARGIN;
 
+  const handleTerminer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onUpdateStationStatus && item.stationActuelle) {
+      onUpdateStationStatus(item.id, item.stationActuelle, 'termine');
+    }
+    // Vérifier s'il reste des étapes non terminées après celle-ci
+    const etapesRestantes = item.stationsActives.filter(sid => {
+      if (sid === item.stationActuelle) return false;
+      const prog = item.progression?.find(p => p.stationId === sid);
+      return prog?.status !== 'termine' && prog?.status !== 'non-requis';
+    });
+    if (etapesRestantes.length === 0) {
+      // Dernière étape — archiver directement
+      onTerminer(item.id);
+    } else {
+      // Il reste des étapes — mettre en attente pour la prochaine
+      onTerminerEtAvancer(item.id);
+    }
+    onClose();
+  };
+
   return (
     <>
       <div onClick={(e) => e.stopPropagation()} style={{
@@ -191,7 +210,7 @@ export function SlotOccupeModal({
         {/* Zone scrollable */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
 
-          {/* ── PHOTO DU CAMION ── */}
+          {/* PHOTO */}
           {item.photoUrl && (
             <div style={{ marginBottom: 12 }}>
               <div style={{
@@ -354,7 +373,7 @@ export function SlotOccupeModal({
             style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
             ⏸ Mettre en attente — libérer le slot
           </button>
-          <button onClick={(e) => { e.stopPropagation(); if (onUpdateStationStatus && item.stationActuelle) { onUpdateStationStatus(item.id, item.stationActuelle, 'termine'); } onTerminerEtAvancer(item.id); onClose(); }}
+          <button onClick={handleTerminer}
             style={{ padding: '10px', borderRadius: 7, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
             ✓ Travail terminé — libérer le slot
           </button>
