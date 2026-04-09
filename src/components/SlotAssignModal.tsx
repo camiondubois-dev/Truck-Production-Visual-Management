@@ -23,7 +23,44 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
 
   // Trouver le garage de ce slot
   const garageSlot = SLOT_TO_GARAGE[slot.id];
-
+if (itemOccupant) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+        background: '#1a1814', border: '1px solid #ef4444',
+        borderRadius: 10, padding: 16, width: 320,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
+    >
+      <div style={{ fontFamily: 'monospace', color: '#ef4444', fontWeight: 700, marginBottom: 8, fontSize: 14 }}>
+        ⚠️ Slot {slot.id} déjà occupé!
+      </div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 14 }}>
+        Le camion <span style={{ color: '#f97316', fontWeight: 700 }}>#{itemOccupant.numero}</span> est déjà dans ce slot. Que voulez-vous faire?
+      </div>
+      <button
+        onClick={() => { onRetirerOccupant?.(itemOccupant.id); onClose(); }}
+        style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#f59e0b', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+      >
+        ↩ Mettre #{itemOccupant.numero} en attente
+      </button>
+      <button
+        onClick={() => { onTerminerOccupant?.(itemOccupant.id); onClose(); }}
+        style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#22c55e', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+      >
+        ✓ Terminer #{itemOccupant.numero} et libérer le slot
+      </button>
+      <button
+        onClick={onClose}
+        style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+      >
+        Annuler
+      </button>
+    </div>
+  );
+}
   // Filtrer seulement les items qui attendent dans CE garage
   const filtrerParGarage = (items: Item[]) =>
     items.filter(i => {
