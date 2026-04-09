@@ -36,6 +36,8 @@ function fromDB(row: any): Item {
     clientId: row.client_id ?? undefined,
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
+    dateLivraisonPlanifiee: row.date_livraison_planifiee ?? undefined,
+dateLivraisonReelle: row.date_livraison_reelle ?? undefined,
   };
 }
 
@@ -132,6 +134,8 @@ export const itemsService = {
     if (patch.documents !== undefined)         partiel.documents = patch.documents;
     if (patch.photoUrl !== undefined)          partiel.photo_url = patch.photoUrl ?? null;
     if (patch.clientId !== undefined)          partiel.client_id = patch.clientId ?? null;
+    if (patch.dateLivraisonPlanifiee !== undefined) partiel.date_livraison_planifiee = patch.dateLivraisonPlanifiee ?? null;
+if (patch.dateLivraisonReelle !== undefined)    partiel.date_livraison_reelle = patch.dateLivraisonReelle ?? null;
     if (patch.aUnReservoir !== undefined)      partiel.a_un_reservoir = patch.aUnReservoir;
     if (patch.reservoirId !== undefined)       partiel.reservoir_id = patch.reservoirId ?? null;
     partiel.updated_at = new Date().toISOString();
