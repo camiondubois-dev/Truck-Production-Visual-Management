@@ -758,9 +758,9 @@ const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
                             <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>
                           )}
                           {v.type === 'eau' && (
-                            v.aUnReservoir
-                              ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir installé</span>
-                              : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>⚠️ Sans réservoir</span>
+                            (vehicules.find(x => x.id === v.id)?.aUnReservoir ?? v.aUnReservoir)
+  ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir installé</span>
+  : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>⚠️ Sans réservoir</span>
                           )}
                         </div>
                       </td>
