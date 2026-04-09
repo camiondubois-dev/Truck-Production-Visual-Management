@@ -34,6 +34,8 @@ function fromDB(row: any): Item {
     inventaireId: row.inventaire_id ?? undefined,
     photoUrl: row.photo_url ?? undefined,
     clientId: row.client_id ?? undefined,
+    aUnReservoir: row.a_un_reservoir ?? false,
+    reservoirId: row.reservoir_id ?? undefined,
   };
 }
 
@@ -117,8 +119,10 @@ export const itemsService = {
     if (patch.progression !== undefined)       partiel.progression = patch.progression;
     if (patch.stationsActives !== undefined)   partiel.stations_actives = patch.stationsActives;
     if (patch.documents !== undefined)         partiel.documents = patch.documents;
-    if (patch.photoUrl !== undefined) partiel.photo_url = patch.photoUrl ?? null;
-    if (patch.clientId !== undefined) partiel.client_id = patch.clientId ?? null;
+    if (patch.photoUrl !== undefined)          partiel.photo_url = patch.photoUrl ?? null;
+    if (patch.clientId !== undefined)          partiel.client_id = patch.clientId ?? null;
+    if (patch.aUnReservoir !== undefined)      partiel.a_un_reservoir = patch.aUnReservoir;
+    if (patch.reservoirId !== undefined)       partiel.reservoir_id = patch.reservoirId ?? null;
     partiel.updated_at = new Date().toISOString();
     const { error } = await supabase
       .from('prod_items')
