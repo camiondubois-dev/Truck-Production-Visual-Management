@@ -175,15 +175,15 @@ export function PlancherView() {
       </div>
 
       {modalState?.type === 'assign' && (
-        <SlotAssignModal
-          slot={modalState.slot}
-          enAttente={enAttente}
-          onAssign={assignerSlot}
-          onClose={() => setModalState(null)}
-          position={modalState.position}
-          preSelectedItem={modalState.preSelectedItem}
-          onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
-        itemOccupant={slotMap[modalState.slot.id]}
+      <SlotAssignModal
+  slot={modalState.slot}
+  enAttente={enAttente}
+  onAssign={assignerSlot}
+  onClose={() => setModalState(null)}
+  position={modalState.position}
+  preSelectedItem={modalState.preSelectedItem}
+  onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
+  itemOccupant={slotMap[modalState.slot.id]}
   onRetirerOccupant={retirerVersAttente}
   onTerminerOccupant={terminerItem}
 />
