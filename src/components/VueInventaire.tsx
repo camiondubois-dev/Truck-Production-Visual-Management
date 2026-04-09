@@ -856,13 +856,20 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   };
 
   const handleMarquerAvecReservoir = async () => {
-    setSavingReservoir(true);
-    try {
-      await onReservoirChange(v.id, true, null);
-    } finally {
-      setSavingReservoir(false);
+  setSavingReservoir(true);
+  try {
+    await onReservoirChange(v.id, true, null);
+    // Mettre à jour prod_items si le camion est en production
+    if (v.jobId) {
+      await supabase
+        .from('prod_items')
+        .update({ a_un_reservoir: true, reservoir_id: null })
+        .eq('inventaire_id', v.id);
     }
-  };
+  } finally {
+    setSavingReservoir(false);
+  }
+};
 
   const handleRetirerReservoir = async () => {
     if (!v.reservoirId) {
