@@ -19,7 +19,7 @@ itemOccupant?: Item;
   onTerminerOccupant?: (itemId: string) => void;
 }
 
-export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire }: SlotAssignModalProps) {
+export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire, itemOccupant, onRetirerOccupant, onTerminerOccupant }: SlotAssignModalProps) {
 
   // Trouver le garage de ce slot
   const garageSlot = SLOT_TO_GARAGE[slot.id];
