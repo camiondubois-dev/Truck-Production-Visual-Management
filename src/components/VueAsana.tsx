@@ -277,14 +277,23 @@ function LigneItem({ item, stations, colonnesInfo, selected, onClick }: LigneIte
 function ColonneValeur({ item, colKey }: { item: Item; colKey: string }) {
   switch (colKey) {
     case 'numero':
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>#{item.numero}</span>
-          {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
-            <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
-          )}
-        </div>
-      );
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>#{item.numero}</span>
+      {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
+        <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
+      )}
+      {item.type === 'eau' && (
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content',
+          background: (item as any).aUnReservoir ? '#dcfce7' : '#fff7ed',
+          color: (item as any).aUnReservoir ? '#166534' : '#c2410c',
+        }}>
+          {(item as any).aUnReservoir ? '💧 Réservoir' : '⚠️ Sans réservoir'}
+        </span>
+      )}
+    </div>
+  );
     case 'annee':   return <span style={{ color: '#6b7280' }}>{item.annee}</span>;
     case 'marque':  return <span style={{ fontWeight: 600 }}>{item.marque}</span>;
     case 'modele':  return <span style={{ color: '#6b7280' }}>{item.modele}</span>;
