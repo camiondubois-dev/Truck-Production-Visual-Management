@@ -13,9 +13,10 @@ interface SlotAssignModalProps {
   onClose: () => void;
   position: { x: number; y: number };
   preSelectedItem?: Item;
+  onJobTemporaire?: () => void;
 }
 
-export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem }: SlotAssignModalProps) {
+export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire }: SlotAssignModalProps) {
 
   // Trouver le garage de ce slot
   const garageSlot = SLOT_TO_GARAGE[slot.id];
@@ -157,9 +158,25 @@ export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, 
         </div>
       ))}
 
+      {onJobTemporaire && (
+        <button
+          onClick={() => { onJobTemporaire(); }}
+          style={{
+            width: '100%', marginTop: 10, padding: '8px', borderRadius: 6,
+            border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)',
+            color: 'rgba(255,255,255,0.55)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+        >
+          ⚙️ Job temporaire
+        </button>
+      )}
+
       <button
         onClick={onClose}
-        style={{ width: '100%', marginTop: 8, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}
+        style={{ width: '100%', marginTop: 6, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
       >
         Annuler
       </button>

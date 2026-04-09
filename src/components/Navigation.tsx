@@ -13,6 +13,7 @@ const TABS = [
   { id: 'clients', label: 'Jobs clients', icon: '🔧', color: '#3b82f6' },
   { id: 'detail', label: 'Camions détail', icon: '🏷️', color: '#22c55e' },
   { id: 'inventaire', label: 'Inventaire', icon: '📋', color: '#1e293b' },
+  { id: 'reservoirs', label: 'Réservoirs', icon: '🛢', color: '#0ea5e9' },
   { id: 'baseclients', label: 'Clients', icon: '👤', color: '#6366f1' },
   { id: 'archive', label: 'Archive', icon: '📦', color: '#6b7280' },
 ];

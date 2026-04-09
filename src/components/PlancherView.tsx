@@ -2,16 +2,34 @@ import { useState, useEffect } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
 import { STATIONS } from '../data/stations';
-import { STATION_TO_GARAGE } from '../data/garageData';
+import { STATION_TO_GARAGE, SLOT_TO_GARAGE } from '../data/garageData';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
+import { logJobTemporaire } from '../services/timeLogService';
 import type { Slot, Item } from '../types/item.types';
+
+export interface JobTemporaire {
+  slotId: string;
+  garageId: string;
+  typeJob: 'export' | 'demantelement' | 'autres';
+  titre: string;
+  heureEntree: string;
+}
+
+const TYPE_JOB_CONFIG = {
+  export:        { label: 'Camion export',        emoji: '🚛', color: '#475569' },
+  demantelement: { label: 'Démantèlement pièces',  emoji: '🔧', color: '#374151' },
+  autres:        { label: 'Autres travaux',         emoji: '📋', color: '#1f2937' },
+} as const;
 
 type ModalState =
   | { type: 'assign'; slot: Slot; position: { x: number; y: number }; preSelectedItem?: Item }
   | { type: 'occupe'; item: Item; slot: Slot; position: { x: number; y: number } }
+  | { type: 'job-type'; slot: Slot; position: { x: number; y: number } }
+  | { type: 'job-titre'; slot: Slot; typeJob: JobTemporaire['typeJob']; position: { x: number; y: number } }
+  | { type: 'job-occupe'; job: JobTemporaire; slot: Slot; position: { x: number; y: number } }
   | null;
 
 export function PlancherView() {
@@ -24,6 +42,7 @@ export function PlancherView() {
 
   const [modalState, setModalState] = useState<ModalState>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [tempJobs, setTempJobs] = useState<Record<string, JobTemporaire>>({});
 
   const allEnAttente = [...enAttente.eau, ...enAttente.client, ...enAttente.detail];
 
@@ -43,9 +62,12 @@ export function PlancherView() {
   const handleSlotClick = (e: React.MouseEvent, slot: Slot) => {
     e.stopPropagation();
     const item = slotMap[slot.id];
+    const tempJob = tempJobs[slot.id];
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
-    if (item) {
+    if (tempJob) {
+      setModalState({ type: 'job-occupe', job: tempJob, slot, position });
+    } else if (item) {
       setModalState({ type: 'occupe', item, slot, position });
     } else if (!slot.futur) {
       setModalState({ type: 'assign', slot, position });
@@ -57,12 +79,50 @@ export function PlancherView() {
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
     const station = STATIONS.find((s) => s.id === garageId);
-    const availableSlot = station?.slots.find((s) => !slotMap[s.id]);
+    const availableSlot = station?.slots.find((s) => !slotMap[s.id] && !tempJobs[s.id]);
     if (availableSlot) {
       setModalState({ type: 'assign', slot: availableSlot, position, preSelectedItem: item });
     } else if (station && station.slots.length > 0) {
       setModalState({ type: 'assign', slot: station.slots[0], position, preSelectedItem: item });
     }
+  };
+
+  const handleJobTemporaireStart = (slot: Slot, position: { x: number; y: number }) => {
+    setModalState({ type: 'job-type', slot, position });
+  };
+
+  const handleJobTypeSelect = (typeJob: JobTemporaire['typeJob']) => {
+    if (modalState?.type !== 'job-type') return;
+    setModalState({ type: 'job-titre', slot: modalState.slot, typeJob, position: modalState.position });
+  };
+
+  const handleJobTitreConfirm = (titre: string) => {
+    if (modalState?.type !== 'job-titre') return;
+    const { slot, typeJob } = modalState;
+    const garageId = SLOT_TO_GARAGE[slot.id] ?? '';
+    const job: JobTemporaire = {
+      slotId: slot.id, garageId, typeJob,
+      titre: titre.trim(),
+      heureEntree: new Date().toISOString(),
+    };
+    setTempJobs(prev => ({ ...prev, [slot.id]: job }));
+    setModalState(null);
+  };
+
+  const handleViderSlot = async (job: JobTemporaire) => {
+    await logJobTemporaire({
+      typeJob: job.typeJob,
+      titre: job.titre,
+      garageId: job.garageId,
+      slotId: job.slotId,
+      heureEntree: job.heureEntree,
+    });
+    setTempJobs(prev => {
+      const next = { ...prev };
+      delete next[job.slotId];
+      return next;
+    });
+    setModalState(null);
   };
 
   return (
@@ -94,24 +154,24 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '3', gridRow: '1' }} />
 
       {/* ── HORLOGE ── */}
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
       </div>
 
       {modalState?.type === 'assign' && (
@@ -122,6 +182,7 @@ export function PlancherView() {
           onClose={() => setModalState(null)}
           position={modalState.position}
           preSelectedItem={modalState.preSelectedItem}
+          onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
         />
       )}
 
@@ -141,12 +202,225 @@ export function PlancherView() {
         />
       )}
 
+      {modalState?.type === 'job-type' && (
+        <ModalJobType
+          slot={modalState.slot}
+          position={modalState.position}
+          onSelect={handleJobTypeSelect}
+          onClose={() => setModalState(null)}
+        />
+      )}
+
+      {modalState?.type === 'job-titre' && (
+        <ModalJobTitre
+          slot={modalState.slot}
+          typeJob={modalState.typeJob}
+          position={modalState.position}
+          onConfirm={handleJobTitreConfirm}
+          onClose={() => setModalState(null)}
+        />
+      )}
+
+      {modalState?.type === 'job-occupe' && (
+        <ModalJobOccupe
+          job={modalState.job}
+          slot={modalState.slot}
+          position={modalState.position}
+          onVider={() => handleViderSlot(modalState.job)}
+          onClose={() => setModalState(null)}
+        />
+      )}
+
       {showWizard && (
         <CreateWizardModal
           onClose={() => setShowWizard(false)}
           onCreate={(item) => ajouterItem(item as Item)}
         />
       )}
+    </div>
+  );
+}
+
+// ── ModalJobType ──────────────────────────────────────────────
+
+function ModalJobType({ slot, position, onSelect, onClose }: {
+  slot: Slot;
+  position: { x: number; y: number };
+  onSelect: (type: JobTemporaire['typeJob']) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+        background: '#1a1814', border: '1px solid rgba(255,255,255,0.2)',
+        borderRadius: 10, padding: 16, width: 290,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
+    >
+      <div style={{ fontFamily: 'monospace', color: '#ff6040', fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        Job temporaire — Slot {slot.id}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 14, fontFamily: 'monospace' }}>
+        Quel type de travail?
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {(Object.entries(TYPE_JOB_CONFIG) as [JobTemporaire['typeJob'], typeof TYPE_JOB_CONFIG[keyof typeof TYPE_JOB_CONFIG]][]).map(([key, cfg]) => (
+          <button
+            key={key}
+            onClick={() => onSelect(key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '11px 14px', borderRadius: 8, cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.05)',
+              color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+          >
+            <span style={{ fontSize: 18 }}>{cfg.emoji}</span>
+            {cfg.label}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={onClose}
+        style={{ width: '100%', marginTop: 10, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+      >
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+// ── ModalJobTitre ─────────────────────────────────────────────
+
+function ModalJobTitre({ slot, typeJob, position, onConfirm, onClose }: {
+  slot: Slot;
+  typeJob: JobTemporaire['typeJob'];
+  position: { x: number; y: number };
+  onConfirm: (titre: string) => void;
+  onClose: () => void;
+}) {
+  const [titre, setTitre] = useState('');
+  const cfg = TYPE_JOB_CONFIG[typeJob];
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+        background: '#1a1814', border: '1px solid rgba(255,255,255,0.2)',
+        borderRadius: 10, padding: 16, width: 290,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
+    >
+      <div style={{ fontFamily: 'monospace', color: '#ff6040', fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        {cfg.emoji} {cfg.label}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 14, fontFamily: 'monospace' }}>
+        Slot {slot.id} — Titre du job
+      </div>
+      <input
+        autoFocus
+        type="text"
+        value={titre}
+        onChange={e => setTitre(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && titre.trim()) onConfirm(titre); }}
+        placeholder={typeJob === 'export' ? 'Ex: Export #12' : typeJob === 'demantelement' ? 'Ex: Pièces F-250' : 'Ex: Nettoyage atelier'}
+        style={{
+          width: '100%', padding: '9px 11px', borderRadius: 7,
+          border: '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(255,255,255,0.07)',
+          color: 'white', fontSize: 13, outline: 'none',
+          boxSizing: 'border-box', marginBottom: 10,
+        }}
+      />
+      <button
+        onClick={() => titre.trim() && onConfirm(titre)}
+        disabled={!titre.trim()}
+        style={{
+          width: '100%', padding: '9px', borderRadius: 7, border: 'none',
+          background: titre.trim() ? '#4b5563' : 'rgba(255,255,255,0.07)',
+          color: titre.trim() ? 'white' : 'rgba(255,255,255,0.25)',
+          fontWeight: 700, fontSize: 13, cursor: titre.trim() ? 'pointer' : 'not-allowed',
+          marginBottom: 6, transition: 'all 0.15s',
+        }}
+      >
+        Occuper le slot
+      </button>
+      <button
+        onClick={onClose}
+        style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+      >
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+// ── ModalJobOccupe ────────────────────────────────────────────
+
+function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
+  job: JobTemporaire;
+  slot: Slot;
+  position: { x: number; y: number };
+  onVider: () => void;
+  onClose: () => void;
+}) {
+  const cfg = TYPE_JOB_CONFIG[job.typeJob];
+  const dureeMin = Math.round((Date.now() - new Date(job.heureEntree).getTime()) / 60000);
+  const dureeLabel = dureeMin < 60
+    ? `${dureeMin} min`
+    : `${Math.floor(dureeMin / 60)}h${String(dureeMin % 60).padStart(2, '0')}`;
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+        background: '#1a1814', border: '1px solid rgba(255,255,255,0.2)',
+        borderRadius: 10, padding: 16, width: 290,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
+    >
+      <div style={{ fontFamily: 'monospace', color: '#ff6040', fontWeight: 700, marginBottom: 12, fontSize: 13 }}>
+        Slot {slot.id} — Job temporaire
+      </div>
+      <div style={{
+        padding: '12px 14px', borderRadius: 8, marginBottom: 14,
+        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.1)',
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)', marginBottom: 4 }}>
+          {cfg.emoji} {job.titre}
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
+          {cfg.label}
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+          Depuis {new Date(job.heureEntree).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })} — {dureeLabel}
+        </div>
+      </div>
+      <button
+        onClick={onVider}
+        style={{
+          width: '100%', padding: '9px', borderRadius: 7, border: 'none',
+          background: '#dc2626', color: 'white',
+          fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6,
+        }}
+      >
+        Vider le slot
+      </button>
+      <button
+        onClick={onClose}
+        style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+      >
+        Fermer
+      </button>
     </div>
   );
 }
@@ -207,13 +481,14 @@ function HorlogeWidget() {
 interface StationBlockProps {
   station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
   slotMap: Record<string, Item>;
+  tempJobs: Record<string, JobTemporaire>;
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   allEnAttente: Item[];
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingItemClick, style }: StationBlockProps) {
+function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, style }: StationBlockProps) {
   const itemsEnAttente = allEnAttente.filter(item => {
     if (item.dernierGarageId) return item.dernierGarageId === station.id;
     const garageViaStation = STATION_TO_GARAGE[item.stationActuelle ?? ''];
@@ -257,6 +532,7 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
             key={slot.id}
             slot={slot}
             item={slotMap[slot.id]}
+            tempJob={tempJobs[slot.id]}
             accentColor={station.color}
             onSlotClick={onSlotClick}
             isOptional={station.optional}
@@ -333,12 +609,13 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
 interface SlotCardSimpleProps {
   slot: Slot;
   item?: Item;
+  tempJob?: JobTemporaire;
   accentColor: string;
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   isOptional?: boolean;
 }
 
-function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional }: SlotCardSimpleProps) {
+function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptional }: SlotCardSimpleProps) {
   const typeColor = item
     ? item.type === 'eau'    ? '#f97316'
     : item.type === 'client' ? '#3b82f6'
@@ -350,6 +627,39 @@ function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional }: Sl
     : item.etatCommercial === 'reserve' ? '#f59e0b'
     : typeColor!
     : null;
+
+  if (tempJob) {
+    const cfg = TYPE_JOB_CONFIG[tempJob.typeJob];
+    return (
+      <div
+        onClick={(e) => onSlotClick(e, slot)}
+        style={{
+          background: '#1e2027',
+          border: '2px solid #374151',
+          borderRadius: 6, padding: '8px 10px',
+          cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          minHeight: 0, height: '100%', boxSizing: 'border-box',
+          transition: 'background 0.15s, transform 0.1s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+      >
+        <span style={{ fontFamily: 'monospace', fontSize: 'clamp(10px, 1.1vw, 14px)', fontWeight: 700, color: '#ff5533', lineHeight: 1 }}>
+          #{slot.id}
+        </span>
+        <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          JOB TEMP
+        </div>
+        <span style={{ fontSize: 'clamp(14px, 1.6vw, 20px)', lineHeight: 1 }}>
+          {cfg.emoji}
+        </span>
+        <span style={{ fontSize: 'clamp(9px, 0.9vw, 12px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {tempJob.titre}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

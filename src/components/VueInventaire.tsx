@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
+import { supabase } from '../lib/supabase';
+import { reservoirService } from '../services/reservoirService';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
 import type { Item, StationProgress } from '../types/item.types';
 import {
   PIPELINE_EAU_NEUF, PIPELINE_EAU_USAGE,
@@ -15,6 +17,14 @@ import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
 type FiltreStatut = 'tous' | 'disponible' | 'en-production';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+
+const CHECKLIST_STATIONS = [
+  { id: 'soudure-generale',   label: 'Soudure générale',    color: '#ff6b35' },
+  { id: 'mecanique-generale', label: 'Mécanique générale',  color: '#4a9eff' },
+  { id: 'mecanique-moteur',   label: 'Mécanique moteur',    color: '#4a9eff' },
+  { id: 'soudure-specialisee',label: 'Soudure spécialisée', color: '#ff6b35' },
+  { id: 'peinture',           label: 'Peinture',            color: '#94a3b8' },
+];
 
 const generateId    = () => `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const generateVehId = () => `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -417,7 +427,7 @@ const handleSelectClient = (client: Client) => {
 // ── VueInventaire ─────────────────────────────────────────────
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType } = useInventaire();
+  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir } = useInventaire();
   const { ajouterItem, supprimerItem } = useGarage();
   const { profile: session } = useAuth();
   const isGestion = session?.role === 'gestion';
@@ -522,8 +532,13 @@ const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
       stationsActives = PIPELINE_DETAIL_DEFAUT;
     }
 
+    const etapesFaites = v.etapesFaites ?? [];
+    const doneIds = new Set(etapesFaites.filter(e => e.fait).map(e => e.stationId));
+
     const progression: StationProgress[] = stationsActives.map(sid => ({
-      stationId: sid, status: 'non-commence' as const, subTasks: [],
+      stationId: sid,
+      status: doneIds.has(sid) ? ('termine' as const) : ('non-commence' as const),
+      subTasks: [],
     }));
 
     let label = '';
@@ -736,11 +751,18 @@ const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
                         {v.nomClient ?? v.descriptionTravail ?? v.clientAcheteur ?? '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        {v.statut === 'disponible' ? (
-                          <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>
-                        ) : (
-                          <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {v.statut === 'disponible' ? (
+                            <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>
+                          ) : (
+                            <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>
+                          )}
+                          {v.type === 'eau' && (
+                            v.aUnReservoir
+                              ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir installé</span>
+                              : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>⚠️ Sans réservoir</span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         {v.statut === 'disponible' && (() => {
@@ -773,6 +795,8 @@ const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
           onRetourInventaire={() => retournerEnInventaire(selected)}
           onSupprimer={() => { supprimerVehicule(selected.id); setSelectedId(null); }}
           isGestion={isGestion}
+          onEtapesChange={mettreAJourEtapes}
+          onReservoirChange={mettreAJourReservoir}
         />
       )}
 
@@ -788,7 +812,7 @@ const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
 
 // ── PanneauDetailInventaire ───────────────────────────────────
 
-function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion }: {
+function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange }: {
   vehicule: VehiculeInventaire;
   onClose: () => void;
   onCreerJob: () => void;
@@ -796,11 +820,91 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   onRetourInventaire: () => void;
   onSupprimer: () => void;
   isGestion: boolean;
+  onEtapesChange: (id: string, etapes: EtapeFaite[]) => Promise<void>;
+  onReservoirChange: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
 }) {
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [confirmerRetour, setConfirmerRetour]           = useState(false);
+  const [savingEtape, setSavingEtape] = useState<string | null>(null);
+  const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
+  const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
+  const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
+  const [savingReservoir, setSavingReservoir] = useState(false);
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeLabel = v.type === 'eau' ? 'Camion à eau' : v.type === 'client' ? 'Client externe' : 'Camion détail';
+
+  useEffect(() => {
+    if (v.type !== 'eau') return;
+    if (v.aUnReservoir && v.reservoirId) {
+      supabase.from('prod_reservoirs').select('numero,type').eq('id', v.reservoirId).maybeSingle()
+        .then(({ data }) => setReservoirInstalle(data ? { numero: data.numero, type: data.type } : null));
+    } else if (!v.aUnReservoir) {
+      supabase.from('prod_reservoirs').select('id,numero,type').eq('etat', 'disponible')
+        .then(({ data }) => setReservoirsDisponibles((data ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type }))));
+    }
+  }, [v.id, v.type, v.aUnReservoir, v.reservoirId]);
+
+  const handleAssignerReservoir = async () => {
+    if (!reservoirSelectionne) return;
+    setSavingReservoir(true);
+    try {
+      await reservoirService.installerSurInventaire(reservoirSelectionne, v.id);
+      await onReservoirChange(v.id, true, reservoirSelectionne);
+    } finally {
+      setSavingReservoir(false);
+    }
+  };
+
+  const handleMarquerAvecReservoir = async () => {
+    setSavingReservoir(true);
+    try {
+      await onReservoirChange(v.id, true, null);
+    } finally {
+      setSavingReservoir(false);
+    }
+  };
+
+  const handleRetirerReservoir = async () => {
+    if (!v.reservoirId) {
+      setSavingReservoir(true);
+      try {
+        await onReservoirChange(v.id, false, null);
+      } finally {
+        setSavingReservoir(false);
+      }
+      return;
+    }
+    setSavingReservoir(true);
+    try {
+      await reservoirService.desinstallerDeInventaire(v.reservoirId, v.id);
+      await onReservoirChange(v.id, false, null);
+    } finally {
+      setSavingReservoir(false);
+    }
+  };
+
+  const etapesFaites = v.etapesFaites ?? [];
+  const getEtape = (stationId: string): EtapeFaite | undefined =>
+    etapesFaites.find(e => e.stationId === stationId);
+
+  const handleToggle = async (stationId: string) => {
+    if (savingEtape) return;
+    setSavingEtape(stationId);
+    const existing = getEtape(stationId);
+    const today = new Date().toISOString().slice(0, 10);
+    let updated: EtapeFaite[];
+    if (existing) {
+      updated = etapesFaites.map(e =>
+        e.stationId === stationId ? { ...e, fait: !e.fait, date: today } : e
+      );
+    } else {
+      updated = [...etapesFaites, { stationId, fait: true, date: today }];
+    }
+    await onEtapesChange(v.id, updated);
+    setSavingEtape(null);
+  };
+
+  const nbFait = CHECKLIST_STATIONS.filter(s => getEtape(s.id)?.fait).length;
 
   return (
     <div style={{
@@ -845,6 +949,95 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
           )}
         </div>
 
+        {/* Section Réservoir (camions eau uniquement) */}
+        {v.type === 'eau' && (
+          <div style={{
+            marginBottom: 20, padding: '14px 16px', borderRadius: 10,
+            border: '1px solid #e5e7eb', background: '#fafafa',
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+              Réservoir
+            </div>
+
+            {v.aUnReservoir ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: 8, fontWeight: 700 }}>
+                    ✅ Réservoir installé
+                  </span>
+                  {reservoirInstalle && (
+                    <span style={{ fontSize: 11, color: '#6b7280', fontFamily: 'monospace' }}>
+                      #{reservoirInstalle.numero} — {reservoirInstalle.type}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleRetirerReservoir}
+                  disabled={savingReservoir}
+                  style={{
+                    padding: '7px 14px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
+                    border: '1px solid #fca5a5', background: 'white',
+                    color: '#ef4444', fontSize: 12, fontWeight: 600,
+                    opacity: savingReservoir ? 0.5 : 1,
+                  }}
+                >
+                  {savingReservoir ? 'En cours...' : 'Retirer le réservoir'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>
+                    Assigner un réservoir de l'inventaire
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      value={reservoirSelectionne}
+                      onChange={e => setReservoirSelectionne(e.target.value)}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', color: reservoirSelectionne ? '#111827' : '#9ca3af' }}
+                    >
+                      <option value="">— Choisir un réservoir —</option>
+                      {reservoirsDisponibles.map(r => (
+                        <option key={r.id} value={r.id}>#{r.numero} ({r.type})</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAssignerReservoir}
+                      disabled={!reservoirSelectionne || savingReservoir}
+                      style={{
+                        padding: '7px 14px', borderRadius: 7,
+                        border: 'none', cursor: !reservoirSelectionne || savingReservoir ? 'not-allowed' : 'pointer',
+                        background: !reservoirSelectionne || savingReservoir ? '#e5e7eb' : '#f97316',
+                        color: !reservoirSelectionne || savingReservoir ? '#9ca3af' : 'white',
+                        fontWeight: 700, fontSize: 12, transition: 'all 0.15s',
+                      }}
+                    >
+                      {savingReservoir ? '...' : 'Assigner'}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+                  <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>ou</span>
+                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+                </div>
+                <button
+                  onClick={handleMarquerAvecReservoir}
+                  disabled={savingReservoir}
+                  style={{
+                    padding: '8px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
+                    border: '1px solid #d1d5db', background: 'white',
+                    color: '#374151', fontSize: 12, fontWeight: 600,
+                    opacity: savingReservoir ? 0.5 : 1,
+                  }}
+                >
+                  {savingReservoir ? 'En cours...' : '✅ Marquer comme ayant un réservoir'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Informations */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -862,6 +1055,68 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
             {v.descriptionTravaux  && <div><span style={{ fontWeight: 600, color: '#374151' }}>Travaux :</span> {v.descriptionTravaux}</div>}
             {v.notes            && <div><span style={{ fontWeight: 600, color: '#374151' }}>Notes :</span> {v.notes}</div>}
             <div><span style={{ fontWeight: 600, color: '#374151' }}>Importé le :</span> {new Date(v.dateImport).toLocaleDateString('fr-CA')}</div>
+          </div>
+        </div>
+
+        {/* Checklist stations */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Étapes pré-production
+            </div>
+            <div style={{
+              fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 10,
+              background: nbFait === CHECKLIST_STATIONS.length ? '#dcfce7' : nbFait > 0 ? '#fff7ed' : '#f1f5f9',
+              color: nbFait === CHECKLIST_STATIONS.length ? '#166534' : nbFait > 0 ? '#c2410c' : '#6b7280',
+            }}>
+              {nbFait}/{CHECKLIST_STATIONS.length}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {CHECKLIST_STATIONS.map(station => {
+              const etape = getEtape(station.id);
+              const fait = etape?.fait ?? false;
+              const isSaving = savingEtape === station.id;
+              return (
+                <button
+                  key={station.id}
+                  onClick={() => handleToggle(station.id)}
+                  disabled={isSaving}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px', borderRadius: 8, cursor: isSaving ? 'wait' : 'pointer',
+                    border: fait ? `1.5px solid ${station.color}40` : '1.5px solid #e5e7eb',
+                    background: fait ? `${station.color}10` : '#fafafa',
+                    transition: 'all 0.15s', textAlign: 'left',
+                    opacity: isSaving ? 0.6 : 1,
+                  }}
+                >
+                  <div style={{
+                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                    border: fait ? `2px solid ${station.color}` : '2px solid #d1d5db',
+                    background: fait ? station.color : 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.15s',
+                  }}>
+                    {fait && (
+                      <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                        <path d="M1 4L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: fait ? 600 : 400, color: fait ? '#111827' : '#6b7280' }}>
+                      {station.label}
+                    </div>
+                    {fait && etape?.date && (
+                      <div style={{ fontSize: 10, color: station.color, fontWeight: 500 }}>
+                        Fait le {etape.date}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
