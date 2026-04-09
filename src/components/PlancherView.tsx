@@ -70,8 +70,8 @@ export function PlancherView() {
     } else if (item) {
       setModalState({ type: 'occupe', item, slot, position });
     } else if (!slot.futur) {
-      setModalState({ type: 'assign', slot, position });
-    }
+  setModalState({ type: 'assign', slot, position });
+}
   };
 
   const handleWaitingItemClick = (e: React.MouseEvent, item: Item, garageId: string) => {
@@ -183,7 +183,10 @@ export function PlancherView() {
           position={modalState.position}
           preSelectedItem={modalState.preSelectedItem}
           onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
-        />
+        itemOccupant={slotMap[modalState.slot.id]}
+  onRetirerOccupant={retirerVersAttente}
+  onTerminerOccupant={terminerItem}
+/>
       )}
 
       {modalState?.type === 'occupe' && (
