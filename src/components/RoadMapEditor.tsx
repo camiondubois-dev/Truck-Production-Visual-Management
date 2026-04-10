@@ -3,6 +3,11 @@ import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { useInventaire } from '../contexts/InventaireContext';
 import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
 
+const generateStepId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `step-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const STATUT_CONFIG = {
   planifie:    { label: 'Planifié',   bg: '#f1f5f9', color: '#64748b', dot: '⬜' },
   'en-attente':{ label: 'En attente', bg: '#fff7ed', color: '#c2410c', dot: '⏳' },
@@ -28,8 +33,8 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
   const [newStation, setNewStation] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
-  const usedIds = new Set(steps.map(s => s.stationId));
-  const availableStations = ROAD_MAP_STATIONS.filter(s => !usedIds.has(s.id));
+  // All stations always available (duplicate sous-traitants etc. allowed)
+  const availableStations = [...ROAD_MAP_STATIONS];
 
   const handleSave = async (newSteps: RoadMapEtape[]) => {
     setSaving(true);
@@ -64,16 +69,18 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
     setSteps(steps.map((s, i) => i === idx ? { ...s, statut } : s));
   };
 
-  // Mode compact: toggle une station (clic = ajoute/retire)
+  // Mode compact: toggle une station (clic = ajoute, re-clic = retire le dernier ajouté)
   const toggleStation = (stationId: string) => {
-    const existingIdx = steps.findIndex(s => s.stationId === stationId);
-    if (existingIdx >= 0) {
+    // Find last occurrence to remove
+    const lastIdx = [...steps].map((s, i) => ({ s, i })).reverse().find(({ s }) => s.stationId === stationId)?.i ?? -1;
+    if (lastIdx >= 0) {
       // Retirer
-      setSteps(steps.filter((_, i) => i !== existingIdx).map((s, i) => ({ ...s, ordre: i + 1 })));
+      setSteps(steps.filter((_, i) => i !== lastIdx).map((s, i) => ({ ...s, ordre: i + 1 })));
     } else {
       // Ajouter en fin de liste
       const station = ROAD_MAP_STATIONS.find(s => s.id === stationId);
       const newStep: RoadMapEtape = {
+        id: generateStepId(),
         stationId,
         ordre: steps.length + 1,
         statut: 'planifie',
@@ -88,6 +95,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
     const station = ROAD_MAP_STATIONS.find(s => s.id === newStation);
     if (!station) return;
     const newStep: RoadMapEtape = {
+      id: generateStepId(),
       stationId: newStation,
       ordre: steps.length + 1,
       statut: 'planifie',
@@ -178,7 +186,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
               const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
               const cfg = STATUT_CONFIG[step.statut] ?? STATUT_CONFIG.planifie;
               return (
-                <div key={step.stationId} style={{
+                <div key={step.id ?? `${step.stationId}-${idx}`} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '6px 10px', marginBottom: 4, borderRadius: 8,
                   background: cfg.bg, border: `1px solid ${cfg.color}25`,
@@ -242,7 +250,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
             const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
             const cfg = STATUT_CONFIG[step.statut] ?? STATUT_CONFIG.planifie;
             return (
-              <div key={step.stationId} style={{
+              <div key={step.id ?? `${step.stationId}-${idx}`} style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 10px', borderRadius: 10,
                 background: cfg.bg, border: `1px solid ${cfg.color}30`,

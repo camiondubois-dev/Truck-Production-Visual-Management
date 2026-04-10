@@ -31,6 +31,19 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  // Real-time: auto-created prod_items (from road_map lifecycle) appear instantly
+  useEffect(() => {
+    const channel = supabase
+      .channel('garage-items-realtime')
+      .on(
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'prod_items' },
+        async () => { await chargerItems(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const ajouterItem = async (item: Item) => {
     await itemsService.ajouter(item);
     setItems(prev => [item, ...prev]);

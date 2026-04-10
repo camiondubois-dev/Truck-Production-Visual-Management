@@ -8,6 +8,7 @@ export interface EtapeFaite {
 }
 
 export interface RoadMapEtape {
+  id?: string;                   // UUID — permet d'avoir deux fois la même stationId (ex: 2x sous-traitants)
   stationId: string;
   ordre: number;
   statut: 'planifie' | 'en-attente' | 'en-cours' | 'termine' | 'saute';

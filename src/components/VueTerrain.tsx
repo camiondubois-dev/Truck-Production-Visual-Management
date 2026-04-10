@@ -4,8 +4,8 @@ import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { TERRAIN_PIN } from '../config/terrain';
-import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
-import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL, ROAD_MAP_STATIONS } from '../data/etapes';
+import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 
@@ -166,14 +166,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   onClose: () => void;
   onMisAJour: (updated: VehiculeInventaire) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Local state for étapes (so user can toggle multiple before saving)
-  const [etapesLocales, setEtapesLocales] = useState<EtapeFaite[]>(v.etapesFaites ?? []);
-  const [retoucheComment, setRetoucheComment] = useState<string>(
-    (v.etapesFaites ?? []).find(e => e.stationId === RETOUCHE_ID)?.commentaire ?? ''
-  );
-
   const [reservoirsDispos, setReservoirsDispos] = useState<{ id: string; numero: string; type: string }[]>([]);
   const [reservoirChoisi, setReservoirChoisi]   = useState<string>('');
   const [saving, setSaving]                     = useState(false);
@@ -192,39 +184,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         .then(({ data }) => setReservoirsDispos((data ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type }))));
     }
   }, [v.id, v.type, v.aUnReservoir]);
-
-  // Helpers for local étapes state
-  const getEtapeLocale = (stationId: string) => etapesLocales.find(e => e.stationId === stationId);
-
-  const toggleEtape = (stationId: string) => {
-    const existing = etapesLocales.find(e => e.stationId === stationId);
-    if (existing) {
-      setEtapesLocales(prev => prev.map(e => e.stationId === stationId ? { ...e, fait: !e.fait, date: today } : e));
-    } else {
-      setEtapesLocales(prev => [...prev, { stationId, fait: true, date: today }]);
-    }
-  };
-
-  const toggleRetouche = () => {
-    const existing = etapesLocales.find(e => e.stationId === RETOUCHE_ID);
-    if (existing) {
-      setEtapesLocales(prev => prev.map(e => e.stationId === RETOUCHE_ID ? { ...e, fait: !e.fait, date: today } : e));
-    } else {
-      setEtapesLocales(prev => [...prev, { stationId: RETOUCHE_ID, fait: true, date: today, commentaire: retoucheComment }]);
-    }
-  };
-
-  const updateRetoucheComment = (val: string) => {
-    setRetoucheComment(val);
-    setEtapesLocales(prev =>
-      prev.some(e => e.stationId === RETOUCHE_ID)
-        ? prev.map(e => e.stationId === RETOUCHE_ID ? { ...e, commentaire: val } : e)
-        : [...prev, { stationId: RETOUCHE_ID, fait: true, date: today, commentaire: val }]
-    );
-  };
-
-  const nbFait = CHECKLIST_STATIONS.filter(s => getEtapeLocale(s.id)?.fait).length;
-  const retoucheActive = getEtapeLocale(RETOUCHE_ID)?.fait ?? false;
 
   // Photo
   const handlePhoto = async (fichier: File) => {
@@ -252,18 +211,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     onMisAJour({ ...v, variante: val ?? undefined });
   };
 
-  // Sauvegarder les étapes — flash ✓ puis ferme
-  const handleSauvegarder = async () => {
-    setSaving(true);
-    try {
-      await inventaireService.mettreAJourEtapes(v.id, etapesLocales);
-      onMisAJour({ ...v, etapesFaites: etapesLocales });
-      setSaved(true);
-      setTimeout(onClose, 900); // flash bref puis retour à la liste
-    } finally { setSaving(false); }
-  };
-
-  // Marquer prêt (toutes étapes + estPret)
+  // Marquer prêt (réservoir si besoin + estPret)
   const handleMarquerPret = async () => {
     setSaving(true);
     try {
@@ -275,18 +223,10 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           await inventaireService.mettreAJourReservoir(v.id, true, null);
         }
       }
-      const toutesEtapes: EtapeFaite[] = CHECKLIST_STATIONS.map(s => ({
-        stationId: s.id, fait: true, date: today,
-      }));
-      // Preserve besoin-retouche if set
-      const retouche = etapesLocales.find(e => e.stationId === RETOUCHE_ID);
-      if (retouche) toutesEtapes.push(retouche);
-      await inventaireService.mettreAJourEtapes(v.id, toutesEtapes);
       await inventaireService.marquerPret(v.id, true);
       onMisAJour({
         ...v,
         estPret: true,
-        etapesFaites: toutesEtapes,
         aUnReservoir: v.type === 'eau' ? true : v.aUnReservoir,
         reservoirId: reservoirChoisi || v.reservoirId,
       });
@@ -342,9 +282,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
             <span style={{ fontFamily: 'monospace', fontSize: 24, fontWeight: 700, color: v.type === 'eau' ? '#f97316' : '#22c55e' }}>#{v.numero}</span>
             {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>✅ Prêt</span>}
-            {!v.estPret && nbFait > 0 && (
+            {!v.estPret && v.statut === 'en-production' && (
               <span style={{ fontSize: 12, background: '#fff7ed', color: '#c2410c', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>
-                🔧 {nbFait}/{CHECKLIST_STATIONS.length} étapes
+                🔧 En production
               </span>
             )}
           </div>
@@ -403,70 +343,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           </div>
         )}
 
-        {/* ── Étapes pré-production ── */}
-        <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Étapes pré-production</div>
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 10,
-              background: nbFait === CHECKLIST_STATIONS.length ? '#dcfce7' : nbFait > 0 ? '#fff7ed' : '#f1f5f9',
-              color: nbFait === CHECKLIST_STATIONS.length ? '#166534' : nbFait > 0 ? '#c2410c' : '#6b7280',
-            }}>
-              {nbFait}/{CHECKLIST_STATIONS.length}
-            </span>
-          </div>
-
-          {CHECKLIST_STATIONS.map(station => {
-            const fait = getEtapeLocale(station.id)?.fait ?? false;
-            return (
-              <div key={station.id} onClick={() => toggleEtape(station.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
-                <div style={{
-                  width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-                  border: fait ? 'none' : `2px solid ${station.color}40`,
-                  background: fait ? station.color : 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {fait && <span style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>✓</span>}
-                </div>
-                <span style={{ flex: 1, fontSize: 15, fontWeight: fait ? 700 : 400, color: fait ? '#111827' : '#6b7280' }}>
-                  {station.icon} {station.label}
-                </span>
-                {fait && getEtapeLocale(station.id)?.date && (
-                  <span style={{ fontSize: 11, color: '#9ca3af' }}>{getEtapeLocale(station.id)!.date}</span>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Besoin de retouche — section spéciale */}
-          <div style={{ marginTop: 8 }}>
-            <div onClick={toggleRetouche}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', cursor: 'pointer' }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-                border: retoucheActive ? 'none' : '2px solid #fbbf2440',
-                background: retoucheActive ? '#f59e0b' : 'white',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {retoucheActive && <span style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>✓</span>}
-              </div>
-              <span style={{ flex: 1, fontSize: 15, fontWeight: retoucheActive ? 700 : 400, color: retoucheActive ? '#92400e' : '#6b7280' }}>
-                ⚠️ {RETOUCHE_LABEL}
-              </span>
-            </div>
-            {retoucheActive && (
-              <textarea
-                value={retoucheComment}
-                onChange={e => updateRetoucheComment(e.target.value)}
-                placeholder="Décrire ce qui doit être retouché..."
-                style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #fde68a', background: '#fefce8', fontSize: 14, resize: 'none', minHeight: 72, outline: 'none', boxSizing: 'border-box', marginTop: 4 }}
-                onClick={e => e.stopPropagation()}
-              />
-            )}
-          </div>
-        </div>
-
         {/* ── Road Map ── */}
         <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -483,7 +359,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
                   : step.statut === 'en-attente' ? {bg:'#fff7ed',color:'#c2410c'}
                   : {bg:'#f1f5f9',color:'#64748b'};
                 return (
-                  <span key={step.stationId} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, fontWeight: 600, background: cfg.bg, color: cfg.color }}>
+                  <span key={step.id ?? `${step.stationId}-${step.ordre}`} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, fontWeight: 600, background: cfg.bg, color: cfg.color }}>
                     {station?.icon} {station?.label ?? step.stationId}
                   </span>
                 );
@@ -642,18 +518,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         {/* ── Boutons d'action ── */}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* Toujours visible : Sauvegarder (reste ouvert) */}
-          <button onClick={handleSauvegarder} disabled={saving}
-            style={{
-              width: '100%', padding: '16px', borderRadius: 14, fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer',
-              border: saved ? 'none' : '2px solid #f97316',
-              background: saved ? '#dcfce7' : 'white',
-              color: saved ? '#166534' : '#f97316',
-              transition: 'all 0.3s',
-            }}>
-            {saving ? 'Sauvegarde...' : saved ? '✓ Sauvegardé !' : '💾 Sauvegarder les étapes'}
-          </button>
-
           {/* Marquer prêt OU Retirer prêt */}
           {v.estPret ? (
             <button onClick={handleDecocher} disabled={saving}
@@ -663,7 +527,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           ) : (
             <button onClick={handleMarquerPret} disabled={saving}
               style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: saving ? '#e5e7eb' : '#22c55e', color: saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
-              {saving ? 'En cours...' : '✅ Marquer prêt — tout cocher'}
+              {saving ? 'En cours...' : saved ? '✓ Prêt !' : '✅ Marquer prêt'}
             </button>
           )}
         </div>

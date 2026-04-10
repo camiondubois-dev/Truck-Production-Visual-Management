@@ -114,6 +114,43 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
 
   const mettreAJourRoadMap = async (id: string, roadMap: RoadMapEtape[]) => {
     await inventaireService.mettreAJourRoadMap(id, roadMap);
+    // ── Lifecycle automatique ──────────────────────────────────────
+    const vehicule = vehicules.find(v => v.id === id);
+    if (vehicule) {
+      const activeSteps = roadMap.filter(s => s.statut === 'en-attente' || s.statut === 'en-cours');
+      const allDone = roadMap.length > 0 && roadMap.every(s => s.statut === 'termine' || s.statut === 'saute');
+
+      if (activeSteps.length > 0 && vehicule.statut === 'disponible') {
+        // Au moins une étape active → créer job si pas encore en production
+        try {
+          const jobId = await inventaireService.creerProdItemDepuisVehicule({ ...vehicule, roadMap });
+          setVehicules(prev => prev.map(v =>
+            v.id === id ? { ...v, roadMap, statut: 'en-production', jobId: jobId ?? v.jobId, dateEnProduction: v.dateEnProduction ?? new Date().toISOString() } : v
+          ));
+          return;
+        } catch (err) {
+          console.error('[InventaireContext] creerProdItemDepuisVehicule error:', err);
+        }
+      }
+
+      if (allDone && vehicule.statut === 'en-production') {
+        // Toutes les étapes terminées/sautées → fermer le job
+        try {
+          if (vehicule.jobId) {
+            await supabase.from('prod_items')
+              .update({ etat: 'termine', date_archive: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq('id', vehicule.jobId);
+          }
+          await inventaireService.marquerDisponible(id);
+          setVehicules(prev => prev.map(v =>
+            v.id === id ? { ...v, roadMap, statut: 'disponible', jobId: undefined, dateEnProduction: undefined } : v
+          ));
+          return;
+        } catch (err) {
+          console.error('[InventaireContext] terminer job error:', err);
+        }
+      }
+    }
     setVehicules(prev => prev.map(v =>
       v.id === id ? { ...v, roadMap } : v
     ));
