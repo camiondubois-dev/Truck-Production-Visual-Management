@@ -165,7 +165,7 @@ export const inventaireService = {
     if (error) throw error;
   },
 
-  async mettreAJourCommercial(id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null): Promise<void> {
+  async mettreAJourCommercial(id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null): Promise<void> {
     const { error } = await supabase
       .from('prod_inventaire')
       .update({ etat_commercial: etatCommercial, date_livraison_planifiee: dateLivraisonPlanifiee, client_acheteur: clientAcheteur, updated_at: new Date().toISOString() })

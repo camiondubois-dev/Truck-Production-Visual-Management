@@ -14,7 +14,7 @@ interface InventaireContextType {
   mettreAJourEtapes: (id: string, etapes: EtapeFaite[]) => Promise<void>;
   mettreAJourReservoir: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
   marquerPret: (id: string, estPret: boolean) => Promise<void>;
-  mettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
+  mettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
   archiverVehicule: (id: string) => Promise<void>;
   supprimerVehicule: (id: string) => Promise<void>;
 }
@@ -96,7 +96,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
-  const mettreAJourCommercial = async (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => {
+  const mettreAJourCommercial = async (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => {
     await inventaireService.mettreAJourCommercial(id, etatCommercial, dateLivraisonPlanifiee, clientAcheteur);
     setVehicules(prev => prev.map(v =>
       v.id === id ? { ...v, etatCommercial, dateLivraisonPlanifiee: dateLivraisonPlanifiee ?? undefined, clientAcheteur: clientAcheteur ?? undefined } : v
