@@ -1142,37 +1142,18 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
 {v.statut === 'en-production' && (
   <button
     onClick={async () => {
-  const today = new Date().toISOString().slice(0, 10);
-  const toutesEtapes = CHECKLIST_STATIONS.map(s => ({
-    stationId: s.id, fait: true, date: today,
-  }));
-  await onEtapesChange(v.id, toutesEtapes);
-  const prodItem = items.find(i => i.inventaireId === v.id && i.etat !== 'termine');
-  if (prodItem) {
-    const nouvelleProgression = prodItem.progression.map(p => ({
-      ...p,
-      status: p.status === 'non-requis' ? 'non-requis' as const : 'termine' as const,
-    }));
-    await mettreAJourItem(prodItem.id, { progression: nouvelleProgression });
-  }
-}}
-        const { data: prodItem } = await supabase
-          .from('prod_items')
-          .select('progression, stations_actives')
-          .eq('inventaire_id', v.id)
-          .neq('etat', 'termine')
-          .maybeSingle();
-        if (prodItem) {
-          const nouvelleProgression = (prodItem.progression ?? []).map((p: any) => ({
-            ...p,
-            status: p.status === 'non-requis' ? 'non-requis' : 'termine',
-          }));
-          await supabase
-            .from('prod_items')
-            .update({ progression: nouvelleProgression })
-            .eq('inventaire_id', v.id)
-            .neq('etat', 'termine');
-        }
+      const today = new Date().toISOString().slice(0, 10);
+      const toutesEtapes = CHECKLIST_STATIONS.map(s => ({
+        stationId: s.id, fait: true, date: today,
+      }));
+      await onEtapesChange(v.id, toutesEtapes);
+      const prodItem = items.find(i => i.inventaireId === v.id && i.etat !== 'termine');
+      if (prodItem) {
+        const nouvelleProgression = prodItem.progression.map(p => ({
+          ...p,
+          status: p.status === 'non-requis' ? 'non-requis' as const : 'termine' as const,
+        }));
+        await mettreAJourItem(prodItem.id, { progression: nouvelleProgression });
       }
     }}
     style={{
