@@ -281,8 +281,8 @@ export function VueInventaire() {
 
   const filtres = [...baseList]
     .filter(v => {
-      if (filtreStatut === 'pret') return v.estPret === true;
-      if (filtreStatut !== 'tous' && v.statut !== filtreStatut) return false;
+      if (filtreStatut === 'pret' && !v.estPret) return false;
+      if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && v.statut !== filtreStatut) return false;
       if (filtreType !== 'tous' && v.type !== filtreType) return false;
       return true;
     })

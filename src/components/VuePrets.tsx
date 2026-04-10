@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGarage } from '../hooks/useGarage';
-import { useInventaire } from '../contexts/InventaireContext';
+import { supabase } from '../lib/supabase';
 import { EauIcon } from './EauIcon';
 import type { Item, EtatCommercial } from '../types/item.types';
 
@@ -8,11 +8,20 @@ type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
 
 export function VuePrets() {
   const { items, archiverItem, mettreAJourItem } = useGarage();
-  const { vehicules } = useInventaire();
+  const [idsPrets, setIdsPrets] = useState<Set<string>>(new Set());
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const idsPrets = new Set(vehicules.filter(v => v.estPret).map(v => v.id));
+  useEffect(() => {
+    supabase
+      .from('prod_inventaire')
+      .select('id')
+      .eq('est_pret', true)
+      .then(({ data }) => {
+        if (data) setIdsPrets(new Set(data.map((r: { id: string }) => r.id)));
+      });
+  }, []);
+
   const prets = items.filter(i => i.etat !== 'termine' && i.inventaireId && idsPrets.has(i.inventaireId));
 
   const filtres = prets
