@@ -11,7 +11,7 @@ export interface RoadMapEtape {
   stationId: string;
   ordre: number;
   statut: 'planifie' | 'en-attente' | 'en-cours' | 'termine' | 'saute';
-  priorite?: 1 | 2 | 3;        // 1=urgent, 2=normal, 3=faible
+  priorite?: number;             // position dans la file d'attente (1=premier)
   description?: string;          // Used for sous-traitants
 }
 
