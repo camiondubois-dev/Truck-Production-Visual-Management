@@ -1147,14 +1147,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
         stationId: s.id, fait: true, date: today,
       }));
       await onEtapesChange(v.id, toutesEtapes);
-      const prodItem = items.find(i => i.inventaireId === v.id && i.etat !== 'termine');
-      if (prodItem) {
-        const nouvelleProgression = prodItem.progression.map(p => ({
-          ...p,
-          status: p.status === 'non-requis' ? 'non-requis' as const : 'termine' as const,
-        }));
-        await mettreAJourItem(prodItem.id, { progression: nouvelleProgression });
-      }
+      await marquerPret(v.id);
     }}
     style={{
       width: '100%', padding: '12px', borderRadius: 8, border: 'none',
