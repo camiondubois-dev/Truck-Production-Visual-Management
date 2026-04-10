@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useGarage } from '../hooks/useGarage';
+import { useInventaire } from '../contexts/InventaireContext';
 import { EauIcon } from './EauIcon';
 import { STATIONS } from '../data/stations';
-import { STATION_TO_GARAGE, SLOT_TO_GARAGE } from '../data/garageData';
+import { STATION_TO_GARAGE, SLOT_TO_GARAGE, GARAGE_TO_ROAD_MAP_STATIONS } from '../data/garageData';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
 import { logJobTemporaire } from '../services/timeLogService';
 import type { Slot, Item } from '../types/item.types';
+import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 export interface JobTemporaire {
   slotId: string;
@@ -24,6 +26,12 @@ const TYPE_JOB_CONFIG = {
   autres:        { label: 'Autres travaux',         emoji: '📋', color: '#1f2937' },
 } as const;
 
+const PRIORITE_CONFIG: Record<1 | 2 | 3, { label: string; dot: string; border: string }> = {
+  1: { label: 'Urgent', dot: '#ef4444', border: '#ef4444' },
+  2: { label: 'Normal', dot: '#f59e0b', border: '#f59e0b' },
+  3: { label: 'Faible', dot: '#22c55e', border: '#22c55e' },
+};
+
 type ModalState =
   | { type: 'assign'; slot: Slot; position: { x: number; y: number }; preSelectedItem?: Item }
   | { type: 'occupe'; item: Item; slot: Slot; position: { x: number; y: number } }
@@ -34,17 +42,41 @@ type ModalState =
 
 export function PlancherView() {
   const {
+    items,
     slotMap, enAttente, assignerSlot,
     retirerVersAttente, terminerItem,
     ajouterItem, updateStationStatus,
     terminerEtAvancer,
   } = useGarage();
 
+  const { vehicules, mettreAJourRoadMap } = useInventaire();
+
   const [modalState, setModalState] = useState<ModalState>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [tempJobs, setTempJobs] = useState<Record<string, JobTemporaire>>({});
 
   const allEnAttente = [...enAttente.eau, ...enAttente.client, ...enAttente.detail];
+
+  // Index inventaireId → Item pour croiser road_map et prod_items
+  const itemByInvId = useMemo(() => {
+    const map: Record<string, Item> = {};
+    items.forEach(item => { if (item.inventaireId) map[item.inventaireId] = item; });
+    return map;
+  }, [items]);
+
+  // Met à jour la priorité d'une étape road_map depuis le plancher
+  const handleSetPriorite = useCallback(async (
+    inventaireId: string,
+    stationId: string,
+    priorite: 1 | 2 | 3 | undefined,
+  ) => {
+    const vehicule = vehicules.find(v => v.id === inventaireId);
+    if (!vehicule?.roadMap) return;
+    const updated = vehicule.roadMap.map(step =>
+      step.stationId === stationId ? { ...step, priorite } : step
+    );
+    await mettreAJourRoadMap(inventaireId, updated);
+  }, [vehicules, mettreAJourRoadMap]);
 
   const calculerPosition = (rect: DOMRect) => {
     const MODAL_WIDTH = 360;
@@ -76,7 +108,6 @@ export function PlancherView() {
 
   const handleWaitingItemClick = (e: React.MouseEvent, item: Item, garageId: string) => {
     e.stopPropagation();
-    // Si l'item est déjà dans un slot, ne rien faire
     if (item.slotId) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
@@ -156,23 +187,23 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '3', gridRow: '1' }} />
 
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
       </div>
 
       {modalState?.type === 'assign' && (
@@ -472,6 +503,77 @@ function HorlogeWidget() {
   );
 }
 
+// ── Types internes ─────────────────────────────────────────────
+interface QueueEntry {
+  item: Item;
+  priorite?: 1 | 2 | 3;
+  inventaireId?: string;
+  stationId?: string;
+}
+
+const prioriteRank = (p?: 1 | 2 | 3) => p === 1 ? 0 : p === 3 ? 2 : 1;
+
+// ── Popover de priorité ────────────────────────────────────────
+function PrioritePopover({ entry, position, onSelect, onClose }: {
+  entry: QueueEntry;
+  position: { x: number; y: number };
+  onSelect: (p: 1 | 2 | 3 | undefined) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: position.y, left: position.x, zIndex: 300,
+        background: '#1a1814', border: '1px solid rgba(255,255,255,0.2)',
+        borderRadius: 8, padding: 10, width: 160,
+        boxShadow: '0 6px 24px rgba(0,0,0,0.8)',
+      }}
+    >
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Priorité #{entry.item.numero}
+      </div>
+      {([1, 2, 3] as const).map(p => (
+        <button
+          key={p}
+          onClick={() => { onSelect(entry.priorite === p ? undefined : p); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: 'none', cursor: 'pointer',
+            background: entry.priorite === p ? `${PRIORITE_CONFIG[p].dot}22` : 'transparent',
+            color: entry.priorite === p ? PRIORITE_CONFIG[p].dot : 'rgba(255,255,255,0.7)',
+            fontSize: 12, fontWeight: entry.priorite === p ? 700 : 500,
+            marginBottom: 2,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = `${PRIORITE_CONFIG[p].dot}18`)}
+          onMouseLeave={e => (e.currentTarget.style.background = entry.priorite === p ? `${PRIORITE_CONFIG[p].dot}22` : 'transparent')}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: PRIORITE_CONFIG[p].dot, flexShrink: 0 }} />
+          {PRIORITE_CONFIG[p].label}
+          {entry.priorite === p && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+        </button>
+      ))}
+      {entry.priorite && (
+        <button
+          onClick={() => { onSelect(undefined); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            width: '100%', padding: '6px 10px', borderRadius: 6,
+            border: 'none', cursor: 'pointer', background: 'transparent',
+            color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          Effacer priorité
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── StationBlock ───────────────────────────────────────────────
 interface StationBlockProps {
   station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
   slotMap: Record<string, Item>;
@@ -479,26 +581,77 @@ interface StationBlockProps {
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   allEnAttente: Item[];
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
+  vehicules: VehiculeInventaire[];
+  itemByInvId: Record<string, Item>;
+  onSetPriorite: (inventaireId: string, stationId: string, priorite: 1 | 2 | 3 | undefined) => Promise<void>;
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, style }: StationBlockProps) {
-  const itemsEnAttente = allEnAttente.filter(item => {
-    if (item.dernierGarageId) return item.dernierGarageId === station.id;
-    const garageViaStation = STATION_TO_GARAGE[item.stationActuelle ?? ''];
-    return garageViaStation === station.id;
-  });
+function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
+  const [prioPopover, setPrioPopover] = useState<{ entry: QueueEntry; x: number; y: number } | null>(null);
+
+  const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
+
+  // File d'attente enrichie avec priorités road_map
+  const finalQueue = useMemo((): QueueEntry[] => {
+    const seenIds = new Set<string>();
+    const queue: QueueEntry[] = [];
+
+    // 1. Items avec étape road_map 'en-attente' pour ce garage (source principale)
+    if (roadMapStations.length > 0) {
+      for (const v of vehicules) {
+        if (!v.roadMap) continue;
+        const step = v.roadMap.find(s =>
+          roadMapStations.includes(s.stationId) && s.statut === 'en-attente'
+        );
+        if (!step) continue;
+        const item = itemByInvId[v.id];
+        if (!item || item.etat === 'termine' || item.slotId) continue;
+        seenIds.add(item.id);
+        queue.push({ item, priorite: step.priorite, inventaireId: v.id, stationId: step.stationId });
+      }
+    }
+
+    // 2. Fallback: logique existante pour items sans road_map (dernierGarageId / stationActuelle)
+    for (const item of allEnAttente) {
+      if (seenIds.has(item.id)) continue;
+      const isForThisGarage =
+        item.dernierGarageId === station.id ||
+        STATION_TO_GARAGE[item.stationActuelle ?? ''] === station.id;
+      if (!isForThisGarage) continue;
+      seenIds.add(item.id);
+      queue.push({ item });
+    }
+
+    // Trier: 1 (urgent) → 2/indéfini (normal) → 3 (faible)
+    return queue.sort((a, b) => prioriteRank(a.priorite) - prioriteRank(b.priorite));
+  }, [vehicules, itemByInvId, allEnAttente, station.id]);
+
+  const handlePrioriteClick = (e: React.MouseEvent, entry: QueueEntry) => {
+    e.stopPropagation();
+    if (!entry.inventaireId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.min(rect.right + 6, window.innerWidth - 170);
+    const y = Math.min(rect.top, window.innerHeight - 160);
+    setPrioPopover({ entry, x, y });
+  };
+
+  const hasUrgent = finalQueue.some(e => e.priorite === 1);
 
   return (
-    <div style={{
-      width: '100%', height: '92%',
-      background: '#161410',
-      border: `1.5px solid ${station.color}40`,
-      borderRadius: 8,
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-      ...style,
-    }}>
+    <div
+      onClick={() => setPrioPopover(null)}
+      style={{
+        width: '100%', height: '92%',
+        background: '#161410',
+        border: `1.5px solid ${station.color}40`,
+        borderRadius: 8,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        ...style,
+      }}
+    >
+      {/* En-tête avec compteur file d'attente */}
       <div style={{
         padding: '6px 12px',
         background: `${station.color}18`,
@@ -510,10 +663,24 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         textTransform: 'uppercase',
         color: station.color,
         flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        {station.label}
+        <span>{station.label}</span>
+        {finalQueue.length > 0 && (
+          <span style={{
+            background: hasUrgent ? '#ef444422' : `${station.color}18`,
+            color: hasUrgent ? '#ef4444' : station.color,
+            border: `1px solid ${hasUrgent ? '#ef444455' : `${station.color}44`}`,
+            borderRadius: 4, padding: '1px 8px',
+            fontSize: 'clamp(8px, 0.85vw, 11px)',
+            fontWeight: 700, letterSpacing: '0.05em',
+          }}>
+            {finalQueue.length} en attente{hasUrgent ? ' ⚠' : ''}
+          </span>
+        )}
       </div>
 
+      {/* Grille des slots */}
       <div style={{
         flex: 1,
         display: 'grid',
@@ -534,44 +701,63 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         ))}
       </div>
 
-      {itemsEnAttente.length > 0 && (
+      {/* File d'attente triée par priorité */}
+      {finalQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
-          padding: '6px 8px 4px',
+          padding: '6px 8px 5px',
           flexShrink: 0,
+          background: 'rgba(0,0,0,0.25)',
         }}>
           <div style={{
             fontSize: 'clamp(8px, 0.8vw, 9px)',
             fontFamily: 'monospace', fontWeight: 700,
             letterSpacing: '0.08em', textTransform: 'uppercase',
-            color: '#f59e0b', marginBottom: 4,
+            color: '#f59e0b', marginBottom: 5,
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-            En attente ({itemsEnAttente.length})
+            File d'attente
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {itemsEnAttente.map((item) => {
+            {finalQueue.map((entry) => {
+              const { item, priorite } = entry;
               const couleur = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
+              const pCfg = priorite ? PRIORITE_CONFIG[priorite] : null;
               return (
                 <div
                   key={item.id}
-                  title={item.label}
+                  title={`${item.label}${pCfg ? ` — Priorité: ${pCfg.label}` : ''}`}
                   onClick={(e) => onWaitingItemClick(e, item, station.id)}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    background: `${couleur}18`,
-                    border: `1px solid ${couleur}55`,
-                    borderRadius: 4, padding: '3px 7px',
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    background: `${couleur}13`,
+                    border: `1px solid ${pCfg ? pCfg.border + '88' : couleur + '55'}`,
+                    borderLeft: `3px solid ${pCfg ? pCfg.dot : couleur + '88'}`,
+                    borderRadius: 4, padding: '3px 7px 3px 5px',
                     cursor: item.slotId ? 'default' : 'pointer',
                     fontSize: 'clamp(9px, 0.9vw, 11px)',
                     fontFamily: 'monospace', color: couleur, fontWeight: 700,
                     transition: 'transform 0.15s, background 0.15s',
                     opacity: item.slotId ? 0.5 : 1,
                   }}
-                  onMouseEnter={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}25`; } }}
-                  onMouseLeave={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}18`; } }}
+                  onMouseEnter={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}22`; } }}
+                  onMouseLeave={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}13`; } }}
                 >
+                  {/* Dot de priorité — clic pour changer */}
+                  <span
+                    title={pCfg ? `${pCfg.label} — clic pour changer` : entry.inventaireId ? 'Définir priorité' : ''}
+                    onClick={entry.inventaireId ? (e) => handlePrioriteClick(e, entry) : undefined}
+                    style={{
+                      width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                      background: pCfg ? pCfg.dot : 'rgba(255,255,255,0.15)',
+                      cursor: entry.inventaireId ? 'pointer' : 'default',
+                      border: pCfg ? 'none' : '1px solid rgba(255,255,255,0.25)',
+                      transition: 'transform 0.1s',
+                    }}
+                    onMouseEnter={(e) => { if (entry.inventaireId) { e.stopPropagation(); e.currentTarget.style.transform = 'scale(1.5)'; } }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  />
                   {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(10px, 1vw, 12px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
                   <span>#{item.numero}</span>
                   {item.slotId && (
@@ -604,6 +790,21 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             })}
           </div>
         </div>
+      )}
+
+      {/* Popover de priorité */}
+      {prioPopover && (
+        <PrioritePopover
+          entry={prioPopover.entry}
+          position={{ x: prioPopover.x, y: prioPopover.y }}
+          onSelect={async (p) => {
+            if (prioPopover.entry.inventaireId && prioPopover.entry.stationId) {
+              await onSetPriorite(prioPopover.entry.inventaireId, prioPopover.entry.stationId, p);
+            }
+            setPrioPopover(null);
+          }}
+          onClose={() => setPrioPopover(null)}
+        />
       )}
     </div>
   );
