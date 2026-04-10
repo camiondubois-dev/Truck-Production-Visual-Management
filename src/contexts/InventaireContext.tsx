@@ -13,6 +13,7 @@ interface InventaireContextType {
   mettreAJourType: (id: string, type: 'eau' | 'detail') => Promise<void>;
   mettreAJourEtapes: (id: string, etapes: EtapeFaite[]) => Promise<void>;
   mettreAJourReservoir: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
+  marquerPret: (id: string, estPret: boolean) => Promise<void>;
   supprimerVehicule: (id: string) => Promise<void>;
 }
 
@@ -53,7 +54,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     await inventaireService.marquerDisponible(id);
     setVehicules(prev => prev.map(v =>
       v.id === id
-        ? { ...v, statut: 'disponible', jobId: undefined, dateEnProduction: undefined }
+        ? { ...v, statut: 'disponible', jobId: undefined, dateEnProduction: undefined, estPret: false }
         : v
     ));
   };
@@ -61,9 +62,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
   const mettreAJourPhotoInventaire = async (id: string, photoUrl: string | null) => {
     await inventaireService.mettreAJourPhoto(id, photoUrl);
     setVehicules(prev => prev.map(v =>
-      v.id === id
-        ? { ...v, photoUrl: photoUrl ?? undefined }
-        : v
+      v.id === id ? { ...v, photoUrl: photoUrl ?? undefined } : v
     ));
   };
 
@@ -88,6 +87,13 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  const marquerPret = async (id: string, estPret: boolean) => {
+    await inventaireService.marquerPret(id, estPret);
+    setVehicules(prev => prev.map(v =>
+      v.id === id ? { ...v, estPret } : v
+    ));
+  };
+
   const supprimerVehicule = async (id: string) => {
     await inventaireService.supprimer(id);
     setVehicules(prev => prev.filter(v => v.id !== id));
@@ -95,17 +101,12 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <InventaireContext.Provider value={{
-      vehicules,
-      loading,
-      importerVehicules,
-      ajouterVehicule,
-      marquerEnProduction,
-      marquerDisponible,
-      mettreAJourPhotoInventaire,
-      mettreAJourType,
-      mettreAJourEtapes,
-      mettreAJourReservoir,
-      supprimerVehicule,
+      vehicules, loading,
+      importerVehicules, ajouterVehicule,
+      marquerEnProduction, marquerDisponible,
+      mettreAJourPhotoInventaire, mettreAJourType,
+      mettreAJourEtapes, mettreAJourReservoir,
+      marquerPret, supprimerVehicule,
     }}>
       {children}
     </InventaireContext.Provider>
