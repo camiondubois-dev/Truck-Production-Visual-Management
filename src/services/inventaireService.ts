@@ -135,6 +135,14 @@ export const inventaireService = {
     if (error) throw error;
   },
 
+  async mettreAJourVariante(id: string, variante: 'Neuf' | 'Usagé' | null): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ variante, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   async mettreAJourEtapes(id: string, etapesFaites: EtapeFaite[]): Promise<void> {
     const { error } = await supabase
       .from('prod_inventaire')

@@ -17,17 +17,10 @@ import {
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
+import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL } from '../data/etapes';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
-
-const CHECKLIST_STATIONS = [
-  { id: 'soudure-generale',    label: 'Soudure générale',    color: '#ff6b35' },
-  { id: 'mecanique-generale',  label: 'Mécanique générale',  color: '#4a9eff' },
-  { id: 'mecanique-moteur',    label: 'Mécanique moteur',    color: '#4a9eff' },
-  { id: 'soudure-specialisee', label: 'Soudure spécialisée', color: '#ff6b35' },
-  { id: 'peinture',            label: 'Peinture',            color: '#94a3b8' },
-];
 
 const generateId    = () => `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const generateVehId = () => `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -802,6 +795,49 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
               );
             })}
           </div>
+
+          {/* Besoin de retouche - section séparée */}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
+            <div
+              onClick={async () => {
+                const retouche = getEtape(RETOUCHE_ID);
+                const today = new Date().toISOString().slice(0, 10);
+                let updated: EtapeFaite[];
+                if (retouche) {
+                  updated = etapesFaites.map(e => e.stationId === RETOUCHE_ID ? { ...e, fait: !e.fait, date: today } : e);
+                } else {
+                  updated = [...etapesFaites, { stationId: RETOUCHE_ID, fait: true, date: today }];
+                }
+                await onEtapesChange(v.id, updated);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}
+            >
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, border: getEtape(RETOUCHE_ID)?.fait ? 'none' : '2px solid #e5e7eb',
+                background: getEtape(RETOUCHE_ID)?.fait ? '#fef3c7' : 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                {getEtape(RETOUCHE_ID)?.fait && <span style={{ fontSize: 14 }}>⚠️</span>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600, color: getEtape(RETOUCHE_ID)?.fait ? '#92400e' : '#6b7280' }}>
+                ⚠️ {RETOUCHE_LABEL}
+              </span>
+            </div>
+            {getEtape(RETOUCHE_ID)?.fait && (
+              <textarea
+                placeholder="Décrire ce qui doit être retouché..."
+                value={getEtape(RETOUCHE_ID)?.commentaire ?? ''}
+                onChange={async e => {
+                  const val = e.target.value;
+                  const updated = etapesFaites.some(ep => ep.stationId === RETOUCHE_ID)
+                    ? etapesFaites.map(ep => ep.stationId === RETOUCHE_ID ? { ...ep, commentaire: val } : ep)
+                    : [...etapesFaites, { stationId: RETOUCHE_ID, fait: true, date: new Date().toISOString().slice(0, 10), commentaire: val }];
+                  await onEtapesChange(v.id, updated);
+                }}
+                style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: '1px solid #fde68a', background: '#fefce8', fontSize: 13, resize: 'vertical', minHeight: 60, outline: 'none', boxSizing: 'border-box' }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Actions */}
@@ -818,7 +854,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
           {/* Marquer comme prêt / Annuler prêt */}
           {v.statut === 'en-production' && (
             !v.estPret ? (
-              <button onClick={async () => { setSavingPret(true); try { const today = new Date().toISOString().slice(0, 10); const toutesEtapes = CHECKLIST_STATIONS.map(s => ({ stationId: s.id, fait: true, date: today })); await onEtapesChange(v.id, toutesEtapes); await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
+              <button onClick={async () => { setSavingPret(true); try { const today = new Date().toISOString().slice(0, 10); const toutesEtapes: EtapeFaite[] = CHECKLIST_STATIONS.map(s => ({ stationId: s.id, fait: true, date: today })); const retouche = etapesFaites.find(e => e.stationId === RETOUCHE_ID); if (retouche) toutesEtapes.push(retouche); await onEtapesChange(v.id, toutesEtapes); await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
                 disabled={savingPret}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: savingPret ? '#86efac' : '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: savingPret ? 'wait' : 'pointer', opacity: savingPret ? 0.7 : 1 }}>
                 {savingPret ? 'En cours...' : '✅ Marquer comme prêt'}
