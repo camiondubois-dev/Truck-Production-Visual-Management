@@ -175,6 +175,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   const [reservoirsDispos, setReservoirsDispos] = useState<{ id: string; numero: string; type: string }[]>([]);
   const [reservoirChoisi, setReservoirChoisi]   = useState<string>('');
   const [saving, setSaving]                     = useState(false);
+  const [saved, setSaved]                       = useState(false);
   const [uploadingPhoto, setUploadingPhoto]     = useState(false);
 
   useEffect(() => {
@@ -243,13 +244,14 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     onMisAJour({ ...v, variante: val ?? undefined });
   };
 
-  // Sauvegarder les étapes (bouton "Commencé")
-  const handleCommence = async () => {
+  // Sauvegarder les étapes — reste ouvert
+  const handleSauvegarder = async () => {
     setSaving(true);
     try {
       await inventaireService.mettreAJourEtapes(v.id, etapesLocales);
       onMisAJour({ ...v, etapesFaites: etapesLocales });
-      onClose();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } finally { setSaving(false); }
   };
 
@@ -280,7 +282,8 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         aUnReservoir: v.type === 'eau' ? true : v.aUnReservoir,
         reservoirId: reservoirChoisi || v.reservoirId,
       });
-      onClose();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } finally { setSaving(false); }
   };
 
@@ -289,7 +292,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     try {
       await inventaireService.marquerPret(v.id, false);
       onMisAJour({ ...v, estPret: false });
-      onClose();
     } finally { setSaving(false); }
   };
 
@@ -303,9 +305,11 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', maxHeight: '92vh', overflowY: 'auto', paddingBottom: 40 }}>
 
-        {/* Poignée */}
-        <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'center' }}>
+        {/* Poignée + bouton fermer */}
+        <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ width: 32 }} />
           <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#6b7280', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
         </div>
 
         {/* Photo */}
@@ -479,22 +483,30 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
 
         {/* ── Boutons d'action ── */}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* Toujours visible : Sauvegarder (reste ouvert) */}
+          <button onClick={handleSauvegarder} disabled={saving}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 14, fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer',
+              border: saved ? 'none' : '2px solid #f97316',
+              background: saved ? '#dcfce7' : 'white',
+              color: saved ? '#166534' : '#f97316',
+              transition: 'all 0.3s',
+            }}>
+            {saving ? 'Sauvegarde...' : saved ? '✓ Sauvegardé !' : '💾 Sauvegarder les étapes'}
+          </button>
+
+          {/* Marquer prêt OU Retirer prêt */}
           {v.estPret ? (
             <button onClick={handleDecocher} disabled={saving}
-              style={{ width: '100%', padding: '16px', borderRadius: 14, border: '2px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: saving ? 'wait' : 'pointer' }}>
               {saving ? '...' : '↩️ Retirer le statut prêt'}
             </button>
           ) : (
-            <>
-              <button onClick={handleCommence} disabled={saving}
-                style={{ width: '100%', padding: '16px', borderRadius: 14, border: '2px solid #f97316', background: 'white', color: '#f97316', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
-                {saving ? 'Sauvegarde...' : '🔧 Sauvegarder les étapes'}
-              </button>
-              <button onClick={handleMarquerPret} disabled={saving}
-                style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: saving ? '#e5e7eb' : '#22c55e', color: saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
-                {saving ? 'En cours...' : '✅ Marquer prêt'}
-              </button>
-            </>
+            <button onClick={handleMarquerPret} disabled={saving}
+              style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: saving ? '#e5e7eb' : '#22c55e', color: saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
+              {saving ? 'En cours...' : '✅ Marquer prêt — tout cocher'}
+            </button>
           )}
         </div>
 
@@ -682,7 +694,7 @@ function VueTerrainMain() {
         <FicheCamion
           vehicule={selected}
           onClose={() => setSelectedId(null)}
-          onMisAJour={updated => { handleMisAJour(updated); setSelectedId(null); }}
+          onMisAJour={updated => { handleMisAJour(updated); }}
         />
       )}
       {showCreation && (
