@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
+import { toutesEtapesCompletees } from '../utils/progressionUtils';
 
 interface NavigationProps {
   currentTab: string;
@@ -8,20 +9,22 @@ interface NavigationProps {
 }
 
 const TABS = [
-  { id: 'plancher', label: 'Vue Plancher', icon: '🏭' },
-  { id: 'eau', label: 'Camions à eau', icon: 'EAU_LOGO', color: '#f97316' },
-  { id: 'clients', label: 'Jobs clients', icon: '🔧', color: '#3b82f6' },
-  { id: 'detail', label: 'Camions détail', icon: '🏷️', color: '#22c55e' },
-  { id: 'inventaire', label: 'Inventaire', icon: '📋', color: '#1e293b' },
-  { id: 'reservoirs', label: 'Réservoirs', icon: '🛢', color: '#0ea5e9' },
-  { id: 'baseclients', label: 'Clients', icon: '👤', color: '#6366f1' },
-  { id: 'archive', label: 'Archive', icon: '📦', color: '#6b7280' },
+  { id: 'plancher',    label: 'Vue Plancher',   icon: '🏭' },
+  { id: 'eau',         label: 'Camions à eau',  icon: 'EAU_LOGO', color: '#f97316' },
+  { id: 'clients',     label: 'Jobs clients',   icon: '🔧',       color: '#3b82f6' },
+  { id: 'detail',      label: 'Camions détail', icon: '🏷️',       color: '#22c55e' },
+  { id: 'prets',       label: 'Prêts',          icon: '✅',        color: '#22c55e' },
+  { id: 'inventaire',  label: 'Inventaire',     icon: '📋',       color: '#1e293b' },
+  { id: 'reservoirs',  label: 'Réservoirs',     icon: '🛢',       color: '#0ea5e9' },
+  { id: 'baseclients', label: 'Clients',        icon: '👤',       color: '#6366f1' },
+  { id: 'archive',     label: 'Archive',        icon: '📦',       color: '#6b7280' },
 ];
 
 export function Navigation({ currentTab, onTabChange }: NavigationProps) {
   const { deconnexion } = useAuth();
   const { items } = useGarage();
-  const archiveCount = items.filter(i => i.etat === 'termine').length;
+
+  const pretsCount = items.filter(i => i.etat !== 'termine' && toutesEtapesCompletees(i)).length;
 
   return (
     <div style={{
@@ -56,7 +59,7 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
       </div>
 
       {TABS.map((tab) => {
-        const count = tab.id === 'archive' ? archiveCount : undefined;
+        const count = tab.id === 'prets' ? pretsCount : undefined;
         return (
           <button
             key={tab.id}
@@ -89,8 +92,8 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
             <span>{tab.label}</span>
             {count !== undefined && count > 0 && (
               <span style={{
-                background: currentTab === tab.id ? tab.color : 'rgba(255,255,255,0.15)',
-                color: currentTab === tab.id ? 'white' : 'rgba(255,255,255,0.5)',
+                background: currentTab === tab.id ? tab.color : '#22c55e',
+                color: 'white',
                 fontSize: 12, fontWeight: 700,
                 padding: '2px 8px', borderRadius: 10,
                 minWidth: 20, textAlign: 'center',
