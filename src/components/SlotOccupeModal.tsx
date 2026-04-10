@@ -388,14 +388,18 @@ export function SlotOccupeModal({
       });
     }
     onClose();
-  }}
-    style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-    ✅ Marquer comme prêt
-  </button>
-  <button onClick={(e) => { e.stopPropagation(); onClose(); }}
-    style={{ padding: '7px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}>
-    Fermer
-  </button>
-</div>
+   }}
+            style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+            ✅ Marquer comme prêt
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={{ padding: '7px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}>
+            Fermer
+          </button>
+        </div>
+      </div>
+      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
+      {photoOuverte && item.photoUrl && <ModalPhoto url={item.photoUrl} numero={item.numero} onClose={() => setPhotoOuverte(false)} />}
+    </>
   );
 }
