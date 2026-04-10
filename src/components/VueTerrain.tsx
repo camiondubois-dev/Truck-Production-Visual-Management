@@ -289,6 +289,28 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           </div>
         )}
 
+        {/* Statut commercial */}
+        {(v.type === 'eau' || v.type === 'detail') && (
+          <div style={{ margin: '0 20px 16px', display: 'flex', gap: 8 }}>
+            {([
+              { val: 'non-vendu' as const, label: 'À vendre', color: '#f59e0b' },
+              { val: 'reserve'   as const, label: 'Réservé',  color: '#3b82f6' },
+              { val: 'vendu'     as const, label: 'Vendu',    color: '#22c55e' },
+            ]).map(({ val, label, color }) => {
+              const actif = (v.etatCommercial ?? 'non-vendu') === val;
+              return (
+                <button key={val} onClick={() => {
+                  inventaireService.mettreAJourCommercial(v.id, val, v.dateLivraisonPlanifiee ?? null, v.clientAcheteur ?? null);
+                  onMisAJour({ ...v, etatCommercial: val });
+                }}
+                  style={{ flex: 1, padding: '10px 4px', borderRadius: 10, cursor: 'pointer', border: actif ? `2px solid ${color}` : '1px solid #e5e7eb', background: actif ? `${color}18` : 'white', color: actif ? color : '#9ca3af', fontWeight: actif ? 700 : 400, fontSize: 12 }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Boutons */}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {v.estPret ? (
