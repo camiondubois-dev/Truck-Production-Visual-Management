@@ -4,6 +4,7 @@ export interface EtapeFaite {
   stationId: string;
   fait: boolean;
   date: string;
+  commentaire?: string;
 }
 
 export interface VehiculeInventaire {
