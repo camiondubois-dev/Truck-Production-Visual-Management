@@ -136,6 +136,7 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const terminerItem = async (itemId: string) => {
+    const item = items.find(i => i.id === itemId);
     const patch = {
       etat: 'termine' as EtatItem,
       slotId: undefined,
@@ -144,6 +145,13 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
       dateArchive: new Date().toISOString(),
     };
     await itemsService.mettreAJour(itemId, patch);
+    // Sync back to prod_inventaire: job terminé → statut disponible
+    if (item?.inventaireId) {
+      await supabase
+        .from('prod_inventaire')
+        .update({ statut: 'disponible', updated_at: new Date().toISOString() })
+        .eq('id', item.inventaireId);
+    }
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
 
