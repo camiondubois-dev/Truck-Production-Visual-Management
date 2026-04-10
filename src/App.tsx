@@ -11,8 +11,9 @@ import { VueInventaire } from './components/VueInventaire';
 import { VueArchive } from './components/VueArchive';
 import { VueClients } from './components/VueClients';
 import { VueReservoirs } from './components/VueReservoirs';
+import { VuePrets } from './components/VuePrets';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'inventaire' | 'reservoirs' | 'baseclients' | 'archive';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 'reservoirs' | 'baseclients' | 'archive';
 
 export default function App() {
   const { profile, loading } = useAuth();
@@ -35,9 +36,9 @@ export default function App() {
     return <PageConnexion />;
   }
 
- if (profile.role === 'employe') {
-  return <VueDepartement />;
-}
+  if (profile.role === 'employe') {
+    return <VueDepartement />;
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0f0e0b' }}>
@@ -47,6 +48,7 @@ export default function App() {
         {currentTab === 'eau'         && <VueCamionsEau />}
         {currentTab === 'clients'     && <VueClientsExternes />}
         {currentTab === 'detail'      && <VueCamionsDetail />}
+        {currentTab === 'prets'       && <VuePrets />}
         {currentTab === 'inventaire'  && <VueInventaire />}
         {currentTab === 'reservoirs'  && <VueReservoirs />}
         {currentTab === 'baseclients' && <VueClients />}
