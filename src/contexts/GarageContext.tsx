@@ -11,23 +11,21 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const chargerItems = async () => {
+    try {
+      const data = await itemsService.getAll();
+      setItems(data);
+    } catch (err) {
+      console.error('[GarageContext] itemsService.getAll() threw:', err);
+      setItems([]);
+    }
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        setLoading(false);
-        return;
-      }
-      console.log('[GarageContext] Session found, calling itemsService.getAll()...');
-      try {
-        const data = await itemsService.getAll();
-        console.log('[GarageContext] itemsService.getAll() returned:', data?.length, 'items');
-        setItems(data);
-      } catch (err) {
-        console.error('[GarageContext] itemsService.getAll() threw:', err);
-        setItems([]);
-      } finally {
-        setLoading(false);
-      }
+      if (!session) { setLoading(false); return; }
+      await chargerItems();
+      setLoading(false);
     });
   }, []);
 
@@ -44,6 +42,27 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const mettreAJourItem = async (itemId: string, patch: Partial<Item>) => {
     await itemsService.mettreAJour(itemId, patch);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+  };
+
+  const marquerPret = async (inventaireId: string) => {
+    // Trouve le prodItem par inventaireId directement dans Supabase
+    const { data } = await supabase
+      .from('prod_items')
+      .select('id, progression')
+      .eq('inventaire_id', inventaireId)
+      .neq('etat', 'termine')
+      .maybeSingle();
+    if (!data) return;
+    const nouvelleProgression = (data.progression ?? []).map((p: any) => ({
+      ...p,
+      status: p.status === 'non-requis' ? 'non-requis' : 'termine',
+    }));
+    await itemsService.mettreAJour(data.id, { progression: nouvelleProgression });
+    // Rafraîchir le state local
+    setItems(prev => prev.map(i => i.id !== data.id ? i : {
+      ...i,
+      progression: nouvelleProgression,
+    }));
   };
 
   const assignerSlot = async (itemId: string, slotId: string) => {
@@ -63,9 +82,7 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const retirerVersAttente = async (itemId: string) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
-    const garageActuel = item.slotId
-      ? SLOT_TO_GARAGE[item.slotId]
-      : item.dernierGarageId;
+    const garageActuel = item.slotId ? SLOT_TO_GARAGE[item.slotId] : item.dernierGarageId;
     const patch = {
       etat: 'en-attente' as EtatItem,
       dernierSlotId: item.slotId,
@@ -102,17 +119,17 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
 
- const terminerItem = async (itemId: string) => {
-  const patch = {
-    etat: 'termine' as EtatItem,
-    slotId: undefined,
-    dernierSlotId: undefined,
-    dernierGarageId: undefined,
-    dateArchive: new Date().toISOString(),
+  const terminerItem = async (itemId: string) => {
+    const patch = {
+      etat: 'termine' as EtatItem,
+      slotId: undefined,
+      dernierSlotId: undefined,
+      dernierGarageId: undefined,
+      dateArchive: new Date().toISOString(),
+    };
+    await itemsService.mettreAJour(itemId, patch);
+    setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
-  await itemsService.mettreAJour(itemId, patch);
-  setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
-};
 
   const updateStationStatus = async (
     itemId: string,
@@ -125,10 +142,7 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     const nouvelleProgression = item.progression.map(p =>
       p.stationId === stationId ? { ...p, status } : p
     );
-    const patch = {
-      stationActuelle: nouvelleStation,
-      progression: nouvelleProgression,
-    };
+    const patch = { stationActuelle: nouvelleStation, progression: nouvelleProgression };
     await itemsService.mettreAJour(itemId, patch);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
@@ -203,38 +217,24 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     detail: items.filter(i => i.type === 'detail' && i.etat === 'en-attente'),
   };
 
- if (loading) return (
-  <div style={{ 
-    display: 'flex', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    height: '100vh',
-    background: '#1a1a1a',
-    color: 'white',
-    fontSize: '18px'
-  }}>
-    Chargement...
-  </div>
-);
+  if (loading) return (
+    <div style={{
+      display: 'flex', justifyContent: 'center', alignItems: 'center',
+      height: '100vh', background: '#1a1a1a', color: 'white', fontSize: '18px',
+    }}>
+      Chargement...
+    </div>
+  );
 
   return (
     <GarageContext.Provider value={{
-      items,
-      slotMap,
-      enAttente,
-      ajouterItem,
-      supprimerItem,
-      mettreAJourItem,
-      archiverItem,
-      reouvrirItem,
-      assignerSlot,
-      retirerVersAttente,
-      terminerEtAvancer,
-      terminerItem,
-      updateStationStatus,
-      updateStationsActives,
-      ajouterDocument,
-      supprimerDocument,
+      items, slotMap, enAttente,
+      ajouterItem, supprimerItem, mettreAJourItem,
+      archiverItem, reouvrirItem, assignerSlot,
+      retirerVersAttente, terminerEtAvancer, terminerItem,
+      updateStationStatus, updateStationsActives,
+      ajouterDocument, supprimerDocument,
+      marquerPret,
     }}>
       {children}
     </GarageContext.Provider>
