@@ -87,4 +87,5 @@ export interface GarageContextType {
   ajouterDocument: (itemId: string, doc: Document) => void;
   supprimerDocument: (itemId: string, docId: string) => void;
   marquerPret: (inventaireId: string) => Promise<void>;
+  rechargerItems: () => Promise<Item[]>;
 }

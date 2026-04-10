@@ -9,6 +9,7 @@ import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
 import { logJobTemporaire } from '../services/timeLogService';
+import { inventaireService } from '../services/inventaireService';
 import type { Slot, Item } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
@@ -44,7 +45,7 @@ export function PlancherView() {
     slotMap, enAttente, assignerSlot,
     retirerVersAttente, terminerItem,
     ajouterItem, updateStationStatus,
-    terminerEtAvancer,
+    terminerEtAvancer, rechargerItems,
   } = useGarage();
 
   const { vehicules, mettreAJourRoadMap } = useInventaire();
@@ -118,6 +119,29 @@ export function PlancherView() {
     }
   };
 
+  // Quand on clique sur un chip ATT (pas de prod_item) → crée le job puis ouvre le modal d'assignation
+  const handleCreateAndAssign = async (e: React.MouseEvent, vehicule: VehiculeInventaire, garageId: string) => {
+    e.stopPropagation();
+    try {
+      await inventaireService.creerProdItemDepuisVehicule(vehicule);
+      // Recharge les items pour obtenir le nouveau prod_item
+      const freshItems = await rechargerItems();
+      const newItem = freshItems.find(i => i.inventaireId === vehicule.id && i.etat !== 'termine');
+      if (!newItem) return;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const position = calculerPosition(rect);
+      const station = STATIONS.find(s => s.id === garageId);
+      const availableSlot = station?.slots.find(s => !slotMap[s.id] && !tempJobs[s.id]);
+      if (availableSlot) {
+        setModalState({ type: 'assign', slot: availableSlot, position, preSelectedItem: newItem });
+      } else if (station && station.slots.length > 0) {
+        setModalState({ type: 'assign', slot: station.slots[0], position, preSelectedItem: newItem });
+      }
+    } catch (err) {
+      console.error('[PlancherView] handleCreateAndAssign error:', err);
+    }
+  };
+
   const handleJobTemporaireStart = (slot: Slot, position: { x: number; y: number }) => {
     setModalState({ type: 'job-type', slot, position });
   };
@@ -185,8 +209,8 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
       </div>
 
       <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '1' }} />
@@ -200,8 +224,8 @@ export function PlancherView() {
       <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
       </div>
 
       {modalState?.type === 'assign' && (
@@ -518,13 +542,14 @@ interface StationBlockProps {
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   allEnAttente: Item[];
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
+  onCreateAndAssign: (e: React.MouseEvent, vehicule: VehiculeInventaire, garageId: string) => Promise<void>;
   vehicules: VehiculeInventaire[];
   itemByInvId: Record<string, Item>;
   onSetPriorite: (inventaireId: string, stationId: string, priorite: number | undefined) => Promise<void>;
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
+function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
@@ -711,20 +736,23 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                   {/* Chip camion */}
                   <div
                     title={label}
-                    onClick={(e) => item && onWaitingItemClick(e, item, station.id)}
+                    onClick={(e) => {
+                      if (item && !inSlot) onWaitingItemClick(e, item, station.id);
+                      else if (!item) onCreateAndAssign(e, vehicule, station.id);
+                    }}
                     style={{
                       flex: 1, display: 'flex', alignItems: 'center', gap: 4,
                       background: `${couleur}13`,
                       border: `1px solid ${couleur}44`,
                       borderRadius: 4, padding: '2px 6px',
-                      cursor: (item && !inSlot) ? 'pointer' : 'default',
+                      cursor: (!inSlot) ? 'pointer' : 'default',
                       fontSize: 'clamp(9px, 0.9vw, 11px)',
                       fontFamily: 'monospace', color: couleur, fontWeight: 700,
                       opacity: inSlot ? 0.5 : 1,
                       minWidth: 0, overflow: 'hidden',
                     }}
-                    onMouseEnter={(e) => { if (item && !inSlot) e.currentTarget.style.background = `${couleur}22`; }}
-                    onMouseLeave={(e) => { if (item && !inSlot) e.currentTarget.style.background = `${couleur}13`; }}
+                    onMouseEnter={(e) => { if (!inSlot) e.currentTarget.style.background = `${couleur}22`; }}
+                    onMouseLeave={(e) => { if (!inSlot) e.currentTarget.style.background = `${couleur}13`; }}
                   >
                     {vehicule.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)' }}>{vehicule.type === 'client' ? '🔧' : '🏷️'}</span>}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{vehicule.numero}</span>
