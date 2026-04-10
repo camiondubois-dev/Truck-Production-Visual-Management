@@ -32,4 +32,6 @@ export interface VehiculeInventaire {
   aUnReservoir?: boolean;
   reservoirId?: string;
   estPret?: boolean;
+  etatCommercial?: 'non-vendu' | 'reserve' | 'vendu';
+  dateLivraisonPlanifiee?: string;
 }
