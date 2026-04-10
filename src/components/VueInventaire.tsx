@@ -830,6 +830,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
   const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
   const [savingReservoir, setSavingReservoir] = useState(false);
+  const { mettreAJourItem, items } = useGarage();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeLabel = v.type === 'eau' ? 'Camion à eau' : v.type === 'client' ? 'Client externe' : 'Camion détail';
 
@@ -1141,16 +1142,20 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
 {v.statut === 'en-production' && (
   <button
     onClick={async () => {
-      const today = new Date().toISOString().slice(0, 10);
-      const etapesFaites = CHECKLIST_STATIONS.map(s => ({
-        stationId: s.id,
-        fait: true,
-        date: today,
-      }));
-      await onEtapesChange(v.id, etapesFaites);
-      // Mettre à jour aussi prod_items si le camion est en production
-      if (v.jobId) {
-        const { supabase } = await import('../lib/supabase');
+  const today = new Date().toISOString().slice(0, 10);
+  const toutesEtapes = CHECKLIST_STATIONS.map(s => ({
+    stationId: s.id, fait: true, date: today,
+  }));
+  await onEtapesChange(v.id, toutesEtapes);
+  const prodItem = items.find(i => i.inventaireId === v.id && i.etat !== 'termine');
+  if (prodItem) {
+    const nouvelleProgression = prodItem.progression.map(p => ({
+      ...p,
+      status: p.status === 'non-requis' ? 'non-requis' as const : 'termine' as const,
+    }));
+    await mettreAJourItem(prodItem.id, { progression: nouvelleProgression });
+  }
+}}
         const { data: prodItem } = await supabase
           .from('prod_items')
           .select('progression, stations_actives')
