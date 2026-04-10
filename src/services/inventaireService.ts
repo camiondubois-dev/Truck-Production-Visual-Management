@@ -119,6 +119,12 @@ export const inventaireService = {
       .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
+    // Sync vers prod_items si le véhicule est en production
+    await supabase
+      .from('prod_items')
+      .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
+      .eq('inventaire_id', id)
+      .neq('etat', 'termine');
   },
 
   async mettreAJourType(id: string, type: 'eau' | 'detail'): Promise<void> {
