@@ -368,24 +368,34 @@ export function SlotOccupeModal({
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }} />
 
         {/* Actions fixes en bas */}
-        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-          <button onClick={(e) => { e.stopPropagation(); onRetirerAttente(item.id); onClose(); }}
-            style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-            ⏸ Mettre en attente — libérer le slot
-          </button>
-          <button onClick={handleTerminer}
-            style={{ padding: '10px', borderRadius: 7, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-            ✓ Travail terminé — libérer le slot
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onClose(); }}
-            style={{ padding: '7px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}>
-            Fermer
-          </button>
-        </div>
-      </div>
-
-      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
-      {photoOuverte && item.photoUrl && <ModalPhoto url={item.photoUrl} numero={item.numero} onClose={() => setPhotoOuverte(false)} />}
-    </>
+<div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+  <button onClick={(e) => { e.stopPropagation(); onRetirerAttente(item.id); onClose(); }}
+    style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+    ⏸ Mettre en attente — libérer le slot
+  </button>
+  <button onClick={handleTerminer}
+    style={{ padding: '10px', borderRadius: 7, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+    ✓ Travail terminé — libérer le slot
+  </button>
+  <button onClick={(e) => {
+    e.stopPropagation();
+    if (onUpdateStationStatus) {
+      item.stationsActives.forEach(sid => {
+        const prog = item.progression.find(p => p.stationId === sid);
+        if (prog?.status !== 'non-requis') {
+          onUpdateStationStatus(item.id, sid, 'termine');
+        }
+      });
+    }
+    onClose();
+  }}
+    style={{ padding: '10px', borderRadius: 7, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+    ✅ Marquer comme prêt
+  </button>
+  <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+    style={{ padding: '7px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}>
+    Fermer
+  </button>
+</div>
   );
 }
