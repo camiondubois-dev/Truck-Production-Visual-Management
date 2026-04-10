@@ -14,7 +14,9 @@ const isTerrainRoute = window.location.pathname.startsWith('/terrain');
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isTerrainRoute ? (
-      <VueTerrain />
+      <InventaireProvider>
+        <VueTerrain />
+      </InventaireProvider>
     ) : (
       <AuthProvider>
         <RoleProvider>
