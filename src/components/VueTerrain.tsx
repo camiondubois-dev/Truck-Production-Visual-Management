@@ -244,14 +244,14 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     onMisAJour({ ...v, variante: val ?? undefined });
   };
 
-  // Sauvegarder les étapes — reste ouvert
+  // Sauvegarder les étapes — flash ✓ puis ferme
   const handleSauvegarder = async () => {
     setSaving(true);
     try {
       await inventaireService.mettreAJourEtapes(v.id, etapesLocales);
       onMisAJour({ ...v, etapesFaites: etapesLocales });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setTimeout(onClose, 900); // flash bref puis retour à la liste
     } finally { setSaving(false); }
   };
 
@@ -283,7 +283,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         reservoirId: reservoirChoisi || v.reservoirId,
       });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setTimeout(onClose, 900);
     } finally { setSaving(false); }
   };
 
@@ -292,6 +292,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     try {
       await inventaireService.marquerPret(v.id, false);
       onMisAJour({ ...v, estPret: false });
+      onClose();
     } finally { setSaving(false); }
   };
 

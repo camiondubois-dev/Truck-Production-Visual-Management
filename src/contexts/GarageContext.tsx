@@ -82,13 +82,33 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const assignerSlot = async (itemId: string, slotId: string) => {
+    const item = items.find(i => i.id === itemId);
     const garageId = SLOT_TO_GARAGE[slotId];
+
+    // Auto-marquer la station de ce garage comme "en-cours"
+    let progressionPatch: Partial<typeof item> = {};
+    if (item && garageId) {
+      // Trouver la première station non-commencée qui appartient à ce garage
+      const stationACommen = item.stationsActives.find(stationId => {
+        if (STATION_TO_GARAGE[stationId] !== garageId) return false;
+        const prog = item.progression.find(p => p.stationId === stationId);
+        return prog?.status === 'non-commence';
+      });
+      if (stationACommen) {
+        const nouvelleProgression = item.progression.map(p =>
+          p.stationId === stationACommen ? { ...p, status: 'en-cours' as const } : p
+        );
+        progressionPatch = { progression: nouvelleProgression, stationActuelle: stationACommen };
+      }
+    }
+
     const patch = {
       etat: 'en-slot' as EtatItem,
       slotId,
       dernierSlotId: undefined,
       dernierGarageId: undefined,
       dateEntreeSlot: new Date().toISOString(),
+      ...progressionPatch,
     };
     await itemsService.mettreAJour(itemId, patch);
     if (garageId) await logEntreeGarage(itemId, garageId, slotId);
