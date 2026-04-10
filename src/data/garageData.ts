@@ -18,6 +18,19 @@ export const GARAGES_DEFAUT: Record<TypeItem, string[]> = {
   'client': ['mecanique-moteur', 'mecanique-electrique'],
 };
 
+// Stations road_map correspondant à chaque garage physique (PlancherView)
+// mecanique-moteur inclut mecanique-electrique (même espace physique)
+export const GARAGE_TO_ROAD_MAP_STATIONS: Record<string, string[]> = {
+  'soudure-generale':    ['soudure-generale'],
+  'point-s':             [],
+  'mecanique-generale':  ['mecanique-generale'],
+  'mecanique-moteur':    ['mecanique-moteur', 'mecanique-electrique'],
+  'mecanique-electrique':['mecanique-electrique'],
+  'sous-traitants':      ['sous-traitants'],
+  'soudure-specialisee': ['soudure-specialisee'],
+  'peinture':            ['peinture'],
+};
+
 // ── MAPPING GARAGE ↔ SLOTS ────────────────────────────────────
 
 export const GARAGE_TO_SLOTS: Record<string, string[]> = {
