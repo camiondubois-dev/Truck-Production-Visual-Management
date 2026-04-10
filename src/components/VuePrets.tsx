@@ -35,6 +35,7 @@ export function VuePrets() {
   const selectedVehicule = filtres.find(v => v.id === selectedId) ?? null;
   const aVendre = prets.filter(v => !v.etatCommercial || v.etatCommercial === 'non-vendu').length;
   const aLivrer = prets.filter(v => v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve').length;
+  const enLocation = prets.filter(v => v.etatCommercial === 'location').length;
 
   const handleArchiver = async (vehicule: VehiculeInventaire) => {
     await archiverVehicule(vehicule.id);
@@ -57,6 +58,7 @@ export function VuePrets() {
             </span>
             {aVendre > 0 && <span style={{ background: '#f59e0b', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🏷️ {aVendre} à vendre</span>}
             {aLivrer > 0 && <span style={{ background: '#3b82f6', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🚛 {aLivrer} à livrer</span>}
+            {enLocation > 0 && <span style={{ background: '#7c3aed', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🔑 {enLocation} en location</span>}
           </div>
         </div>
 
@@ -88,10 +90,12 @@ export function VuePrets() {
                 const isSelected = selectedId === vehicule.id;
                 const etat = vehicule.etatCommercial ?? 'non-vendu';
                 const statut = etat === 'non-vendu'
-                  ? { label: '🏷️ À vendre', bg: '#fef3c7', color: '#92400e' }
+                  ? { label: '🏷️ À vendre',  bg: '#fef3c7', color: '#92400e' }
                   : etat === 'reserve'
-                  ? { label: '🔒 Réservé', bg: '#eff6ff', color: '#1d4ed8' }
-                  : { label: '✓ Vendu', bg: '#dcfce7', color: '#166534' };
+                  ? { label: '🔒 Réservé',    bg: '#eff6ff', color: '#1d4ed8' }
+                  : etat === 'location'
+                  ? { label: '🔑 Location',   bg: '#ede9fe', color: '#6d28d9' }
+                  : { label: '✓ Vendu',       bg: '#dcfce7', color: '#166534' };
                 return (
                   <div key={vehicule.id} onClick={() => setSelectedId(isSelected ? null : vehicule.id)}
                     style={{ background: isSelected ? '#f0fdf4' : 'white', borderRadius: 10, border: `1px solid ${isSelected ? '#22c55e' : '#e5e7eb'}`, borderLeft: `4px solid ${typeColor}`, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', transition: 'all 0.15s' }}
@@ -144,12 +148,12 @@ function PanneauDetailPret({ vehicule, onClose, onArchiver, onMettreAJourCommerc
   vehicule: VehiculeInventaire;
   onClose: () => void;
   onArchiver: () => void;
-  onMettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
+  onMettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
 }) {
   const typeColor = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
   const etatCommercial = vehicule.etatCommercial ?? 'non-vendu';
 
-  const setEtat = (val: 'non-vendu' | 'reserve' | 'vendu') => {
+  const setEtat = (val: 'non-vendu' | 'reserve' | 'vendu' | 'location') => {
     onMettreAJourCommercial(vehicule.id, val, vehicule.dateLivraisonPlanifiee ?? null, vehicule.clientAcheteur ?? null);
   };
   const setClient = (val: string) => {
@@ -191,6 +195,7 @@ function PanneauDetailPret({ vehicule, onClose, onArchiver, onMettreAJourCommerc
                 { val: 'non-vendu' as const, label: 'À vendre', icon: '🏷️', color: '#f59e0b' },
                 { val: 'reserve'   as const, label: 'Réservé',  icon: '🔒', color: '#3b82f6' },
                 { val: 'vendu'     as const, label: 'Vendu',    icon: '✓',  color: '#22c55e' },
+                { val: 'location'  as const, label: 'Location', icon: '🔑', color: '#7c3aed' },
               ]).map(({ val, label, icon, color }) => (
                 <button key={val} onClick={() => setEtat(val)}
                   style={{ flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer', border: etatCommercial === val ? `2px solid ${color}` : '1px solid #e5e7eb', background: etatCommercial === val ? `${color}15` : 'white', color: etatCommercial === val ? color : '#9ca3af', fontWeight: etatCommercial === val ? 700 : 400, fontSize: 11, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
@@ -199,7 +204,7 @@ function PanneauDetailPret({ vehicule, onClose, onArchiver, onMettreAJourCommerc
                 </button>
               ))}
             </div>
-            {(etatCommercial === 'reserve' || etatCommercial === 'vendu') && (
+            {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input type="text" value={vehicule.clientAcheteur ?? ''} onChange={e => setClient(e.target.value)} placeholder="Nom du client" style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
                 <div>

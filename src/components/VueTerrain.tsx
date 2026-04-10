@@ -296,6 +296,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
               { val: 'non-vendu' as const, label: 'À vendre', color: '#f59e0b' },
               { val: 'reserve'   as const, label: 'Réservé',  color: '#3b82f6' },
               { val: 'vendu'     as const, label: 'Vendu',    color: '#22c55e' },
+              { val: 'location'  as const, label: 'Location', color: '#7c3aed' },
             ]).map(({ val, label, color }) => {
               const actif = (v.etatCommercial ?? 'non-vendu') === val;
               return (
@@ -361,7 +362,7 @@ function VueTerrainMain() {
       if (filtreType !== 'tous' && c.type !== filtreType) return false;
       if (filtreStatut === 'disponibles' && c.estPret) return false;
       if (filtreStatut === 'prets' && !c.estPret) return false;
-      if (filtreStatut === 'vendus' && c.etatCommercial !== 'vendu' && c.etatCommercial !== 'reserve') return false;
+      if (filtreStatut === 'vendus' && c.etatCommercial !== 'vendu' && c.etatCommercial !== 'reserve' && c.etatCommercial !== 'location') return false;
       if (q) {
         const haystack = [c.numero, c.marque, c.modele, c.annee?.toString(), c.variante].filter(Boolean).join(' ').toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -426,7 +427,7 @@ function VueTerrainMain() {
             ['tous',        'Tous',         camions.length],
             ['disponibles', 'Disponibles',  camions.filter(c => !c.estPret).length],
             ['prets',       '✅ Prêts',      camions.filter(c => c.estPret).length],
-            ['vendus',      '✓ Vendus',      camions.filter(c => c.etatCommercial === 'vendu' || c.etatCommercial === 'reserve').length],
+            ['vendus',      '✓ Non dispo',   camions.filter(c => c.etatCommercial === 'vendu' || c.etatCommercial === 'reserve' || c.etatCommercial === 'location').length],
           ] as [FiltreStatut, string, number][]).map(([id, label, count]) => (
             <button key={id} onClick={() => setFiltreStatut(id)}
               style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: filtreStatut === id ? 700 : 400, border: filtreStatut === id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === id ? '#1d4ed8' : 'white', color: filtreStatut === id ? 'white' : '#6b7280', cursor: 'pointer', flexShrink: 0 }}>

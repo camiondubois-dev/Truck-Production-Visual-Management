@@ -1,6 +1,6 @@
 export type TypeItem = 'eau' | 'client' | 'detail';
 export type EtatItem = 'en-attente' | 'en-slot' | 'termine';
-export type EtatCommercial = 'non-vendu' | 'reserve' | 'vendu';
+export type EtatCommercial = 'non-vendu' | 'reserve' | 'vendu' | 'location';
 export interface StationProgress {
   stationId: string;
   status: 'non-commence' | 'en-cours' | 'termine' | 'non-requis';

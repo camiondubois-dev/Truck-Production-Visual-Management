@@ -594,6 +594,11 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                       RÉS
                     </span>
                   )}
+                  {item.etatCommercial === 'location' && (
+                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '1px 3px', borderRadius: 2 }}>
+                      LOC
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -621,8 +626,9 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
     : null;
 
   const borderColor = item
-    ? item.etatCommercial === 'vendu'   ? '#ef4444'
-    : item.etatCommercial === 'reserve' ? '#f59e0b'
+    ? item.etatCommercial === 'vendu'    ? '#ef4444'
+    : item.etatCommercial === 'reserve'  ? '#f59e0b'
+    : item.etatCommercial === 'location' ? '#7c3aed'
     : typeColor!
     : null;
 
@@ -723,14 +729,16 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
           {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
             <div style={{
               marginTop: 2, padding: '3px 6px', borderRadius: 4,
-              border: `1.5px solid ${item.etatCommercial === 'vendu' ? '#ef4444' : '#f59e0b'}`,
-              background: item.etatCommercial === 'vendu' ? '#ef444422' : '#f59e0b22',
-              color: item.etatCommercial === 'vendu' ? '#ef4444' : '#f59e0b',
+              border: `1.5px solid ${item.etatCommercial === 'vendu' ? '#ef4444' : item.etatCommercial === 'location' ? '#7c3aed' : '#f59e0b'}`,
+              background: item.etatCommercial === 'vendu' ? '#ef444422' : item.etatCommercial === 'location' ? '#ede9fe' : '#f59e0b22',
+              color: item.etatCommercial === 'vendu' ? '#ef4444' : item.etatCommercial === 'location' ? '#6d28d9' : '#f59e0b',
               fontWeight: 800, fontSize: 'clamp(7px, 0.75vw, 10px)',
               textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center',
             }}>
               {item.etatCommercial === 'vendu'
                 ? `✓ VENDU${item.clientAcheteur ? ` — ${item.clientAcheteur}` : ''}`
+                : item.etatCommercial === 'location'
+                ? `🔑 LOCATION${item.clientAcheteur ? ` — ${item.clientAcheteur}` : ''}`
                 : `🔒 RÉS.${item.clientAcheteur ? ` — ${item.clientAcheteur}` : ''}`
               }
             </div>

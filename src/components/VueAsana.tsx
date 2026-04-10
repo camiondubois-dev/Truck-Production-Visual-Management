@@ -40,6 +40,8 @@ function BadgeCommercial({ etat, client }: { etat?: EtatCommercial; client?: str
   if (!etat || etat === 'non-vendu') return null;
   const cfg = etat === 'vendu'
     ? { bg: '#dcfce7', color: '#166534', label: client ? `✓ Vendu — ${client}` : '✓ Vendu' }
+    : etat === 'location'
+    ? { bg: '#ede9fe', color: '#6d28d9', label: client ? `🔑 Location — ${client}` : '🔑 Location' }
     : { bg: '#fef3c7', color: '#92400e', label: client ? `🔒 Réservé — ${client}` : '🔒 Réservé' };
   return (
     <span style={{ fontSize: 11, background: cfg.bg, color: cfg.color, padding: '3px 10px', borderRadius: 4, fontWeight: 700 }}>
@@ -567,9 +569,10 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
               </div>
               <div style={{ display: 'flex', gap: 6, marginBottom: etatCommercial !== 'non-vendu' ? 10 : 0 }}>
                 {([
-                  { val: 'non-vendu' as EtatCommercial, label: 'Non vendu', icon: '○', color: '#6b7280' },
+                  { val: 'non-vendu' as EtatCommercial, label: 'Non vendu', icon: '○',  color: '#6b7280' },
                   { val: 'reserve'   as EtatCommercial, label: 'Réservé',   icon: '🔒', color: '#f59e0b' },
                   { val: 'vendu'     as EtatCommercial, label: 'Vendu',     icon: '✓',  color: '#22c55e' },
+                  { val: 'location'  as EtatCommercial, label: 'Location',  icon: '🔑', color: '#7c3aed' },
                 ]).map(({ val, label, icon, color }) => (
                   <button key={val} onClick={() => changerEtatCommercial(val)}
                     style={{
@@ -587,7 +590,7 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
                   </button>
                 ))}
               </div>
-              {(etatCommercial === 'reserve' || etatCommercial === 'vendu') && (
+              {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <input type="text" value={item.clientAcheteur ?? ''} onChange={e => changerClientAcheteur(e.target.value)}
                     placeholder="Nom du client (optionnel)"

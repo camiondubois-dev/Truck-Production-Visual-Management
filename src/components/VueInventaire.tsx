@@ -18,7 +18,7 @@ import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
 
-type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret';
+type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
 
 const CHECKLIST_STATIONS = [
@@ -284,7 +284,8 @@ export function VueInventaire() {
   const filtres = [...baseList]
     .filter(v => {
       if (filtreStatut === 'pret' && !v.estPret) return false;
-      if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && v.statut !== filtreStatut) return false;
+      if (filtreStatut === 'vendu' && v.etatCommercial !== 'vendu' && v.etatCommercial !== 'reserve' && v.etatCommercial !== 'location') return false;
+      if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && filtreStatut !== 'vendu' && v.statut !== filtreStatut) return false;
       if (filtreType !== 'tous' && v.type !== filtreType) return false;
       return true;
     })
@@ -296,6 +297,7 @@ export function VueInventaire() {
 
   const selected = vehicules.find(v => v.id === selectedId) ?? null;
   const pretsCount = vehicules.filter(v => v.estPret).length;
+  const vendusCount = vehicules.filter(v => v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location').length;
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,12 +414,13 @@ export function VueInventaire() {
         <div style={{ display: 'flex', gap: 8, padding: '12px 24px', borderBottom: '1px solid #e5e7eb', background: 'white', flexWrap: 'wrap' }}>
           {([
             { id: 'tous' as FiltreStatut, label: 'Tous' },
-            { id: 'disponible' as FiltreStatut, label: '✅ Disponible' },
+            { id: 'disponible'    as FiltreStatut, label: '✅ Disponible' },
             { id: 'en-production' as FiltreStatut, label: '🔧 En production' },
-            { id: 'pret' as FiltreStatut, label: `✅ Prêts${pretsCount > 0 ? ` (${pretsCount})` : ''}` },
+            { id: 'pret'          as FiltreStatut, label: `✅ Prêts${pretsCount > 0 ? ` (${pretsCount})` : ''}` },
+            { id: 'vendu'         as FiltreStatut, label: `🏷️ Vendus/Loués${vendusCount > 0 ? ` (${vendusCount})` : ''}` },
           ]).map(s => (
             <button key={s.id} onClick={() => setFiltreStatut(s.id)}
-              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreStatut === s.id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === s.id ? (s.id === 'pret' ? '#22c55e' : '#374151') : 'white', color: filtreStatut === s.id ? 'white' : '#6b7280', fontWeight: filtreStatut === s.id ? 700 : 400 }}>
+              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreStatut === s.id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === s.id ? (s.id === 'pret' ? '#22c55e' : s.id === 'vendu' ? '#7c3aed' : '#374151') : 'white', color: filtreStatut === s.id ? 'white' : '#6b7280', fontWeight: filtreStatut === s.id ? 700 : 400 }}>
               {s.label}
             </button>
           ))}
@@ -487,6 +490,15 @@ export function VueInventaire() {
                             <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>
                           ) : (
                             <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>
+                          )}
+                          {v.etatCommercial === 'vendu' && (
+                            <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✓ Vendu{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
+                          )}
+                          {v.etatCommercial === 'reserve' && (
+                            <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔒 Réservé{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
+                          )}
+                          {v.etatCommercial === 'location' && (
+                            <span style={{ fontSize: 10, background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔑 Location{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
                           )}
                           {v.type === 'eau' && (v.aUnReservoir
                             ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir</span>
@@ -675,12 +687,27 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
         </div>
 
         {/* Statut */}
-        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 20, background: v.statut === 'disponible' ? '#f0fdf4' : '#fff7ed', border: `1px solid ${v.statut === 'disponible' ? '#86efac' : '#fed7aa'}` }}>
+        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: v.etatCommercial && v.etatCommercial !== 'non-vendu' ? 8 : 20, background: v.statut === 'disponible' ? '#f0fdf4' : '#fff7ed', border: `1px solid ${v.statut === 'disponible' ? '#86efac' : '#fed7aa'}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: v.statut === 'disponible' ? '#166534' : '#c2410c' }}>
             {v.statut === 'disponible' ? '✅ Disponible' : '🔧 En production'}
           </div>
           {v.dateEnProduction && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Mis en production le {new Date(v.dateEnProduction).toLocaleDateString('fr-CA')}</div>}
         </div>
+
+        {/* Statut commercial */}
+        {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (() => {
+          const cfg = v.etatCommercial === 'vendu'
+            ? { bg: '#f0fdf4', border: '#86efac', color: '#166534', label: `✓ Vendu${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` }
+            : v.etatCommercial === 'reserve'
+            ? { bg: '#fefce8', border: '#fde68a', color: '#92400e', label: `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` }
+            : { bg: '#f5f3ff', border: '#c4b5fd', color: '#6d28d9', label: `🔑 Location${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` };
+          return (
+            <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 20, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{cfg.label}</div>
+              {v.dateLivraisonPlanifiee && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>📅 Livraison planifiée : {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</div>}
+            </div>
+          );
+        })()}
 
         {/* Réservoir */}
         {v.type === 'eau' && (
