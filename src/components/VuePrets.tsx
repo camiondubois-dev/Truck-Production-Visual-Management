@@ -164,6 +164,12 @@ function PanneauDetailPret({ vehicule, onClose, onArchiver, onMettreAJourCommerc
       <div style={{ padding: 24 }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af' }}>✕</button>
 
+        {vehicule.photoUrl && (
+          <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+            <img src={vehicule.photoUrl} alt={`Photo #${vehicule.numero}`} style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
+
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 700, color: typeColor, marginBottom: 4 }}>#{vehicule.numero}</div>
           <div style={{ fontSize: 15, color: '#374151', marginBottom: 12 }}>{getLabelVehicule(vehicule)}</div>

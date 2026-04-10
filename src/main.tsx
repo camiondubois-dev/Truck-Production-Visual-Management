@@ -6,20 +6,27 @@ import { GarageProvider } from './contexts/GarageContext';
 import { InventaireProvider } from './contexts/InventaireContext';
 import { ClientProvider } from './contexts/ClientContext';
 import App from './App.tsx';
+import { VueTerrain } from './components/VueTerrain';
 import './index.css';
+
+const isTerrainRoute = window.location.pathname.startsWith('/terrain');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <RoleProvider>
-        <GarageProvider>
-          <InventaireProvider>
-            <ClientProvider>
-              <App />
-            </ClientProvider>
-          </InventaireProvider>
-        </GarageProvider>
-      </RoleProvider>
-    </AuthProvider>
+    {isTerrainRoute ? (
+      <VueTerrain />
+    ) : (
+      <AuthProvider>
+        <RoleProvider>
+          <GarageProvider>
+            <InventaireProvider>
+              <ClientProvider>
+                <App />
+              </ClientProvider>
+            </InventaireProvider>
+          </GarageProvider>
+        </RoleProvider>
+      </AuthProvider>
+    )}
   </StrictMode>
 );

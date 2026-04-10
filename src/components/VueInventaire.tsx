@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
 import { fromDB as inventaireFromDB } from '../services/inventaireService';
+import { photoService } from '../services/photoService';
 import { supabase } from '../lib/supabase';
 import { reservoirService } from '../services/reservoirService';
 import { useInventaire } from '../contexts/InventaireContext';
@@ -553,6 +554,8 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
   const [savingReservoir, setSavingReservoir] = useState(false);
   const [savingPret, setSavingPret] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const { mettreAJourPhotoInventaire } = useInventaire();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeLabel = v.type === 'eau' ? 'Camion à eau' : v.type === 'client' ? 'Client externe' : 'Camion détail';
 
@@ -629,6 +632,46 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
             {v.variante && <span style={{ fontSize: 12, background: '#f1f5f9', color: '#374151', padding: '3px 10px', borderRadius: 10, fontWeight: 600 }}>{v.variante}</span>}
             {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>✅ Prêt</span>}
           </div>
+        </div>
+
+        {/* Photo */}
+        <div style={{ marginBottom: 20 }}>
+          {v.photoUrl ? (
+            <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+              <img src={v.photoUrl} alt={`Photo #${v.numero}`} style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+                <label style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 11, fontWeight: 600 }}>
+                  Changer
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    setUploadingPhoto(true);
+                    try {
+                      if (v.photoUrl) await photoService.supprimerPhoto(v.photoUrl);
+                      const url = await photoService.uploaderPhoto(f, 'inventaire');
+                      await mettreAJourPhotoInventaire(v.id, url);
+                    } finally { setUploadingPhoto(false); }
+                  }} />
+                </label>
+                <button onClick={async () => { if (!v.photoUrl) return; await photoService.supprimerPhoto(v.photoUrl); await mettreAJourPhotoInventaire(v.id, null); }}
+                  style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(220,38,38,0.8)', color: 'white', fontSize: 11, fontWeight: 600, border: 'none' }}>
+                  Supprimer
+                </button>
+              </div>
+              {uploadingPhoto && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 13, fontWeight: 600 }}>Chargement...</div>}
+            </div>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', borderRadius: 10, border: '2px dashed #d1d5db', cursor: uploadingPhoto ? 'wait' : 'pointer', background: '#fafafa', color: '#9ca3af', fontSize: 13, fontWeight: 500 }}>
+              {uploadingPhoto ? 'Chargement...' : '📷 Ajouter une photo'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploadingPhoto} onChange={async e => {
+                const f = e.target.files?.[0]; if (!f) return;
+                setUploadingPhoto(true);
+                try {
+                  const url = await photoService.uploaderPhoto(f, 'inventaire');
+                  await mettreAJourPhotoInventaire(v.id, url);
+                } finally { setUploadingPhoto(false); }
+              }} />
+            </label>
+          )}
         </div>
 
         {/* Statut */}
