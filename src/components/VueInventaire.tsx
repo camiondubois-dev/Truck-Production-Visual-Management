@@ -9,22 +9,16 @@ import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
 import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
-import type { Item, StationProgress } from '../types/item.types';
-import {
-  PIPELINE_EAU_NEUF, PIPELINE_EAU_USAGE,
-  PIPELINE_CLIENT_DEFAUT, PIPELINE_DETAIL_DEFAUT
-} from '../data/mockData';
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
-import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL, ROAD_MAP_STATIONS } from '../data/etapes';
+import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
 type FiltreDept = 'tous' | string; // station ID
 
-const generateId    = () => `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const generateVehId = () => `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 
 const inputStyle: React.CSSProperties = {
@@ -247,8 +241,8 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
 }
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
-  const { ajouterItem, supprimerItem } = useGarage();
+  const { vehicules, importerVehicules, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
+  const { supprimerItem } = useGarage();
   const { profile: session } = useAuth();
   const isGestion = session?.role === 'gestion';
 
@@ -262,7 +256,6 @@ export function VueInventaire() {
   const [erreurImport, setErreurImport] = useState<string | null>(null);
   const [showModalAjout, setShowModalAjout] = useState(false);
   const [typeOverrides, setTypeOverrides] = useState<Record<string, 'eau' | 'detail'>>({});
-  const [submittingJobId, setSubmittingJobId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -327,54 +320,6 @@ export function VueInventaire() {
       importerVehicules(nouveaux);
     } catch (err) { setErreurImport('Erreur lors de la lecture du fichier Excel.'); }
     e.target.value = '';
-  };
-
-  const creerJobDepuisInventaire = async (v: VehiculeInventaire) => {
-    if (submittingJobId === v.id) return;
-    setSubmittingJobId(v.id);
-    setErreurImport(null);
-    try {
-      const now = new Date().toISOString();
-      const jobId = generateId();
-      let stationsActives: string[];
-      if (v.type === 'eau') stationsActives = v.variante === 'Neuf' ? PIPELINE_EAU_NEUF : PIPELINE_EAU_USAGE;
-      else if (v.type === 'client') stationsActives = PIPELINE_CLIENT_DEFAUT;
-      else stationsActives = PIPELINE_DETAIL_DEFAUT;
-
-      const etapesFaites = v.etapesFaites ?? [];
-      const doneIds = new Set(etapesFaites.filter(e => e.fait).map(e => e.stationId));
-      const progression: StationProgress[] = stationsActives.map(sid => ({
-        stationId: sid, status: doneIds.has(sid) ? 'termine' as const : 'non-commence' as const, subTasks: [],
-      }));
-
-      let label = '';
-      if (v.type === 'client') label = v.nomClient ? `${v.nomClient} — ${v.descriptionTravail ?? ''}` : v.vehicule ?? v.numero;
-      else label = `${v.marque ?? ''} ${v.modele ?? ''} ${v.annee ?? ''}`.trim();
-
-      const nouvelItem: Item = {
-        id: jobId, type: v.type, numero: v.numero, label,
-        etat: 'en-attente', dateCreation: now,
-        stationsActives, progression, stationActuelle: stationsActives[0],
-        inventaireId: v.id, photoUrl: v.photoUrl ?? undefined,
-        ...(v.variante && { variante: v.variante }),
-        ...(v.marque && { marque: v.marque }),
-        ...(v.modele && { modele: v.modele }),
-        ...(v.annee && { annee: v.annee }),
-        ...(v.clientAcheteur && { clientAcheteur: v.clientAcheteur }),
-        ...(v.notes && { notes: v.notes }),
-        ...(v.nomClient && { nomClient: v.nomClient }),
-        ...(v.telephone && { telephone: v.telephone }),
-        ...(v.vehicule && { vehicule: v.vehicule }),
-        ...(v.descriptionTravail && { descriptionTravail: v.descriptionTravail }),
-        ...(v.descriptionTravaux && { descriptionTravaux: v.descriptionTravaux }),
-      };
-      await ajouterItem(nouvelItem);
-      await marquerEnProduction(v.id, jobId);
-      setSelectedId(null);
-      setFiltreStatut('tous');
-    } catch (err: any) {
-      setErreurImport(err?.message ?? 'Erreur lors de la création du job');
-    } finally { setSubmittingJobId(null); }
   };
 
   const retournerEnInventaire = async (v: VehiculeInventaire) => {
@@ -535,10 +480,7 @@ export function VueInventaire() {
                         </div>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        {v.statut === 'disponible' && (() => {
-                          const isSubmitting = submittingJobId === v.id;
-                          return (<button onClick={(e) => { e.stopPropagation(); creerJobDepuisInventaire(v); }} disabled={isSubmitting} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: isSubmitting ? '#fdba74' : '#f97316', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>{isSubmitting ? 'Création...' : '+ Créer job'}</button>);
-                        })()}
+                        {/* Road map drives production — no manual "Créer job" needed */}
                       </td>
                     </tr>
                   );
@@ -553,8 +495,6 @@ export function VueInventaire() {
         <PanneauDetailInventaire
           vehicule={selected}
           onClose={() => setSelectedId(null)}
-          onCreerJob={() => creerJobDepuisInventaire(selected)}
-          isSubmitting={submittingJobId === selected.id}
           onRetourInventaire={() => retournerEnInventaire(selected)}
           onSupprimer={() => { supprimerVehicule(selected.id); setSelectedId(null); }}
           isGestion={isGestion}
@@ -577,11 +517,9 @@ export function VueInventaire() {
   );
 }
 
-function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange, onMarquerPret, onMettreAJour }: {
+function PanneauDetailInventaire({ vehicule: v, onClose, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange, onMarquerPret, onMettreAJour }: {
   vehicule: VehiculeInventaire;
   onClose: () => void;
-  onCreerJob: () => void;
-  isSubmitting: boolean;
   onRetourInventaire: () => void;
   onSupprimer: () => void;
   isGestion: boolean;
@@ -593,7 +531,6 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   const [activeTab, setActiveTab] = useState<'info' | 'roadmap'>('info');
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [confirmerRetour, setConfirmerRetour] = useState(false);
-  const [savingEtape, setSavingEtape] = useState<string | null>(null);
   const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
   const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
   const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
@@ -644,25 +581,6 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
     } finally { setSavingReservoir(false); }
   };
 
-  const etapesFaites = v.etapesFaites ?? [];
-  const getEtape = (stationId: string): EtapeFaite | undefined => etapesFaites.find(e => e.stationId === stationId);
-
-  const handleToggle = async (stationId: string) => {
-    if (savingEtape) return;
-    setSavingEtape(stationId);
-    const existing = getEtape(stationId);
-    const today = new Date().toISOString().slice(0, 10);
-    let updated: EtapeFaite[];
-    if (existing) {
-      updated = etapesFaites.map(e => e.stationId === stationId ? { ...e, fait: !e.fait, date: today } : e);
-    } else {
-      updated = [...etapesFaites, { stationId, fait: true, date: today }];
-    }
-    await onEtapesChange(v.id, updated);
-    setSavingEtape(null);
-  };
-
-  const nbFait = CHECKLIST_STATIONS.filter(s => getEtape(s.id)?.fait).length;
 
   return (
     <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100vh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
@@ -837,93 +755,13 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
           </div>
         </div>
 
-        {/* Checklist */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Étapes pré-production</div>
-            <div style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 10, background: nbFait === CHECKLIST_STATIONS.length ? '#dcfce7' : nbFait > 0 ? '#fff7ed' : '#f1f5f9', color: nbFait === CHECKLIST_STATIONS.length ? '#166534' : nbFait > 0 ? '#c2410c' : '#6b7280' }}>
-              {nbFait}/{CHECKLIST_STATIONS.length}
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {CHECKLIST_STATIONS.map(station => {
-              const etape = getEtape(station.id);
-              const fait = etape?.fait ?? false;
-              const isSaving = savingEtape === station.id;
-              return (
-                <button key={station.id} onClick={() => handleToggle(station.id)} disabled={isSaving}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: isSaving ? 'wait' : 'pointer', border: fait ? `1.5px solid ${station.color}40` : '1.5px solid #e5e7eb', background: fait ? `${station.color}10` : '#fafafa', transition: 'all 0.15s', textAlign: 'left', opacity: isSaving ? 0.6 : 1 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, border: fait ? `2px solid ${station.color}` : '2px solid #d1d5db', background: fait ? station.color : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {fait && (<svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: fait ? 600 : 400, color: fait ? '#111827' : '#6b7280' }}>{station.label}</div>
-                    {fait && etape?.date && <div style={{ fontSize: 10, color: station.color, fontWeight: 500 }}>Fait le {etape.date}</div>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Besoin de retouche - section séparée */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
-            <div
-              onClick={async () => {
-                const retouche = getEtape(RETOUCHE_ID);
-                const today = new Date().toISOString().slice(0, 10);
-                let updated: EtapeFaite[];
-                if (retouche) {
-                  updated = etapesFaites.map(e => e.stationId === RETOUCHE_ID ? { ...e, fait: !e.fait, date: today } : e);
-                } else {
-                  updated = [...etapesFaites, { stationId: RETOUCHE_ID, fait: true, date: today }];
-                }
-                await onEtapesChange(v.id, updated);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}
-            >
-              <div style={{
-                width: 22, height: 22, borderRadius: 6, border: getEtape(RETOUCHE_ID)?.fait ? 'none' : '2px solid #e5e7eb',
-                background: getEtape(RETOUCHE_ID)?.fait ? '#fef3c7' : 'white',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                {getEtape(RETOUCHE_ID)?.fait && <span style={{ fontSize: 14 }}>⚠️</span>}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 600, color: getEtape(RETOUCHE_ID)?.fait ? '#92400e' : '#6b7280' }}>
-                ⚠️ {RETOUCHE_LABEL}
-              </span>
-            </div>
-            {getEtape(RETOUCHE_ID)?.fait && (
-              <textarea
-                placeholder="Décrire ce qui doit être retouché..."
-                value={getEtape(RETOUCHE_ID)?.commentaire ?? ''}
-                onChange={async e => {
-                  const val = e.target.value;
-                  const updated = etapesFaites.some(ep => ep.stationId === RETOUCHE_ID)
-                    ? etapesFaites.map(ep => ep.stationId === RETOUCHE_ID ? { ...ep, commentaire: val } : ep)
-                    : [...etapesFaites, { stationId: RETOUCHE_ID, fait: true, date: new Date().toISOString().slice(0, 10), commentaire: val }];
-                  await onEtapesChange(v.id, updated);
-                }}
-                style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: '1px solid #fde68a', background: '#fefce8', fontSize: 13, resize: 'vertical', minHeight: 60, outline: 'none', boxSizing: 'border-box' }}
-              />
-            )}
-          </div>
-        </div>
-
         {/* Actions */}
         <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          {/* Créer job */}
-          {v.statut === 'disponible' && (
-            <button onClick={onCreerJob} disabled={isSubmitting}
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: isSubmitting ? '#fdba74' : '#f97316', color: 'white', fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.7 : 1 }}>
-              {isSubmitting ? 'Création...' : '🚛 Créer un job depuis ce véhicule'}
-            </button>
-          )}
 
           {/* Marquer comme prêt / Annuler prêt */}
           {v.statut === 'en-production' && (
             !v.estPret ? (
-              <button onClick={async () => { setSavingPret(true); try { const today = new Date().toISOString().slice(0, 10); const toutesEtapes: EtapeFaite[] = CHECKLIST_STATIONS.map(s => ({ stationId: s.id, fait: true, date: today })); const retouche = etapesFaites.find(e => e.stationId === RETOUCHE_ID); if (retouche) toutesEtapes.push(retouche); await onEtapesChange(v.id, toutesEtapes); await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
+              <button onClick={async () => { setSavingPret(true); try { await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
                 disabled={savingPret}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: savingPret ? '#86efac' : '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: savingPret ? 'wait' : 'pointer', opacity: savingPret ? 0.7 : 1 }}>
                 {savingPret ? 'En cours...' : '✅ Marquer comme prêt'}

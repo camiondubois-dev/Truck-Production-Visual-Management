@@ -1,5 +1,11 @@
 import { supabase } from '../lib/supabase';
 import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
+import type { Item, StationProgress } from '../types/item.types';
+
+const generateUUID = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export function fromDB(row: any): VehiculeInventaire {
   return {
@@ -23,7 +29,10 @@ export function fromDB(row: any): VehiculeInventaire {
     descriptionTravaux: row.description_travaux ?? undefined,
     photoUrl: row.photo_url ?? undefined,
     etapesFaites: row.etapes_faites ?? [],
-    roadMap: row.road_map ?? [],
+    roadMap: (row.road_map ?? []).map((s: any) => ({
+      ...s,
+      id: s.id ?? generateUUID(),
+    })),
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
     estPret: row.est_pret ?? false,
@@ -236,5 +245,116 @@ export const inventaireService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+  },
+
+  // Crée automatiquement un prod_items pour un véhicule qui commence sa production
+  // (appelé quand une étape road_map passe en 'en-attente' ou 'en-cours')
+  async creerProdItemDepuisVehicule(v: VehiculeInventaire): Promise<string | null> {
+    // Vérifier si un job actif existe déjà
+    const { data: existing } = await supabase
+      .from('prod_items')
+      .select('id')
+      .eq('inventaire_id', v.id)
+      .neq('etat', 'termine')
+      .maybeSingle();
+    if (existing?.id) {
+      // Déjà un job actif — s'assurer que prod_inventaire est bien marqué en-production
+      await supabase
+        .from('prod_inventaire')
+        .update({ statut: 'en-production', job_id: existing.id, date_en_production: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', v.id);
+      return existing.id;
+    }
+
+    const jobId = `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const now = new Date().toISOString();
+
+    let label = '';
+    if (v.type === 'client') label = v.nomClient ? `${v.nomClient} — ${v.descriptionTravail ?? ''}` : v.vehicule ?? v.numero;
+    else label = `${v.marque ?? ''} ${v.modele ?? ''} ${v.annee ?? ''}`.trim() || v.numero;
+
+    // Dériver les stationsActives depuis la road_map (toutes les étapes non-sautées)
+    const roadMap = v.roadMap ?? [];
+    const stationsActives = roadMap
+      .filter(s => s.statut !== 'saute')
+      .map(s => s.stationId)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx); // déduplique pour progression
+
+    const progression: StationProgress[] = stationsActives.map(sid => {
+      const step = roadMap.find(s => s.stationId === sid);
+      const status = step?.statut === 'termine' ? 'termine' as const
+        : step?.statut === 'en-cours' ? 'en-cours' as const
+        : 'non-commence' as const;
+      return { stationId: sid, status, subTasks: [] };
+    });
+
+    const nouvelItem: Partial<Item> & { id: string } = {
+      id: jobId,
+      type: v.type,
+      numero: v.numero,
+      label,
+      etat: 'en-attente',
+      date_creation: now,
+      stationsActives,
+      progression,
+      stationActuelle: stationsActives[0],
+      inventaireId: v.id,
+      photoUrl: v.photoUrl,
+      ...(v.variante && { variante: v.variante }),
+      ...(v.marque && { marque: v.marque }),
+      ...(v.modele && { modele: v.modele }),
+      ...(v.annee && { annee: v.annee }),
+      ...(v.clientAcheteur && { clientAcheteur: v.clientAcheteur }),
+      ...(v.notes && { notes: v.notes }),
+      ...(v.nomClient && { nomClient: v.nomClient }),
+      ...(v.telephone && { telephone: v.telephone }),
+      ...(v.vehicule && { vehicule: v.vehicule }),
+      ...(v.descriptionTravail && { descriptionTravail: v.descriptionTravail }),
+      ...(v.descriptionTravaux && { descriptionTravaux: v.descriptionTravaux }),
+      aUnReservoir: v.aUnReservoir ?? false,
+      reservoirId: v.reservoirId,
+      etatCommercial: v.etatCommercial ?? 'non-vendu',
+      dateLivraisonPlanifiee: v.dateLivraisonPlanifiee,
+      clientAcheteur: v.clientAcheteur,
+    };
+
+    // Insérer dans prod_items
+    const { error: insertError } = await supabase.from('prod_items').insert({
+      id: jobId,
+      type: nouvelItem.type,
+      numero: nouvelItem.numero,
+      label: nouvelItem.label,
+      etat: 'en-attente',
+      date_creation: now,
+      stations_actives: stationsActives,
+      progression: progression,
+      station_actuelle: stationsActives[0] ?? null,
+      inventaire_id: v.id,
+      photo_url: v.photoUrl ?? null,
+      variante: v.variante ?? null,
+      marque: v.marque ?? null,
+      modele: v.modele ?? null,
+      annee: v.annee ?? null,
+      client_acheteur: v.clientAcheteur ?? null,
+      notes: v.notes ?? null,
+      nom_client: v.nomClient ?? null,
+      telephone: v.telephone ?? null,
+      vehicule: v.vehicule ?? null,
+      description_travail: v.descriptionTravail ?? null,
+      description_travaux: v.descriptionTravaux ?? null,
+      a_un_reservoir: v.aUnReservoir ?? false,
+      reservoir_id: v.reservoirId ?? null,
+      etat_commercial: v.etatCommercial ?? 'non-vendu',
+      date_livraison_planifiee: v.dateLivraisonPlanifiee ?? null,
+    });
+    if (insertError) throw insertError;
+
+    // Mettre à jour prod_inventaire : statut en-production
+    await supabase
+      .from('prod_inventaire')
+      .update({ statut: 'en-production', job_id: jobId, date_en_production: now, updated_at: now })
+      .eq('id', v.id);
+
+    return jobId;
   },
 };

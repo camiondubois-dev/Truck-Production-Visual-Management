@@ -503,9 +503,10 @@ function HorlogeWidget() {
 
 // ── Types internes ─────────────────────────────────────────────
 interface QueueEntry {
-  item: Item;
+  vehicule: VehiculeInventaire;  // toujours présent — road_map est source de vérité
+  item?: Item;                   // prod_items correspondant si disponible (pour assigner slot)
   priorite?: number;
-  inventaireId?: string;
+  stepId?: string;               // id de l'étape road_map
   stationId?: string;
 }
 
@@ -526,12 +527,13 @@ interface StationBlockProps {
 function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
-  // File d'attente : road_map en-attente + fallback, triée par position (priorite)
+  // File d'attente : road_map en-attente = source de vérité + fallback prod_items
   const finalQueue = useMemo((): QueueEntry[] => {
-    const seenIds = new Set<string>();
+    const seenVehIds = new Set<string>();
+    const seenItemIds = new Set<string>();
     const queue: QueueEntry[] = [];
 
-    // 1. Camions avec étape road_map 'en-attente' pour ce garage
+    // 1. Camions avec étape road_map 'en-attente' pour ce garage (source de vérité)
     if (roadMapStations.length > 0) {
       for (const v of vehicules) {
         if (!v.roadMap) continue;
@@ -540,21 +542,28 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         );
         if (!step) continue;
         const item = itemByInvId[v.id];
-        if (!item || item.etat === 'termine' || item.slotId) continue;
-        seenIds.add(item.id);
-        queue.push({ item, priorite: step.priorite, inventaireId: v.id, stationId: step.stationId });
+        // Skip si déjà dans un slot (en cours de travail)
+        if (item?.slotId) continue;
+        if (item?.etat === 'termine') continue;
+        seenVehIds.add(v.id);
+        if (item) seenItemIds.add(item.id);
+        queue.push({ vehicule: v, item, priorite: step.priorite, stepId: step.id, stationId: step.stationId });
       }
     }
 
-    // 2. Fallback : logique dernierGarageId / stationActuelle pour camions sans road_map
+    // 2. Fallback : prod_items en-attente sans road_map associée (trucks anciens)
     for (const item of allEnAttente) {
-      if (seenIds.has(item.id)) continue;
+      if (seenItemIds.has(item.id)) continue;
+      if (!item.inventaireId || seenVehIds.has(item.inventaireId)) continue;
       const isForThisGarage =
         item.dernierGarageId === station.id ||
         STATION_TO_GARAGE[item.stationActuelle ?? ''] === station.id;
       if (!isForThisGarage) continue;
-      seenIds.add(item.id);
-      queue.push({ item });
+      // Trouver le vehicule correspondant
+      const vehicule = vehicules.find(v => v.id === item.inventaireId);
+      if (!vehicule) continue;
+      seenItemIds.add(item.id);
+      queue.push({ vehicule, item });
     }
 
     // Trier par position (priorite). Sans position → fin de liste.
@@ -587,8 +596,8 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     const saves: Promise<void>[] = [];
     newOrder.forEach((entry, i) => {
       const newPrio = i + 1;
-      if (entry.inventaireId && entry.stationId && entry.priorite !== newPrio) {
-        saves.push(onSetPriorite(entry.inventaireId, entry.stationId, newPrio));
+      if (entry.stationId && entry.priorite !== newPrio) {
+        saves.push(onSetPriorite(entry.vehicule.id, entry.stationId, newPrio));
       }
     });
     await Promise.all(saves);
@@ -675,12 +684,18 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {finalQueue.map((entry, idx) => {
-              const { item } = entry;
+              const { vehicule, item } = entry;
               const rank = idx + 1;
-              const couleur = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
+              const couleur = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
               const rankColor = positionColor(rank);
+              const inSlot = !!item?.slotId;
+              const label = item?.label ?? (vehicule.type === 'client'
+                ? (vehicule.nomClient ?? vehicule.vehicule ?? vehicule.numero)
+                : `${vehicule.marque ?? ''} ${vehicule.modele ?? ''} ${vehicule.annee ?? ''}`.trim() || vehicule.numero);
+              const etatCommercial = item?.etatCommercial ?? vehicule.etatCommercial;
+              const entryKey = entry.stepId ?? `${vehicule.id}-${entry.stationId ?? idx}`;
               return (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div key={entryKey} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   {/* Badge de position */}
                   <span style={{
                     width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
@@ -695,37 +710,40 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
 
                   {/* Chip camion */}
                   <div
-                    title={item.label}
-                    onClick={(e) => onWaitingItemClick(e, item, station.id)}
+                    title={label}
+                    onClick={(e) => item && onWaitingItemClick(e, item, station.id)}
                     style={{
                       flex: 1, display: 'flex', alignItems: 'center', gap: 4,
                       background: `${couleur}13`,
                       border: `1px solid ${couleur}44`,
                       borderRadius: 4, padding: '2px 6px',
-                      cursor: item.slotId ? 'default' : 'pointer',
+                      cursor: (item && !inSlot) ? 'pointer' : 'default',
                       fontSize: 'clamp(9px, 0.9vw, 11px)',
                       fontFamily: 'monospace', color: couleur, fontWeight: 700,
-                      opacity: item.slotId ? 0.5 : 1,
+                      opacity: inSlot ? 0.5 : 1,
                       minWidth: 0, overflow: 'hidden',
                     }}
-                    onMouseEnter={(e) => { if (!item.slotId) e.currentTarget.style.background = `${couleur}22`; }}
-                    onMouseLeave={(e) => { if (!item.slotId) e.currentTarget.style.background = `${couleur}13`; }}
+                    onMouseEnter={(e) => { if (item && !inSlot) e.currentTarget.style.background = `${couleur}22`; }}
+                    onMouseLeave={(e) => { if (item && !inSlot) e.currentTarget.style.background = `${couleur}13`; }}
                   >
-                    {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{item.numero}</span>
-                    {item.etatCommercial === 'vendu' && (
+                    {vehicule.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)' }}>{vehicule.type === 'client' ? '🔧' : '🏷️'}</span>}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{vehicule.numero}</span>
+                    {!item && (
+                      <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>ATT</span>
+                    )}
+                    {etatCommercial === 'vendu' && (
                       <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fee2e2', color: '#dc2626', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>VDU</span>
                     )}
-                    {item.etatCommercial === 'reserve' && (
+                    {etatCommercial === 'reserve' && (
                       <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>RÉS</span>
                     )}
-                    {item.etatCommercial === 'location' && (
+                    {etatCommercial === 'location' && (
                       <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>LOC</span>
                     )}
                   </div>
 
-                  {/* Boutons haut/bas (seulement si on a un inventaireId pour sauvegarder) */}
-                  {entry.inventaireId && (
+                  {/* Boutons haut/bas (toujours si entry a un stationId) */}
+                  {entry.stationId && (
                     <>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
