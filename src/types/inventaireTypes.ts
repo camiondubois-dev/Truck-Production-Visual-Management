@@ -7,6 +7,14 @@ export interface EtapeFaite {
   commentaire?: string;
 }
 
+export interface RoadMapEtape {
+  stationId: string;
+  ordre: number;
+  statut: 'planifie' | 'en-attente' | 'en-cours' | 'termine' | 'saute';
+  priorite?: 1 | 2 | 3;        // 1=urgent, 2=normal, 3=faible
+  description?: string;          // Used for sous-traitants
+}
+
 export interface VehiculeInventaire {
   id: string;
   statut: StatutInventaire;
@@ -35,4 +43,5 @@ export interface VehiculeInventaire {
   estPret?: boolean;
   etatCommercial?: 'non-vendu' | 'reserve' | 'vendu' | 'location';
   dateLivraisonPlanifiee?: string;
+  roadMap?: RoadMapEtape[];
 }

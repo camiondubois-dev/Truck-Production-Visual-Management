@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
 import { inventaireService } from '../services/inventaireService';
 
 interface InventaireContextType {
@@ -12,6 +12,7 @@ interface InventaireContextType {
   mettreAJourPhotoInventaire: (id: string, photoUrl: string | null) => Promise<void>;
   mettreAJourType: (id: string, type: 'eau' | 'detail') => Promise<void>;
   mettreAJourEtapes: (id: string, etapes: EtapeFaite[]) => Promise<void>;
+  mettreAJourRoadMap: (id: string, roadMap: RoadMapEtape[]) => Promise<void>;
   mettreAJourReservoir: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
   marquerPret: (id: string, estPret: boolean) => Promise<void>;
   mettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
@@ -82,6 +83,13 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  const mettreAJourRoadMap = async (id: string, roadMap: RoadMapEtape[]) => {
+    await inventaireService.mettreAJourRoadMap(id, roadMap);
+    setVehicules(prev => prev.map(v =>
+      v.id === id ? { ...v, roadMap } : v
+    ));
+  };
+
   const mettreAJourReservoir = async (id: string, aUnReservoir: boolean, reservoirId: string | null) => {
     await inventaireService.mettreAJourReservoir(id, aUnReservoir, reservoirId);
     setVehicules(prev => prev.map(v =>
@@ -119,7 +127,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       importerVehicules, ajouterVehicule,
       marquerEnProduction, marquerDisponible,
       mettreAJourPhotoInventaire, mettreAJourType,
-      mettreAJourEtapes, mettreAJourReservoir,
+      mettreAJourEtapes, mettreAJourRoadMap, mettreAJourReservoir,
       marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
     }}>
       {children}

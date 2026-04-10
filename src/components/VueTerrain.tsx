@@ -5,7 +5,9 @@ import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { TERRAIN_PIN } from '../config/terrain';
 import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
-import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL } from '../data/etapes';
+import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL, ROAD_MAP_STATIONS } from '../data/etapes';
+import { RoadMapEditor } from './RoadMapEditor';
+import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 
 type FiltreType   = 'tous' | 'eau' | 'detail';
 type FiltreStatut = 'tous' | 'disponibles' | 'prets' | 'vendus';
@@ -177,6 +179,12 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   const [saving, setSaving]                     = useState(false);
   const [saved, setSaved]                       = useState(false);
   const [uploadingPhoto, setUploadingPhoto]     = useState(false);
+
+  const [showSlotAssign, setShowSlotAssign]     = useState(false);
+  const [slotGarageChoisi, setSlotGarageChoisi] = useState('');
+  const [slotChoisi, setSlotChoisi]             = useState('');
+  const [slotConflict, setSlotConflict]         = useState<{item: any, slotId: string} | null>(null);
+  const [assigningSlot, setAssigningSlot]       = useState(false);
 
   useEffect(() => {
     if (v.type === 'eau' && !v.aUnReservoir) {
@@ -457,6 +465,155 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
               />
             )}
           </div>
+        </div>
+
+        {/* ── Road Map ── */}
+        <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            🗺️ Road Map
+          </div>
+          {(v.roadMap ?? []).length === 0 ? (
+            <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>Aucune étape planifiée.</div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {(v.roadMap ?? []).sort((a,b)=>a.ordre-b.ordre).map(step => {
+                const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
+                const cfg = step.statut === 'termine' ? {bg:'#f0fdf4',color:'#166534'}
+                  : step.statut === 'en-cours' ? {bg:'#eff6ff',color:'#1d4ed8'}
+                  : step.statut === 'en-attente' ? {bg:'#fff7ed',color:'#c2410c'}
+                  : {bg:'#f1f5f9',color:'#64748b'};
+                return (
+                  <span key={step.stationId} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, fontWeight: 600, background: cfg.bg, color: cfg.color }}>
+                    {station?.icon} {station?.label ?? step.stationId}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <RoadMapEditor
+            vehicule={v}
+            onSaved={updated => onMisAJour(updated)}
+            compact={true}
+          />
+        </div>
+
+        {/* ── Assigner à un slot ── */}
+        <div style={{ margin: '0 20px 16px' }}>
+          {!showSlotAssign ? (
+            <button onClick={() => setShowSlotAssign(true)}
+              style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: 14, cursor: 'pointer', fontWeight: 500 }}>
+              🏭 Assigner à un slot de garage
+            </button>
+          ) : (
+            <div style={{ padding: '14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assigner à un slot</div>
+
+              {/* Département */}
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>1. Sélectionner le département</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {GARAGES_COLONNES.map(g => (
+                  <button key={g.id} onClick={() => { setSlotGarageChoisi(g.id); setSlotChoisi(''); }}
+                    style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: slotGarageChoisi === g.id ? 700 : 400, cursor: 'pointer',
+                      border: slotGarageChoisi === g.id ? 'none' : '1px solid #e5e7eb',
+                      background: slotGarageChoisi === g.id ? g.color : 'white',
+                      color: slotGarageChoisi === g.id ? 'white' : '#6b7280',
+                    }}>
+                    {g.labelCourt}
+                  </button>
+                ))}
+              </div>
+
+              {/* Slot */}
+              {slotGarageChoisi && (
+                <>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>2. Sélectionner le slot</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {(GARAGE_TO_SLOTS[slotGarageChoisi] ?? []).map(slotId => (
+                      <button key={slotId} onClick={() => setSlotChoisi(slotId)}
+                        style={{ width: 52, height: 44, borderRadius: 8, fontSize: 14, fontWeight: slotChoisi === slotId ? 700 : 400, cursor: 'pointer',
+                          border: slotChoisi === slotId ? 'none' : '1px solid #e5e7eb',
+                          background: slotChoisi === slotId ? '#111827' : 'white',
+                          color: slotChoisi === slotId ? 'white' : '#374151',
+                        }}>
+                        {slotId}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Conflict dialog */}
+              {slotConflict && (
+                <div style={{ padding: '12px', borderRadius: 10, background: '#fef3c7', border: '1px solid #fde68a', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>
+                    ⚠️ Slot occupé — #{slotConflict.item.numero ?? slotConflict.item.label} est dans ce slot
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button onClick={async () => {
+                      setAssigningSlot(true);
+                      try {
+                        await supabase.from('prod_items')
+                          .update({ slot_id: null, etat: 'en-attente', updated_at: new Date().toISOString() })
+                          .eq('id', slotConflict.item.id);
+                        const updatedRoadMap = (v.roadMap ?? []).map(e =>
+                          e.stationId === slotGarageChoisi && e.statut === 'en-attente'
+                            ? { ...e, statut: 'en-cours' as const } : e
+                        );
+                        await inventaireService.mettreAJourRoadMap(v.id, updatedRoadMap);
+                        onMisAJour({ ...v, roadMap: updatedRoadMap });
+                        setSlotConflict(null);
+                        setShowSlotAssign(false);
+                        alert(`Camion assigné au slot ${slotChoisi} ✓`);
+                      } finally { setAssigningSlot(false); }
+                    }}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      ✅ Il est sorti
+                    </button>
+                    <button onClick={() => setSlotConflict(null)}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#374151', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      ↩️ Il est encore là
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm button */}
+              {slotGarageChoisi && slotChoisi && !slotConflict && (
+                <button onClick={async () => {
+                  setAssigningSlot(true);
+                  try {
+                    const { data: occupant } = await supabase
+                      .from('prod_items')
+                      .select('id, numero, label')
+                      .eq('slot_id', slotChoisi)
+                      .neq('etat', 'termine')
+                      .maybeSingle();
+                    if (occupant) {
+                      setSlotConflict({ item: occupant, slotId: slotChoisi });
+                      return;
+                    }
+                    const updatedRoadMap = (v.roadMap ?? []).map(e =>
+                      GARAGE_TO_SLOTS[slotGarageChoisi]?.includes(slotChoisi) && e.statut === 'en-attente'
+                        ? { ...e, statut: 'en-cours' as const } : e
+                    );
+                    await inventaireService.mettreAJourRoadMap(v.id, updatedRoadMap);
+                    onMisAJour({ ...v, roadMap: updatedRoadMap });
+                    setShowSlotAssign(false);
+                    setSlotGarageChoisi('');
+                    setSlotChoisi('');
+                  } finally { setAssigningSlot(false); }
+                }} disabled={assigningSlot}
+                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: assigningSlot ? '#e5e7eb' : '#111827', color: assigningSlot ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 14, cursor: assigningSlot ? 'wait' : 'pointer' }}>
+                  {assigningSlot ? 'Vérification...' : `✓ Confirmer — Slot ${slotChoisi}`}
+                </button>
+              )}
+
+              <button onClick={() => { setShowSlotAssign(false); setSlotGarageChoisi(''); setSlotChoisi(''); setSlotConflict(null); }}
+                style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: 13, cursor: 'pointer', marginTop: 8 }}>
+                Annuler
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Statut commercial ── */}
