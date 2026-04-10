@@ -12,7 +12,7 @@ const ETAPES_IDS = [
 ];
 
 type FiltreType = 'tous' | 'eau' | 'detail';
-type EcranPin = 'pin' | 'ok' | 'no-session';
+type Ecran = 'pin' | 'login' | 'ok';
 
 // ─── PIN ────────────────────────────────────────────────────────────────────
 
@@ -37,9 +37,9 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🚛</div>
+      <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="Camions Dubois" style={{ height: 60, marginBottom: 20, filter: 'brightness(0) invert(1)' }} />
       <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>Vue Terrain</div>
-      <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 40 }}>Camions Dubois</div>
+      <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 40 }}>Entrez votre code d'accès</div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
         {[0, 1, 2, 3].map(i => (
@@ -443,34 +443,58 @@ function VueTerrainMain() {
   );
 }
 
+// ─── Connexion ───────────────────────────────────────────────────────────────
+
+function EcranConnexion({ onConnecte }: { onConnecte: () => void }) {
+  const [email, setEmail]     = useState('');
+  const [mdp, setMdp]         = useState('');
+  const [erreur, setErreur]   = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleConnexion = async () => {
+    if (!email.trim() || !mdp) return;
+    setLoading(true); setErreur('');
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: mdp });
+    if (error) { setErreur('Email ou mot de passe incorrect'); setLoading(false); return; }
+    onConnecte();
+  };
+
+  const inp: React.CSSProperties = { width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 16, outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="Camions Dubois" style={{ height: 60, marginBottom: 20, filter: 'brightness(0) invert(1)' }} />
+      <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>Connexion</div>
+      <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 32 }}>Vue Terrain — Camions Dubois</div>
+
+      <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <input style={inp} type="email" inputMode="email" autoComplete="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+        <input style={inp} type="password" autoComplete="current-password" placeholder="Mot de passe" value={mdp} onChange={e => setMdp(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleConnexion()} />
+        {erreur && <div style={{ fontSize: 13, color: '#f87171', textAlign: 'center' }}>{erreur}</div>}
+        <button onClick={handleConnexion} disabled={loading || !email.trim() || !mdp}
+          style={{ padding: '16px', borderRadius: 12, border: 'none', background: loading || !email.trim() || !mdp ? 'rgba(255,255,255,0.1)' : '#f97316', color: 'white', fontWeight: 700, fontSize: 16, cursor: loading ? 'wait' : 'pointer', marginTop: 8 }}>
+          {loading ? 'Connexion...' : 'Se connecter'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Export principal ────────────────────────────────────────────────────────
 
 export function VueTerrain() {
-  const [ecran, setEcran] = useState<EcranPin>(() =>
+  const [ecran, setEcran] = useState<Ecran>(() =>
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
 
   useEffect(() => {
     if (ecran !== 'ok') return;
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) setEcran('no-session');
+      if (!session) setEcran('login');
     });
   }, [ecran]);
 
-  if (ecran === 'pin') return <EcranPin onSuccess={() => setEcran('ok')} />;
-
-  if (ecran === 'no-session') {
-    return (
-      <div style={{ minHeight: '100vh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: 'white', marginBottom: 8 }}>Session expirée</div>
-        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 32 }}>Connectez-vous d'abord depuis l'application principale</div>
-        <a href="/" style={{ padding: '14px 28px', borderRadius: 12, background: '#f97316', color: 'white', fontWeight: 700, fontSize: 16, textDecoration: 'none' }}>
-          Aller à la connexion
-        </a>
-      </div>
-    );
-  }
-
+  if (ecran === 'pin')   return <EcranPin onSuccess={() => setEcran('ok')} />;
+  if (ecran === 'login') return <EcranConnexion onConnecte={() => setEcran('ok')} />;
   return <VueTerrainMain />;
 }
