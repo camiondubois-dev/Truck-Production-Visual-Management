@@ -25,6 +25,7 @@ function fromDB(row: any): VehiculeInventaire {
     etapesFaites: row.etapes_faites ?? [],
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
+    estPret: row.est_pret ?? false,
   };
 }
 
@@ -52,6 +53,7 @@ function toDB(v: VehiculeInventaire): any {
     etapes_faites: v.etapesFaites ?? [],
     a_un_reservoir: v.aUnReservoir ?? false,
     reservoir_id: v.reservoirId ?? null,
+    est_pret: v.estPret ?? false,
   };
 }
 
@@ -99,20 +101,17 @@ export const inventaireService = {
         statut: 'disponible',
         job_id: null,
         date_en_production: null,
+        est_pret: false,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);
     if (error) throw error;
   },
 
-  // ← AJOUT — synchroniser la photo vers l'inventaire
   async mettreAJourPhoto(id: string, photoUrl: string | null): Promise<void> {
     const { error } = await supabase
       .from('prod_inventaire')
-      .update({
-        photo_url: photoUrl,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },
@@ -137,6 +136,14 @@ export const inventaireService = {
     const { error } = await supabase
       .from('prod_inventaire')
       .update({ a_un_reservoir: aUnReservoir, reservoir_id: reservoirId, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async marquerPret(id: string, estPret: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ est_pret: estPret, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },
