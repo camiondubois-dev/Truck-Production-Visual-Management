@@ -486,19 +486,26 @@ export function VueInventaire() {
                       <td style={{ padding: '12px 16px', fontSize: 12, color: '#6b7280', maxWidth: 200 }}>{v.nomClient ?? v.descriptionTravail ?? v.clientAcheteur ?? '—'}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {v.statut === 'disponible' ? (
-                            <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>
-                          ) : (
-                            <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>
-                          )}
+                          {/* Production status — hide "Disponible" when truck has a commercial status */}
+                          {(() => {
+                            const nonDispo = v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location';
+                            if (v.statut === 'en-production') {
+                              return <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>;
+                            }
+                            if (!nonDispo) {
+                              return <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>;
+                            }
+                            return null;
+                          })()}
+                          {/* Commercial status badge */}
                           {v.etatCommercial === 'vendu' && (
-                            <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✓ Vendu{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
+                            <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✓ Vendu{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
                           )}
                           {v.etatCommercial === 'reserve' && (
-                            <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔒 Réservé{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
+                            <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔒 Réservé{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
                           )}
                           {v.etatCommercial === 'location' && (
-                            <span style={{ fontSize: 10, background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔑 Location{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
+                            <span style={{ fontSize: 11, background: '#ede9fe', color: '#6d28d9', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔑 Location{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
                           )}
                           {v.type === 'eau' && (v.aUnReservoir
                             ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir</span>
