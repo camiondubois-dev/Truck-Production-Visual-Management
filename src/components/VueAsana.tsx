@@ -1,34 +1,19 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useGarage } from '../hooks/useGarage';
+import { useInventaire } from '../contexts/InventaireContext';
 import { EauIcon } from './EauIcon';
 import { useAuth } from '../contexts/AuthContext';
-import { useInventaire } from '../contexts/InventaireContext';
 import { CreateWizardModal } from './CreateWizardModal';
 import { PopupAssignationSlot } from './PopupAssignationSlot';
-import { getStatutEffectif, toutesEtapesCompletees } from '../utils/progressionUtils';
 import { photoService } from '../services/photoService';
-import { inventaireService } from '../services/inventaireService';
-import type { Item, TypeItem, Document, EtatCommercial } from '../types/item.types';
+import { ROAD_MAP_STATIONS } from '../data/etapes';
+import type { TypeItem, Item, EtatCommercial, Document } from '../types/item.types';
+import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
 import { useClients } from '../contexts/ClientContext';
 
-interface StationConfig {
-  id: string;
-  label: string;
-  labelCourt: string;
-  color: string;
-  ordre: number;
-}
-
-interface ColonneInfo {
-  key: string;
-  label: string;
-  width: number;
-}
-
+// ── Types ────────────────────────────────────────────────────────
 interface VueAsanaProps {
   type: TypeItem;
-  toutesLesStations: StationConfig[];
-  colonnesInfo: ColonneInfo[];
   config: {
     color: string;
     icon: string;
@@ -36,57 +21,97 @@ interface VueAsanaProps {
   };
 }
 
-function BadgeCommercial({ etat, client }: { etat?: EtatCommercial; client?: string }) {
-  if (!etat || etat === 'non-vendu') return null;
-  const cfg = etat === 'vendu'
-    ? { bg: '#dcfce7', color: '#166534', label: client ? `✓ Vendu — ${client}` : '✓ Vendu' }
-    : etat === 'location'
-    ? { bg: '#ede9fe', color: '#6d28d9', label: client ? `🔑 Location — ${client}` : '🔑 Location' }
-    : { bg: '#fef3c7', color: '#92400e', label: client ? `🔒 Réservé — ${client}` : '🔒 Réservé' };
-  return (
-    <span style={{ fontSize: 11, background: cfg.bg, color: cfg.color, padding: '3px 10px', borderRadius: 4, fontWeight: 700 }}>
-      {cfg.label}
-    </span>
-  );
+type FiltreVue = 'tous' | 'a-planifier' | 'pret' | string; // string = stationId
+type Section = 'a-planifier' | 'en-attente' | 'dans-le-garage' | 'pret' | 'archive';
+
+// ── Helper: détermine la section d'un véhicule ───────────────────
+function getSectionVehicule(v: VehiculeInventaire, item?: Item): Section {
+  if (v.statut === 'archive') return 'archive';
+  if (v.estPret) return 'pret';
+  if (item?.slotId) return 'dans-le-garage';
+  if (!v.roadMap || v.roadMap.length === 0) return 'a-planifier';
+  const active = v.roadMap.filter(s => s.statut !== 'planifie' && s.statut !== 'saute');
+  if (active.length === 0) return 'a-planifier';
+  if (active.some(s => s.statut === 'en-cours')) return 'dans-le-garage';
+  if (active.some(s => s.statut === 'en-attente')) return 'en-attente';
+  if (active.every(s => s.statut === 'termine')) return 'pret';
+  return 'a-planifier';
 }
 
-export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueAsanaProps) {
-  const { items, ajouterItem, updateStationStatus } = useGarage();
+// ── Composant principal ──────────────────────────────────────────
+export function VueAsana({ type, config }: VueAsanaProps) {
+  const { items, ajouterItem } = useGarage();
+  const { vehicules } = useInventaire();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [showTermines, setShowTermines] = useState(false);
+  const [filtreActif, setFiltreActif] = useState<FiltreVue>('tous');
+  const [showArchives, setShowArchives] = useState(false);
 
-  const sortByNumero = (arr: typeof items) =>
-    [...arr].sort((a, b) => {
-      const numA = parseInt(a.numero?.replace(/\D/g, '') ?? '0') || 0;
-      const numB = parseInt(b.numero?.replace(/\D/g, '') ?? '0') || 0;
-      return numA - numB;
+  // Map inventaireId → Item pour croiser les données
+  const itemByInvId = useMemo(() => {
+    const map: Record<string, Item> = {};
+    items.forEach(i => { if (i.inventaireId) map[i.inventaireId] = i; });
+    return map;
+  }, [items]);
+
+  // Véhicules du bon type, triés par numéro
+  const mesVehicules = useMemo(() => {
+    const filtered = vehicules.filter(v => v.type === type);
+    return [...filtered].sort((a, b) => {
+      const na = parseInt(a.numero.replace(/\D/g, '') || '0');
+      const nb = parseInt(b.numero.replace(/\D/g, '') || '0');
+      return na - nb;
     });
+  }, [vehicules, type]);
 
-  const mesItems = items.filter((i) => i.type === type);
-  const enAttente = sortByNumero(mesItems.filter((i) => i.etat === 'en-attente'));
-  const enSlot = sortByNumero(mesItems.filter((i) => i.etat === 'en-slot'));
-  const termines = sortByNumero(mesItems.filter((i) => i.etat === 'termine'));
-  const selectedItem = items.find((i) => i.id === selectedId) ?? null;
+  // Filtre actif appliqué
+  const vehiculesFiltres = useMemo(() => {
+    if (filtreActif === 'tous') return mesVehicules;
+    if (filtreActif === 'a-planifier') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
+    }
+    if (filtreActif === 'pret') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
+    }
+    // Filtre par station: camions qui ont cette étape active (en-attente ou en-cours)
+    return mesVehicules.filter(v => {
+      if (!v.roadMap) return false;
+      return v.roadMap.some(s => s.stationId === filtreActif && (s.statut === 'en-attente' || s.statut === 'en-cours'));
+    });
+  }, [mesVehicules, filtreActif, itemByInvId]);
+
+  // Sections
+  const aPlanifier   = vehiculesFiltres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
+  const enAttente    = vehiculesFiltres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
+  const dansLeGarage = vehiculesFiltres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
+  const prets        = vehiculesFiltres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
+  const archives     = mesVehicules.filter(v => v.statut === 'archive');
+
+  const selectedVehicule = mesVehicules.find(v => v.id === selectedId) ?? null;
+  const selectedItem = selectedVehicule ? itemByInvId[selectedVehicule.id] : undefined;
+
+  const totalActifs = aPlanifier.length + enAttente.length + dansLeGarage.length + prets.length;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        marginRight: selectedItem ? 360 : 0, transition: 'margin-right 0.3s ease',
+        marginRight: selectedVehicule ? 380 : 0, transition: 'margin-right 0.3s ease',
       }}>
+        {/* ── En-tête ─────────────────────────────────────────── */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 24px', borderBottom: '2px solid #e5e7eb', background: 'white',
+          padding: '14px 24px', borderBottom: '2px solid #e5e7eb', background: 'white', flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {config.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 28 }}>{config.icon}</span>}
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: config.color, margin: 0 }}>{config.label}</h1>
+              {config.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 26 }}>{config.icon}</span>}
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: config.color, margin: 0 }}>{config.label}</h1>
             </div>
-            <StatPill label="En slot" value={enSlot.length} color="#3b82f6" />
-            <StatPill label="En attente" value={enAttente.length} color="#f59e0b" />
-            <StatPill label="Terminés" value={termines.length} color="#22c55e" />
+            <StatPill label="À planifier"    value={aPlanifier.length}   color="#9ca3af" />
+            <StatPill label="En attente"     value={enAttente.length}    color="#f59e0b" />
+            <StatPill label="Dans le garage" value={dansLeGarage.length} color="#3b82f6" />
+            <StatPill label="Prêts"          value={prets.length}        color="#22c55e" />
           </div>
           <button onClick={() => setShowModal(true)}
             style={{ background: config.color, color: 'white', border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -94,70 +119,112 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
           </button>
         </div>
 
+        {/* ── Barre de filtres ────────────────────────────────── */}
+        <div style={{
+          display: 'flex', gap: 6, padding: '10px 20px', borderBottom: '1px solid #e5e7eb',
+          background: 'white', flexWrap: 'wrap', flexShrink: 0,
+        }}>
+          <FiltreBtn active={filtreActif === 'tous'} onClick={() => setFiltreActif('tous')} label={`Tous (${totalActifs})`} />
+          <FiltreBtn active={filtreActif === 'a-planifier'} onClick={() => setFiltreActif('a-planifier')} label="📋 À planifier" />
+          {ROAD_MAP_STATIONS.map(s => {
+            const nb = mesVehicules.filter(v => v.roadMap?.some(r => r.stationId === s.id && (r.statut === 'en-attente' || r.statut === 'en-cours'))).length;
+            return (
+              <FiltreBtn key={s.id} active={filtreActif === s.id} onClick={() => setFiltreActif(s.id)}
+                label={`${s.icon} ${s.label}${nb > 0 ? ` (${nb})` : ''}`} color={s.color} />
+            );
+          })}
+          <FiltreBtn active={filtreActif === 'pret'} onClick={() => setFiltreActif('pret')} label={`✅ Prêt (${prets.length})`} color="#22c55e" />
+        </div>
+
+        {/* ── Tableau ─────────────────────────────────────────── */}
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
-          {mesItems.length === 0 ? (
+          {mesVehicules.filter(v => v.statut !== 'archive').length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9ca3af' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon === 'EAU_LOGO' ? <EauIcon /> : config.icon}</div>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun item pour l'instant</div>
+              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun véhicule pour l'instant</div>
               <div style={{ fontSize: 14 }}>Clique sur "+ Nouveau" pour commencer</div>
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 950 }}>
               <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                 <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  {colonnesInfo.map((col) => (
-                    <th key={col.key} style={{
-                      width: col.width, textAlign: 'left', padding: '12px 16px',
-                      fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                      textTransform: 'uppercase', color: '#6b7280',
-                    }}>{col.label}</th>
-                  ))}
-                  {toutesLesStations.map((s) => (
+                  <th style={thStyle(110)}>Numéro</th>
+                  {type === 'client'
+                    ? <><th style={thStyle(150)}>Client</th><th style={thStyle(160)}>Description</th></>
+                    : <><th style={thStyle(120)}>Marque</th><th style={thStyle(110)}>Modèle</th></>
+                  }
+                  <th style={thStyle(90)}>Slot</th>
+                  <th style={thStyle(120)}>Statut</th>
+                  {ROAD_MAP_STATIONS.map(s => (
                     <th key={s.id} style={{
-                      width: 110, textAlign: 'center', padding: '10px 6px',
+                      width: 100, textAlign: 'center', padding: '10px 4px',
                       fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
                       textTransform: 'uppercase', color: s.color,
                       borderBottom: `3px solid ${s.color}`,
                       whiteSpace: 'normal', lineHeight: 1.4,
-                      verticalAlign: 'bottom', minWidth: 100,
-                    }}>{s.label}</th>
+                      verticalAlign: 'bottom', minWidth: 90,
+                    }}>{s.icon} {s.label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
+                {aPlanifier.length > 0 && (
+                  <>
+                    <SectionHeader label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
+                    {aPlanifier.map(v => (
+                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                        selected={selectedId === v.id}
+                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                    ))}
+                  </>
+                )}
                 {enAttente.length > 0 && (
                   <>
-                    <SectionHeader label="En attente de slot" color="#f59e0b" count={enAttente.length} />
-                    {enAttente.map((item) => (
-                      <LigneItem key={item.id} item={item} stations={toutesLesStations} colonnesInfo={colonnesInfo}
-                        selected={selectedId === item.id}
-                        onClick={() => setSelectedId(item.id === selectedId ? null : item.id)}
-                        onStationStatusChange={updateStationStatus} />
+                    <SectionHeader label="⏳ En attente" color="#f59e0b" count={enAttente.length} />
+                    {enAttente.map(v => (
+                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                        selected={selectedId === v.id}
+                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                     ))}
                   </>
                 )}
-                {enSlot.length > 0 && (
+                {dansLeGarage.length > 0 && (
                   <>
-                    <SectionHeader label="Dans le garage" color="#3b82f6" count={enSlot.length} />
-                    {enSlot.map((item) => (
-                      <LigneItem key={item.id} item={item} stations={toutesLesStations} colonnesInfo={colonnesInfo}
-                        selected={selectedId === item.id}
-                        onClick={() => setSelectedId(item.id === selectedId ? null : item.id)}
-                        onStationStatusChange={updateStationStatus} />
+                    <SectionHeader label="🔧 Dans le garage" color="#3b82f6" count={dansLeGarage.length} />
+                    {dansLeGarage.map(v => (
+                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                        selected={selectedId === v.id}
+                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                     ))}
                   </>
                 )}
-                {termines.length > 0 && (
+                {prets.length > 0 && (
+                  <>
+                    <SectionHeader label="✅ Prêts" color="#22c55e" count={prets.length} />
+                    {prets.map(v => (
+                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                        selected={selectedId === v.id}
+                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                    ))}
+                  </>
+                )}
+                {vehiculesFiltres.filter(v => v.statut !== 'archive').length === 0 && filtreActif !== 'tous' && (
+                  <tr>
+                    <td colSpan={999} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', fontSize: 14 }}>
+                      Aucun résultat pour ce filtre
+                    </td>
+                  </tr>
+                )}
+                {archives.length > 0 && (
                   <>
                     <SectionHeader
-                      label={showTermines ? 'Terminés (cliquer pour masquer)' : `Terminés (${termines.length})`}
-                      color="#22c55e" count={termines.length}
-                      onClick={() => setShowTermines(!showTermines)} clickable />
-                    {showTermines && termines.map((item) => (
-                      <LigneItem key={item.id} item={item} stations={toutesLesStations} colonnesInfo={colonnesInfo}
-                        selected={selectedId === item.id}
-                        onClick={() => setSelectedId(item.id === selectedId ? null : item.id)}
-                        onStationStatusChange={updateStationStatus} />
+                      label={showArchives ? 'Archivés (masquer)' : `Archivés (${archives.length})`}
+                      color="#d1d5db" count={archives.length}
+                      onClick={() => setShowArchives(s => !s)} clickable />
+                    {showArchives && archives.map(v => (
+                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                        selected={selectedId === v.id}
+                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                     ))}
                   </>
                 )}
@@ -167,50 +234,54 @@ export function VueAsana({ type, toutesLesStations, colonnesInfo, config }: VueA
         </div>
       </div>
 
-      {selectedItem && (
-        <PanneauDetail
-          item={selectedItem} stations={toutesLesStations}
+      {/* ── Panneau détail ──────────────────────────────────── */}
+      {selectedVehicule && (
+        <PanneauDetailVehicule
+          vehicule={selectedVehicule}
+          item={selectedItem}
           onClose={() => setSelectedId(null)}
-          onStationStatusChange={updateStationStatus}
-          onSupprimer={() => setSelectedId(null)}
         />
       )}
 
+      {/* ── Modal création ──────────────────────────────────── */}
       {showModal && (
         <CreateWizardModal
           initialType={type}
           onClose={() => setShowModal(false)}
-          onCreate={(item) => {
-            const typeVue = type;
-            const typeItem = item.type;
-            if ((typeVue === 'eau' && typeItem === 'detail') || (typeVue === 'detail' && typeItem === 'eau')) {
-              const destLabel = typeVue === 'eau' ? 'eau' : 'détail';
-              const srcLabel = typeVue === 'eau' ? 'détail' : 'eau';
-              const confirme = window.confirm(`Ce camion est destiné à ${srcLabel}. Voulez-vous changer sa destination pour ${destLabel}?`);
-              if (confirme) {
-                ajouterItem({ ...item, type: typeVue });
-              } else {
-                ajouterItem(item);
-              }
-            } else {
-              ajouterItem(item);
-            }
-            setShowModal(false);
-          }}
+          onCreate={(item) => { ajouterItem(item); setShowModal(false); }}
         />
       )}
     </div>
   );
 }
 
+// ── Sous-composants utilitaires ──────────────────────────────────
+
 function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: 13, color: '#6b7280' }}>{label}</span>
-      <span style={{ background: color, color: 'white', fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 12, minWidth: 24, textAlign: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+      <span style={{ background: color, color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 10, minWidth: 20, textAlign: 'center' }}>
         {value}
       </span>
     </div>
+  );
+}
+
+function FiltreBtn({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color?: string }) {
+  const c = color ?? '#6b7280';
+  return (
+    <button onClick={onClick}
+      style={{
+        padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: active ? 700 : 500,
+        border: active ? `2px solid ${c}` : '1px solid #e5e7eb',
+        background: active ? `${c}15` : 'white',
+        color: active ? c : '#6b7280',
+        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -220,13 +291,13 @@ function SectionHeader({ label, color, count, onClick, clickable }: {
   return (
     <tr onClick={onClick} style={{ cursor: clickable ? 'pointer' : 'default' }}>
       <td colSpan={999} style={{
-        padding: '10px 16px', background: '#f8fafc',
+        padding: '8px 16px', background: '#f8fafc',
         borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb',
-        fontSize: 12, fontWeight: 700, color, letterSpacing: '0.05em',
+        fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em',
       }}>
         {label}
         {!clickable && (
-          <span style={{ marginLeft: 10, background: color, color: 'white', fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>
+          <span style={{ marginLeft: 8, background: color, color: 'white', fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>
             {count}
           </span>
         )}
@@ -235,176 +306,185 @@ function SectionHeader({ label, color, count, onClick, clickable }: {
   );
 }
 
-interface LigneItemProps {
-  item: Item;
-  stations: StationConfig[];
-  colonnesInfo: ColonneInfo[];
+const thStyle = (width: number): React.CSSProperties => ({
+  width, textAlign: 'left', padding: '12px 14px',
+  fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+  textTransform: 'uppercase', color: '#6b7280',
+});
+
+// ── LigneVehicule ────────────────────────────────────────────────
+
+function LigneVehicule({ vehicule: v, item, type, selected, onClick }: {
+  vehicule: VehiculeInventaire;
+  item?: Item;
+  type: TypeItem;
   selected: boolean;
   onClick: () => void;
-  onStationStatusChange: (itemId: string, stationId: string, status: string) => void;
-}
+}) {
+  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+  const section = getSectionVehicule(v, item);
+  const isArchive = v.statut === 'archive';
 
-function LigneItem({ item, stations, colonnesInfo, selected, onClick }: LigneItemProps) {
   return (
     <tr onClick={onClick}
       style={{
         borderBottom: '1px solid #f1f5f9',
-        background: selected ? '#eff6ff' : 'white',
-        borderLeft: selected ? '3px solid #3b82f6' : '3px solid transparent',
+        background: selected ? `${typeColor}18` : isArchive ? '#fafafa' : 'white',
+        borderLeft: selected ? `3px solid ${typeColor}` : '3px solid transparent',
         cursor: 'pointer', transition: 'background 0.1s',
+        opacity: isArchive ? 0.65 : 1,
       }}
-      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = '#f8fafc'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'white'; }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f8fafc'; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = isArchive ? '#fafafa' : 'white'; }}
     >
-      {colonnesInfo.map((col) => (
-        <td key={col.key} style={{ padding: '14px 16px', fontSize: 13 }}>
-          <ColonneValeur item={item} colKey={col.key} />
+      {/* Numéro */}
+      <td style={{ padding: '12px 14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: typeColor }}>#{v.numero}</span>
+          {v.estPret && <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Prêt</span>}
+          {v.variante && <span style={{ fontSize: 10, color: '#9ca3af' }}>{v.variante}</span>}
+          {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
+            <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />
+          )}
+        </div>
+      </td>
+
+      {/* Colonnes variables selon type */}
+      {type === 'client' ? (
+        <>
+          <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{v.nomClient ?? '—'}</td>
+          <td style={{ padding: '12px 14px', fontSize: 12, color: '#6b7280', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {v.descriptionTravail ?? v.vehicule ?? '—'}
+          </td>
+        </>
+      ) : (
+        <>
+          <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{v.marque ?? '—'}</td>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontSize: 13, color: '#374151' }}>{v.modele ?? '—'}</span>
+              {v.annee && <span style={{ fontSize: 11, color: '#9ca3af' }}>{v.annee}</span>}
+            </div>
+          </td>
+        </>
+      )}
+
+      {/* Slot */}
+      <td style={{ padding: '12px 14px' }}>
+        {item?.slotId
+          ? <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>
+              Slot {item.slotId}
+            </span>
+          : <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
+        }
+      </td>
+
+      {/* Statut */}
+      <td style={{ padding: '12px 14px' }}>
+        <StatutBadgeSection section={section} />
+      </td>
+
+      {/* Colonnes road_map */}
+      {ROAD_MAP_STATIONS.map(s => (
+        <td key={s.id} style={{ textAlign: 'center', padding: '8px 4px' }}>
+          <CelluleRoadMap vehicule={v} stationId={s.id} />
         </td>
       ))}
-      {stations.map((s) => {
-        const estActive = item.stationsActives.includes(s.id);
-        const prog = item.progression?.find((p) => p.stationId === s.id);
-        return (
-          <td key={s.id} style={{ textAlign: 'center', padding: '8px 4px' }}>
-            {estActive
-              ? <CelluleStation item={item} stationId={s.id} stations={stations} prog={prog} />
-              : <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f1f5f9', margin: '0 auto', opacity: 0.4 }} />
-            }
-          </td>
-        );
-      })}
     </tr>
   );
 }
 
-function ColonneValeur({ item, colKey }: { item: Item; colKey: string }) {
-  switch (colKey) {
-    case 'numero':
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>#{item.numero}</span>
-          {item.etatCommercial && item.etatCommercial !== 'non-vendu' && (
-            <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
-          )}
-          {item.dateLivraisonPlanifiee && (
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content', background: '#eff6ff', color: '#1d4ed8' }}>
-              📅 {new Date(item.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}
-            </span>
-          )}
-          {item.type === 'eau' && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, width: 'fit-content',
-              background: (item as any).aUnReservoir ? '#dcfce7' : '#fff7ed',
-              color: (item as any).aUnReservoir ? '#166534' : '#c2410c',
-            }}>
-              {(item as any).aUnReservoir ? '💧 Réservoir' : '⚠️ Sans réservoir'}
-            </span>
-          )}
-        </div>
-      );
-    case 'annee':   return <span style={{ color: '#6b7280' }}>{item.annee}</span>;
-    case 'marque':  return <span style={{ fontWeight: 600 }}>{item.marque}</span>;
-    case 'modele':  return <span style={{ color: '#6b7280' }}>{item.modele}</span>;
-    case 'client':  return <span style={{ fontWeight: 600 }}>{item.nomClient}</span>;
-    case 'travail': return <span style={{ color: '#6b7280', fontSize: 12 }}>{item.descriptionTravail}</span>;
-    case 'slot':
-      return item.slotId ? (
-        <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: 4, fontWeight: 600 }}>
-          Slot {item.slotId}
-        </span>
-      ) : <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>;
-    case 'statut':  return <StatusBadge etat={item.etat} />;
-    case 'urgence':
-      return item.urgence ? (
-        <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>URGENT</span>
-      ) : null;
-    default: return null;
-  }
+function StatutBadgeSection({ section }: { section: Section }) {
+  const cfg: Record<Section, { bg: string; color: string; label: string }> = {
+    'a-planifier':    { bg: '#f3f4f6', color: '#6b7280', label: '📋 À planifier' },
+    'en-attente':     { bg: '#fef3c7', color: '#92400e', label: '⏳ En attente' },
+    'dans-le-garage': { bg: '#dbeafe', color: '#1e40af', label: '🔧 En garage' },
+    'pret':           { bg: '#dcfce7', color: '#166534', label: '✅ Prêt' },
+    'archive':        { bg: '#f9fafb', color: '#9ca3af', label: '📦 Archivé' },
+  };
+  const c = cfg[section];
+  return (
+    <span style={{ fontSize: 11, background: c.bg, color: c.color, padding: '4px 8px', borderRadius: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
+      {c.label}
+    </span>
+  );
 }
 
-function StatusBadge({ etat }: { etat: string }) {
-  const cfg = {
-    'en-attente': { bg: '#fef3c7', color: '#92400e', label: 'En attente' },
-    'en-slot':    { bg: '#dbeafe', color: '#1e40af', label: 'En slot' },
-    'termine':    { bg: '#dcfce7', color: '#166534', label: 'Terminé' },
-  }[etat] || { bg: '#f3f4f6', color: '#374151', label: etat };
+// ── CelluleRoadMap ───────────────────────────────────────────────
+
+function CelluleRoadMap({ vehicule, stationId }: { vehicule: VehiculeInventaire; stationId: string }) {
+  const steps = vehicule.roadMap?.filter(s => s.stationId === stationId) ?? [];
+
+  if (steps.length === 0) {
+    return <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f1f5f9', margin: '0 auto', opacity: 0.4 }} />;
+  }
+
+  const allTermine = steps.every(s => s.statut === 'termine' || s.statut === 'saute');
+  const anyEnCours  = steps.some(s => s.statut === 'en-cours');
+  const anyEnAttente = steps.some(s => s.statut === 'en-attente');
+  const count = steps.length;
+
+  if (allTermine) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#dcfce7', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: 13, fontWeight: 700 }}>✓</div>
+        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 6, fontSize: 9, background: '#22c55e', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
+      </div>
+    );
+  }
+  if (anyEnCours) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 6, background: '#dbeafe', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🚛</div>
+        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 2, fontSize: 9, background: '#3b82f6', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
+      </div>
+    );
+  }
+  if (anyEnAttente) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+        <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#fef3c7', border: '2px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>⏳</div>
+        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 4, fontSize: 9, background: '#f59e0b', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
+      </div>
+    );
+  }
+  // planifié mais présent dans le road_map
   return (
-    <span style={{ fontSize: 11, background: cfg.bg, color: cfg.color, padding: '4px 10px', borderRadius: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+      <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#d1d5db', border: '1px solid #9ca3af' }} />
+      {count > 1 && <span style={{ position: 'absolute', top: -4, right: 4, fontSize: 9, background: '#9ca3af', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
+    </div>
+  );
+}
+
+// ── Badges utilitaires ───────────────────────────────────────────
+
+function BadgeCommercial({ etat, client }: { etat?: EtatCommercial; client?: string }) {
+  if (!etat || etat === 'non-vendu') return null;
+  const cfg = etat === 'vendu'
+    ? { bg: '#dcfce7', color: '#166534', label: client ? `✓ Vendu — ${client}` : '✓ Vendu' }
+    : etat === 'location'
+    ? { bg: '#ede9fe', color: '#6d28d9', label: client ? `🔑 Location — ${client}` : '🔑 Location' }
+    : { bg: '#fef3c7', color: '#92400e', label: client ? `🔒 Réservé — ${client}` : '🔒 Réservé' };
+  return (
+    <span style={{ fontSize: 10, background: cfg.bg, color: cfg.color, padding: '2px 7px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>
       {cfg.label}
     </span>
   );
 }
 
-function CelluleStation({ item, stationId, stations, prog }: {
-  item: Item; stationId: string; stations: StationConfig[];
-  prog?: { status: string; subTasks?: any[] };
-}) {
-  const statutEffectif = getStatutEffectif(item, stationId, stations);
-
-  if (statutEffectif === 'non-requis') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Non requis">
-        <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 11, fontWeight: 700 }}>✕</div>
-      </div>
-    );
-  }
-  if (statutEffectif === 'termine') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#dcfce7', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: 13, fontWeight: 700 }}>✓</div>
-      </div>
-    );
-  }
-  if (statutEffectif === 'saute') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }} title="Étape sautée">
-        <div style={{ fontSize: 18, lineHeight: 1 }}>⚠️</div>
-        <span style={{ fontSize: 9, color: '#f59e0b', fontWeight: 700 }}>SAUTÉ</span>
-      </div>
-    );
-  }
-  if (statutEffectif === 'en-cours') {
-    const subTasks = prog?.subTasks ?? [];
-    const done = subTasks.filter((t) => t.done).length;
-    const total = subTasks.length;
-    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 6, background: '#dbeafe', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🚛</div>
-        {total > 0 && (
-          <>
-            <div style={{ width: 38, height: 3, background: '#e5e7eb', borderRadius: 2 }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: '#3b82f6', borderRadius: 2 }} />
-            </div>
-            <span style={{ fontSize: 10, color: '#6b7280' }}>{done}/{total}</span>
-          </>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e5e7eb' }} />
-    </div>
-  );
-}
+// ── PanneauDetailVehicule ────────────────────────────────────────
 
 function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#1a1814', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#1a1814', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#111009', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 20 }}>📄</span>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{doc.nom}</span>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => { const l = document.createElement('a'); l.href = doc.base64; l.download = doc.nom; document.body.appendChild(l); l.click(); document.body.removeChild(l); }}
-              style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              ⬇ Télécharger
-            </button>
-            <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Fermer</button>
-          </div>
+          <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Fermer</button>
         </div>
         <iframe src={doc.base64} style={{ flex: 1, width: '100%', border: 'none', background: 'white' }} title={doc.nom} />
       </div>
@@ -412,48 +492,47 @@ function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onCl
   );
 }
 
-function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSupprimer }: {
-  item: Item; stations: StationConfig[];
-  onClose: () => void;
-  onStationStatusChange: (itemId: string, stationId: string, status: string) => void;
-  onSupprimer: () => void;
-}) {
-  const [popupStation, setPopupStation] = useState<string | null>(null);
-  const [confirmerSuppression, setConfirmerSuppression] = useState(false);
-  const [confirmerRetourInventaire, setConfirmerRetourInventaire] = useState(false);
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+const STATUT_CFG = {
+  planifie:    { label: 'Planifié',    bg: '#f1f5f9', color: '#64748b', icon: '⬜' },
+  'en-attente':{ label: 'En attente',  bg: '#fff7ed', color: '#c2410c', icon: '⏳' },
+  'en-cours':  { label: 'En cours',    bg: '#eff6ff', color: '#1d4ed8', icon: '🔵' },
+  termine:     { label: 'Terminé',     bg: '#f0fdf4', color: '#166534', icon: '✅' },
+  saute:       { label: 'Sauté',       bg: '#fef2f2', color: '#dc2626', icon: '⏭️' },
+} as const;
 
-  const { retirerVersAttente, supprimerItem, archiverItem, ajouterDocument, supprimerDocument, mettreAJourItem } = useGarage();
-  const { marquerDisponible, mettreAJourPhotoInventaire } = useInventaire();
+function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
+  vehicule: VehiculeInventaire;
+  item?: Item;
+  onClose: () => void;
+}) {
+  const {
+    mettreAJourRoadMap, mettreAJourPhotoInventaire,
+    marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
+    marquerDisponible,
+  } = useInventaire();
+  const { supprimerItem, ajouterDocument, supprimerDocument } = useGarage();
   const { profile: session } = useAuth();
   const { clients } = useClients();
-  const { items: tousLesItems } = useGarage();
-  const clientLie = item.clientId ? clients.find(c => c.id === item.clientId) : null;
-  const jobsClient = item.clientId ? tousLesItems.filter(i => i.clientId === item.clientId && i.id !== item.id) : [];
-  const typeColor = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
+
+  const [confirmerSuppr, setConfirmerSuppr] = useState(false);
+  const [confirmerRetour, setConfirmerRetour] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [popupStation, setPopupStation] = useState<string | null>(null);
+
+  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const isGestion = session?.role === 'gestion';
+  const montrerCommercial = v.type === 'eau' || v.type === 'detail';
+  const etatCommercial = v.etatCommercial ?? 'non-vendu';
+  const clientLie = v.clientId ? clients.find(c => c.id === v.clientId) : null;
+  const roadMap = (v.roadMap ?? []).sort((a, b) => a.ordre - b.ordre);
 
-  const toutesTerminees = toutesEtapesCompletees(item);
-  const montrerCommercial = item.type === 'eau' || item.type === 'detail';
-  const etatCommercial = item.etatCommercial ?? 'non-vendu';
-
-  const changerEtatCommercial = (val: EtatCommercial) => {
-    mettreAJourItem(item.id, {
-      etatCommercial: val,
-      clientAcheteur: val === 'non-vendu' ? undefined : item.clientAcheteur,
+  const handleStepStatut = async (stepId: string | undefined, stepIdx: number, newStatut: RoadMapEtape['statut']) => {
+    const updated = roadMap.map((s, i) => {
+      if (stepId ? s.id === stepId : i === stepIdx) return { ...s, statut: newStatut };
+      return s;
     });
-  };
-
-  const changerClientAcheteur = (nom: string) => {
-    mettreAJourItem(item.id, { clientAcheteur: nom || undefined });
-  };
-
-  const handleRetourInventaire = async () => {
-    if (item.inventaireId) await marquerDisponible(item.inventaireId);
-    await supprimerItem(item.id);
-    onSupprimer();
-    onClose();
+    await mettreAJourRoadMap(v.id, updated);
   };
 
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,69 +541,84 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
     if (fichier.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
     setUploadingPhoto(true);
     try {
-      if (item.photoUrl) await photoService.supprimerPhoto(item.photoUrl);
+      if (v.photoUrl) await photoService.supprimerPhoto(v.photoUrl);
       const url = await photoService.uploaderPhoto(fichier, 'items');
-      await mettreAJourItem(item.id, { photoUrl: url });
-      if (item.inventaireId) await mettreAJourPhotoInventaire(item.inventaireId, url);
-    } catch (err) {
-      console.error('Erreur upload photo:', err);
-      alert("Erreur lors de l'upload de la photo");
-    } finally {
-      setUploadingPhoto(false);
-    }
+      await mettreAJourPhotoInventaire(v.id, url);
+    } catch { alert("Erreur lors de l'upload de la photo"); }
+    finally { setUploadingPhoto(false); }
     e.target.value = '';
   };
 
   const handleSupprimerPhoto = async () => {
-    if (!item.photoUrl) return;
-    await photoService.supprimerPhoto(item.photoUrl);
-    await mettreAJourItem(item.id, { photoUrl: undefined });
-    if (item.inventaireId) await mettreAJourPhotoInventaire(item.inventaireId, null);
+    if (!v.photoUrl) return;
+    await photoService.supprimerPhoto(v.photoUrl);
+    await mettreAJourPhotoInventaire(v.id, null);
+  };
+
+  const handleRetourInventaire = async () => {
+    await marquerDisponible(v.id);
+    if (item) await supprimerItem(item.id);
+    onClose();
+  };
+
+  const changerEtatCommercial = async (val: EtatCommercial) => {
+    await mettreAJourCommercial(v.id, val,
+      v.dateLivraisonPlanifiee ?? null,
+      val === 'non-vendu' ? null : (v.clientAcheteur ?? null)
+    );
+  };
+
+  const changerClientAcheteur = async (nom: string) => {
+    await mettreAJourCommercial(v.id, etatCommercial as EtatCommercial, v.dateLivraisonPlanifiee ?? null, nom || null);
+  };
+
+  const changerDateLivraison = async (date: string) => {
+    await mettreAJourCommercial(v.id, etatCommercial as EtatCommercial, date || null, v.clientAcheteur ?? null);
   };
 
   return (
     <>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        position: 'fixed', right: 0, top: 0, width: 360, height: '100vh',
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'fixed', right: 0, top: 0, width: 380, height: '100vh',
         background: 'white', borderLeft: '1px solid #e5e7eb',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
       }}>
         <div style={{ padding: 20 }}>
           <button onClick={onClose}
             style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >✕</button>
 
-          {/* Header */}
+          {/* ── En-tête ─────────────────────────── */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: 'monospace', fontSize: 24, fontWeight: 700, color: typeColor, marginBottom: 6 }}>#{item.numero}</div>
-            <div style={{ fontSize: 15, color: '#374151', marginBottom: 12 }}>{item.label}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <StatusBadge etat={item.etat} />
-              {item.slotId && (
-                <span style={{ fontSize: 12, background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: 4, fontWeight: 600, fontFamily: 'monospace' }}>
+            <div style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 700, color: typeColor, marginBottom: 4 }}>
+              #{v.numero}
+            </div>
+            <div style={{ fontSize: 14, color: '#374151', marginBottom: 10 }}>
+              {v.marque} {v.modele} {v.annee ? `(${v.annee})` : ''}{v.variante ? ` — ${v.variante}` : ''}
+              {v.nomClient && <span> — {v.nomClient}</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <StatutBadgeSection section={getSectionVehicule(v, item)} />
+              {item?.slotId && (
+                <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 4, fontWeight: 600, fontFamily: 'monospace' }}>
                   Slot {item.slotId}
                 </span>
               )}
-              {item.urgence && (
-                <span style={{ fontSize: 12, background: '#fee2e2', color: '#991b1b', padding: '3px 10px', borderRadius: 4, fontWeight: 600 }}>URGENT</span>
+              {v.estPret && (
+                <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>✅ Prêt</span>
               )}
-              <BadgeCommercial etat={item.etatCommercial} client={item.clientAcheteur} />
-              {item.inventaireId && (
-                <span style={{ fontSize: 11, background: '#f0fdf4', color: '#166534', padding: '3px 10px', borderRadius: 4, fontWeight: 600, border: '1px solid #86efac' }}>
-                  📋 Depuis inventaire
-                </span>
-              )}
+              <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />
             </div>
           </div>
 
-          {/* Photo */}
+          {/* ── Photo ────────────────────────────── */}
           <div style={{ marginBottom: 20 }}>
-            {item.photoUrl ? (
+            {v.photoUrl ? (
               <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                <img src={item.photoUrl} alt={`Photo ${item.numero}`}
-                  style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }} />
+                <img src={v.photoUrl} alt={`Photo ${v.numero}`}
+                  style={{ width: '100%', height: 190, objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
                   <label style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 11, fontWeight: 600 }}>
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
@@ -544,343 +638,226 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
             ) : (
               <label style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: 8, padding: '24px', borderRadius: 10,
-                border: '2px dashed #d1d5db', background: '#f8fafc',
-                color: '#9ca3af', cursor: 'pointer', transition: 'all 0.15s',
+                gap: 8, padding: '20px', borderRadius: 10, border: '2px dashed #d1d5db',
+                background: '#f8fafc', color: '#9ca3af', cursor: 'pointer', transition: 'all 0.15s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = typeColor; (e.currentTarget as HTMLLabelElement).style.color = typeColor; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; (e.currentTarget as HTMLLabelElement).style.color = '#9ca3af'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = typeColor; (e.currentTarget as HTMLLabelElement).style.color = typeColor; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; (e.currentTarget as HTMLLabelElement).style.color = '#9ca3af'; }}
               >
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
-                <span style={{ fontSize: 32 }}>📷</span>
+                <span style={{ fontSize: 28 }}>📷</span>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
                   {uploadingPhoto ? '⏳ Upload en cours...' : 'Ajouter une photo'}
                 </span>
-                <span style={{ fontSize: 11 }}>JPG, PNG, WEBP · max 10 MB</span>
               </label>
             )}
           </div>
 
-          {/* Statut commercial */}
+          {/* ── Statut commercial ───────────────── */}
           {montrerCommercial && (
-            <div style={{ marginBottom: 20, padding: '14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Statut commercial
-              </div>
+            <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Statut commercial</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: etatCommercial !== 'non-vendu' ? 10 : 0 }}>
                 {([
-                  { val: 'non-vendu' as EtatCommercial, label: 'Non vendu', icon: '○',  color: '#6b7280' },
+                  { val: 'non-vendu' as EtatCommercial, label: 'Non vendu', icon: '○', color: '#6b7280' },
                   { val: 'reserve'   as EtatCommercial, label: 'Réservé',   icon: '🔒', color: '#f59e0b' },
-                  { val: 'vendu'     as EtatCommercial, label: 'Vendu',     icon: '✓',  color: '#22c55e' },
+                  { val: 'vendu'     as EtatCommercial, label: 'Vendu',     icon: '✓', color: '#22c55e' },
                   { val: 'location'  as EtatCommercial, label: 'Location',  icon: '🔑', color: '#7c3aed' },
                 ]).map(({ val, label, icon, color }) => (
                   <button key={val} onClick={() => changerEtatCommercial(val)}
                     style={{
-                      flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer',
+                      flex: 1, padding: '7px 3px', borderRadius: 8, cursor: 'pointer',
                       border: etatCommercial === val ? `2px solid ${color}` : '1px solid #e5e7eb',
                       background: etatCommercial === val ? `${color}15` : 'white',
                       color: etatCommercial === val ? color : '#9ca3af',
                       fontWeight: etatCommercial === val ? 700 : 400,
-                      fontSize: 11, transition: 'all 0.15s',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                      fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
                     }}
                   >
-                    <span style={{ fontSize: 16 }}>{icon}</span>
+                    <span style={{ fontSize: 14 }}>{icon}</span>
                     <span>{label}</span>
                   </button>
                 ))}
               </div>
               {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <input type="text" value={item.clientAcheteur ?? ''} onChange={e => changerClientAcheteur(e.target.value)}
+                  <input type="text" defaultValue={v.clientAcheteur ?? ''} onBlur={e => changerClientAcheteur(e.target.value)}
                     placeholder="Nom du client (optionnel)"
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-                  />
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
-                      📅 Date de livraison planifiée
-                    </label>
-                    <input
-                      type="date"
-                      value={item.dateLivraisonPlanifiee ?? ''}
-                      onChange={e => mettreAJourItem(item.id, { dateLivraisonPlanifiee: e.target.value || undefined })}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
-                    />
-                  </div>
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+                  <input type="date" defaultValue={v.dateLivraisonPlanifiee ?? ''} onBlur={e => changerDateLivraison(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               )}
             </div>
           )}
 
-          {/* Étapes opérationnelles */}
-          {item.stationsActives && item.stationsActives.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Étapes opérationnelles
+          {/* ── Road Map ─────────────────────────── */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              🗺 Plan de production
+            </div>
+            {roadMap.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '16px', borderRadius: 8, border: '1px dashed #e5e7eb' }}>
+                Aucune étape planifiée.<br />Configurez le Road Map dans l'onglet Inventaire.
               </div>
-              {item.stationsActives.map((stationId) => {
-                const prog = item.progression?.find(p => p.stationId === stationId);
-                const station = stations.find(s => s.id === stationId);
-                if (!prog || !station) return null;
-                const estNonRequis = prog.status === 'non-requis';
-                const statusColor = estNonRequis ? '#e5e7eb'
-                  : prog.status === 'termine' ? '#22c55e'
-                  : prog.status === 'en-cours' ? '#3b82f6'
-                  : '#e5e7eb';
+            ) : (
+              roadMap.map((step, idx) => {
+                const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
+                const cfg = STATUT_CFG[step.statut] ?? STATUT_CFG.planifie;
                 return (
-                  <div key={stationId} style={{
-                    padding: '12px', marginBottom: 8, borderRadius: 8,
-                    border: '1px solid #e5e7eb',
-                    background: estNonRequis ? '#f9fafb' : prog.status === 'en-cours' ? '#eff6ff' : 'white',
-                    borderLeft: `3px solid ${statusColor}`,
-                    opacity: estNonRequis ? 0.65 : 1, transition: 'all 0.15s',
+                  <div key={step.id ?? `${step.stationId}-${idx}`} style={{
+                    padding: '10px 12px', marginBottom: 6, borderRadius: 8,
+                    background: cfg.bg, border: `1px solid ${cfg.color}30`,
+                    borderLeft: `3px solid ${cfg.color}`,
                   }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: estNonRequis ? '#9ca3af' : '#111827', textDecoration: estNonRequis ? 'line-through' : 'none' }}>
-                      {station.label}
-                      {estNonRequis && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, fontStyle: 'italic', textDecoration: 'none' }}>— non requis</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', minWidth: 16 }}>{idx + 1}</span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#111827' }}>
+                        {station?.icon} {station?.label ?? step.stationId}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
                     </div>
+                    {step.description && (
+                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontStyle: 'italic' }}>{step.description}</div>
+                    )}
                     <div style={{ display: 'flex', gap: 3 }}>
-                      {([
-                        { val: 'non-commence' as const, label: '○ À faire',    activeBg: '#94a3b8' },
-                        { val: 'en-cours'     as const, label: '● En cours',   activeBg: '#3b82f6' },
-                        { val: 'termine'      as const, label: '✓ Terminé',    activeBg: '#22c55e' },
-                        { val: 'non-requis'   as const, label: '✕ Non requis', activeBg: '#6b7280' },
-                      ]).map(({ val, label, activeBg }) => {
-                        const isActive = prog.status === val;
+                      {(['planifie', 'en-attente', 'en-cours', 'termine', 'saute'] as const).map(statut => {
+                        const sc = STATUT_CFG[statut];
+                        const isActive = step.statut === statut;
                         return (
-                          <button key={val}
-                            onClick={() => {
-                              if (val === 'en-cours') {
-                                onStationStatusChange(item.id, stationId, 'en-cours');
-                                retirerVersAttente(item.id);
-                                setPopupStation(stationId);
-                              } else if (val === 'termine') {
-                                onStationStatusChange(item.id, stationId, 'termine');
-                                if (stationId === 'livraison') {
-                                  mettreAJourItem(item.id, {
-                                    dateLivraisonReelle: new Date().toISOString(),
-                                    dateArchive: new Date().toISOString(),
-                                  });
-                                  archiverItem(item.id);
-                                  onClose();
-                                } else {
-                                  retirerVersAttente(item.id);
-                                }
-                              } else {
-                                onStationStatusChange(item.id, stationId, val);
-                              }
-                            }}
+                          <button key={statut}
+                            onClick={() => handleStepStatut(step.id, idx, statut)}
                             style={{
-                              flex: 1, padding: '6px 2px', fontSize: 9,
-                              fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                              border: 'none',
-                              background: isActive ? activeBg : '#f1f5f9',
+                              flex: 1, padding: '4px 2px', fontSize: 8, fontWeight: 600,
+                              borderRadius: 4, cursor: 'pointer', border: 'none',
+                              background: isActive ? sc.color : '#f1f5f9',
                               color: isActive ? 'white' : '#9ca3af',
-                              transition: 'all 0.15s', whiteSpace: 'nowrap',
+                              transition: 'all 0.1s', whiteSpace: 'nowrap',
                             }}
                           >
-                            {label}
+                            {sc.icon} {statut === 'en-attente' ? 'Attente' : statut === 'en-cours' ? 'En cours' : statut === 'planifie' ? 'Planifié' : statut === 'termine' ? 'Terminé' : 'Sauté'}
                           </button>
                         );
                       })}
                     </div>
-                    {stationId === 'livraison' && (
-                      <div style={{ marginTop: 8 }}>
-                        <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
-                          📅 Date de livraison planifiée
-                        </label>
-                        <input
-                          type="date"
-                          value={item.dateLivraisonPlanifiee ?? ''}
-                          onChange={e => mettreAJourItem(item.id, { dateLivraisonPlanifiee: e.target.value || undefined })}
-                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
-                        />
-                      </div>
-                    )}
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
 
-          {/* Informations */}
+          {/* ── Informations ─────────────────────── */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Informations</label>
-            <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.8 }}>
-              {item.variante    && <div><span style={{ fontWeight: 600 }}>Variante:</span> {item.variante}</div>}
-              {item.marque      && <div><span style={{ fontWeight: 600 }}>Marque:</span> {item.marque}</div>}
-              {item.modele      && <div><span style={{ fontWeight: 600 }}>Modèle:</span> {item.modele}</div>}
-              {item.annee       && <div><span style={{ fontWeight: 600 }}>Année:</span> {item.annee}</div>}
-              {item.nomClient   && <div><span style={{ fontWeight: 600 }}>Client:</span> {item.nomClient}</div>}
-              {item.telephone   && <div><span style={{ fontWeight: 600 }}>Téléphone:</span> {item.telephone}</div>}
-              {item.stationActuelle && <div><span style={{ fontWeight: 600 }}>Station actuelle:</span> {item.stationActuelle}</div>}
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Informations</div>
+            <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.9 }}>
+              {v.variante          && <div><span style={{ fontWeight: 600 }}>Variante:</span> {v.variante}</div>}
+              {v.marque            && <div><span style={{ fontWeight: 600 }}>Marque:</span> {v.marque}</div>}
+              {v.modele            && <div><span style={{ fontWeight: 600 }}>Modèle:</span> {v.modele}</div>}
+              {v.annee             && <div><span style={{ fontWeight: 600 }}>Année:</span> {v.annee}</div>}
+              {v.nomClient         && <div><span style={{ fontWeight: 600 }}>Client:</span> {v.nomClient}</div>}
+              {v.telephone         && <div><span style={{ fontWeight: 600 }}>Téléphone:</span> {v.telephone}</div>}
+              {v.vehicule          && <div><span style={{ fontWeight: 600 }}>Véhicule:</span> {v.vehicule}</div>}
+              {v.descriptionTravail && <div><span style={{ fontWeight: 600 }}>Description:</span> {v.descriptionTravail}</div>}
             </div>
           </div>
 
-          {/* Fiche client */}
+          {/* ── Fiche client ─────────────────────── */}
           {clientLie && (
             <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                👤 Fiche client
-              </div>
-              <div style={{ fontSize: 13, color: '#374151', lineHeight: 2 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{clientLie.nom}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Fiche client</div>
+              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{clientLie.nom}</div>
                 {clientLie.telephone && <div>📞 {clientLie.telephone}</div>}
                 {clientLie.email     && <div>✉️ {clientLie.email}</div>}
                 {clientLie.adresse   && <div>📍 {clientLie.adresse}</div>}
               </div>
-              {jobsClient.length > 0 && (
-                <div style={{ marginTop: 12, borderTop: '1px solid #bae6fd', paddingTop: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 8 }}>
-                    Historique — {jobsClient.length} job{jobsClient.length > 1 ? 's' : ''} antérieur{jobsClient.length > 1 ? 's' : ''}
+            </div>
+          )}
+
+          {/* ── Documents (si prod_item lié) ─────── */}
+          {item && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>📎 Documents</span>
+                <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{item.documents?.length ?? 0}/3</span>
+              </div>
+              {(item.documents ?? []).map(doc => (
+                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid #e5e7eb', background: '#f8fafc' }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>📄</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
                   </div>
-                  {jobsClient.map(j => {
-                    const etatCfg = {
-                      'en-attente': { bg: '#fef3c7', color: '#92400e', label: 'En attente' },
-                      'en-slot':    { bg: '#dbeafe', color: '#1e40af', label: 'En slot' },
-                      'termine':    { bg: '#dcfce7', color: '#166534', label: 'Terminé' },
-                    }[j.etat] || { bg: '#f3f4f6', color: '#374151', label: j.etat };
-                    return (
-                      <div key={j.id} style={{ padding: '8px 10px', borderRadius: 6, marginBottom: 6, background: 'white', border: '1px solid #e0f2fe', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            #{j.numero} — {j.descriptionTravail ?? j.label}
-                          </div>
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>
-                            {new Date(j.dateCreation).toLocaleDateString('fr-CA')}
-                            {j.vehicule && ` · ${j.vehicule}`}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 10, background: etatCfg.bg, color: etatCfg.color, padding: '2px 8px', borderRadius: 10, fontWeight: 700, flexShrink: 0 }}>
-                          {etatCfg.label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  <button onClick={() => setPdfOuvert({ nom: doc.nom, base64: doc.base64 })}
+                    style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                    👁 Voir
+                  </button>
+                  <button onClick={() => supprimerDocument(item.id, doc.id)}
+                    style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                    🗑
+                  </button>
                 </div>
-              )}
-              {jobsClient.length === 0 && (
-                <div style={{ marginTop: 10, fontSize: 11, color: '#0369a1', fontStyle: 'italic' }}>
-                  Premier job pour ce client
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Notes */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Notes</label>
-            <textarea rows={4} placeholder="Notes sur ce camion..." defaultValue={item.notes || ''}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, resize: 'vertical', fontFamily: 'system-ui, -apple-system, sans-serif' }} />
-          </div>
-
-          {/* Documents */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>📎 Documents</span>
-              <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{item.documents?.length ?? 0}/3</span>
-            </div>
-            {(item.documents ?? []).map(doc => (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid #e5e7eb', background: '#f8fafc' }}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>📄</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille} · {new Date(doc.dateUpload).toLocaleDateString('fr-CA')}</div>
-                </div>
-                <button onClick={() => setPdfOuvert({ nom: doc.nom, base64: doc.base64 })}
-                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                  👁 Voir
-                </button>
-                <button onClick={() => supprimerDocument(item.id, doc.id)}
-                  style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                  🗑
-                </button>
-              </div>
-            ))}
-            {(item.documents?.length ?? 0) < 3 && (
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1.5px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#3b82f6'; (e.currentTarget as HTMLLabelElement).style.color = '#3b82f6'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; (e.currentTarget as HTMLLabelElement).style.color = '#6b7280'; }}
-              >
-                <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    if (file.size > 10 * 1024 * 1024) { alert('Le fichier ne doit pas dépasser 10 MB'); return; }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const base64 = reader.result as string;
-                      const tailleKB = Math.round(file.size / 1024);
-                      const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
-                      const nouveauDoc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
-                      ajouterDocument(item.id, nouveauDoc);
-                    };
-                    reader.readAsDataURL(file);
-                    e.target.value = '';
-                  }}
-                />
-                + Ajouter un document PDF
-              </label>
-            )}
-            {(item.documents?.length ?? 0) >= 3 && (
-              <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: '8px' }}>Maximum 3 documents atteint</div>
-            )}
-          </div>
-{/* Marquer comme prêt */}
-{!toutesTerminees && (
-  <div style={{ marginBottom: 16 }}>
-    <button
-      onClick={() => {
-        const nouvelleProgression = item.progression.map(p => ({
-          ...p,
-          status: 'termine' as const,
-        }));
-        mettreAJourItem(item.id, { progression: nouvelleProgression });
-      }}
-      style={{
-        width: '100%', padding: '12px', borderRadius: 8, border: 'none',
-        background: '#22c55e', color: 'white', fontWeight: 700,
-        fontSize: 14, cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-      }}
-    >
-      ✅ Marquer comme prêt
-    </button>
-    <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center', marginTop: 6 }}>
-      Coche toutes les étapes comme terminées
-    </div>
-  </div>
-)}
-          {/* Livrer & Archiver */}
-          {toutesTerminees && (
-            <div style={{ marginBottom: 16 }}>
-              <button onClick={() => { archiverItem(item.id); onClose(); }}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                🏁 Livrer & Archiver ce job
-              </button>
-              <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center', marginTop: 6 }}>
-                Toutes les étapes sont complétées ou non requises
-              </div>
-            </div>
-          )}
-
-          {/* Retour inventaire */}
-          {item.inventaireId && item.etat !== 'termine' && (
-            <div style={{ marginBottom: 16 }}>
-              {!confirmerRetourInventaire ? (
-                <button onClick={() => setConfirmerRetourInventaire(true)}
-                  style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              ))}
+              {(item.documents?.length ?? 0) < 3 && (
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1.5px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#3b82f6'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; }}
                 >
+                  <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const base64 = reader.result as string;
+                        const tailleKB = Math.round(file.size / 1024);
+                        const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
+                        const doc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
+                        ajouterDocument(item.id, doc);
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  + Ajouter un document PDF
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* ── Marquer prêt ─────────────────────── */}
+          {!v.estPret && v.statut !== 'archive' && (
+            <div style={{ marginBottom: 14 }}>
+              <button onClick={() => marquerPret(v.id, true)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ✅ Marquer comme prêt
+              </button>
+            </div>
+          )}
+          {v.estPret && (
+            <div style={{ marginBottom: 14 }}>
+              <button onClick={() => marquerPret(v.id, false)}
+                style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                ↩ Retirer le statut Prêt
+              </button>
+            </div>
+          )}
+
+          {/* ── Retour inventaire ────────────────── */}
+          {item && v.statut !== 'archive' && (
+            <div style={{ marginBottom: 14 }}>
+              {!confirmerRetour ? (
+                <button onClick={() => setConfirmerRetour(true)}
+                  style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                   ↩ Retourner à l'inventaire
                 </button>
               ) : (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>Retourner ce véhicule à l'inventaire?</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Le job sera supprimé et le véhicule redeviendra disponible dans l'inventaire.</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Le job de production sera supprimé et le véhicule redeviendra disponible.</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setConfirmerRetourInventaire(false)}
+                    <button onClick={() => setConfirmerRetour(false)}
                       style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
                       Annuler
                     </button>
@@ -894,31 +871,36 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
             </div>
           )}
 
-          {/* Supprimer */}
+          {/* ── Archiver ─────────────────────────── */}
+          {v.statut !== 'archive' && isGestion && (
+            <div style={{ marginBottom: 14 }}>
+              <button onClick={() => { archiverVehicule(v.id); onClose(); }}
+                style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                🏁 Archiver ce véhicule
+              </button>
+            </div>
+          )}
+
+          {/* ── Supprimer ────────────────────────── */}
           {isGestion && (
-            <div style={{ borderTop: '1px solid #fee2e2', paddingTop: 16 }}>
-              {!confirmerSuppression ? (
-                <button onClick={() => setConfirmerSuppression(true)}
-                  style={{ width: '100%', padding: '10px', borderRadius: 7, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#fee2e2'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  🗑 Supprimer ce camion
+            <div style={{ borderTop: '1px solid #fee2e2', paddingTop: 14 }}>
+              {!confirmerSuppr ? (
+                <button onClick={() => setConfirmerSuppr(true)}
+                  style={{ width: '100%', padding: '10px', borderRadius: 7, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
+                  🗑 Supprimer ce véhicule
                 </button>
               ) : (
                 <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 8, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>⚠️ Confirmer la suppression</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>
-                    <strong>#{item.numero} — {item.label}</strong><br />Cette action est irréversible.
-                  </div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>#{v.numero} — Action irréversible.</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setConfirmerSuppression(false)}
+                    <button onClick={() => setConfirmerSuppr(false)}
                       style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
                       Annuler
                     </button>
-                    <button onClick={() => { supprimerItem(item.id); onSupprimer(); onClose(); }}
+                    <button onClick={() => { supprimerVehicule(v.id); if (item) supprimerItem(item.id); onClose(); }}
                       style={{ flex: 1, padding: '8px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
-                      🗑 Supprimer définitivement
+                      🗑 Supprimer
                     </button>
                   </div>
                 </div>
@@ -927,7 +909,7 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
           )}
         </div>
 
-        {popupStation && (
+        {popupStation && item && (
           <PopupAssignationSlot
             camion={item}
             prochaineStation={popupStation}

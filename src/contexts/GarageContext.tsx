@@ -23,6 +23,17 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const rechargerItems = async (): Promise<Item[]> => {
+    try {
+      const data = await itemsService.getAll();
+      setItems(data);
+      return data;
+    } catch (err) {
+      console.error('[GarageContext] rechargerItems threw:', err);
+      return [];
+    }
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { setLoading(false); return; }
@@ -320,7 +331,7 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
       retirerVersAttente, terminerEtAvancer, terminerItem,
       updateStationStatus, updateStationsActives,
       ajouterDocument, supprimerDocument,
-      marquerPret,
+      marquerPret, rechargerItems,
     }}>
       {children}
     </GarageContext.Provider>

@@ -421,13 +421,13 @@ export function VueInventaire() {
               <tbody>
                 {filtres.map(v => {
                   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+                  const typeBg = v.type === 'eau' ? '#fff7ed' : v.type === 'client' ? '#eff6ff' : '#f0fdf4';
                   const isSelected = selectedId === v.id;
-                  const isEnProd = v.statut === 'en-production';
                   return (
                     <tr key={v.id} onClick={() => setSelectedId(isSelected ? null : v.id)}
-                      style={{ borderBottom: '1px solid #f1f5f9', background: isSelected ? '#eff6ff' : isEnProd ? '#fafafa' : 'white', borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent', cursor: 'pointer', transition: 'background 0.1s', opacity: isEnProd ? 0.9 : 1 }}
-                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
-                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isEnProd ? '#fafafa' : 'white'; }}
+                      style={{ borderBottom: '1px solid #e5e7eb', background: isSelected ? `${typeColor}22` : typeBg, borderLeft: isSelected ? `3px solid ${typeColor}` : '3px solid transparent', cursor: 'pointer', transition: 'background 0.1s' }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = `${typeColor}15`; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = typeBg; }}
                     >
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

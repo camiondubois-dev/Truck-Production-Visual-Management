@@ -237,94 +237,129 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
     );
   }
 
-  // ── Mode desktop: liste avec flèches ──────────────────────
+  // ── Mode desktop: même grille toggle que compact + liste pour statuts/réordre ──
   return (
     <div>
-      {steps.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af', fontSize: fs }}>
-          Aucune étape planifiée. Ajoutez des étapes ci-dessous.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-          {steps.map((step, idx) => {
-            const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
-            const cfg = STATUT_CONFIG[step.statut] ?? STATUT_CONFIG.planifie;
-            return (
-              <div key={step.id ?? `${step.stationId}-${idx}`} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 10px', borderRadius: 10,
-                background: cfg.bg, border: `1px solid ${cfg.color}30`,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', minWidth: 16 }}>{idx+1}</span>
-                <span style={{ fontSize: fs }}>{station?.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: fs, fontWeight: 600, color: '#111827' }}>
-                    {station?.label ?? step.stationId}
-                  </div>
-                  {step.description && (
-                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>{step.description}</div>
-                  )}
-                </div>
-                <select
-                  value={step.statut}
-                  onChange={e => changeStatut(idx, e.target.value as RoadMapEtape['statut'])}
-                  onClick={e => e.stopPropagation()}
-                  style={{
-                    fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '3px 6px',
-                    border: `1px solid ${cfg.color}60`, background: cfg.bg, color: cfg.color,
-                    cursor: 'pointer', outline: 'none',
-                  }}
-                >
-                  <option value="planifie">⬜ Planifié</option>
-                  <option value="en-attente">⏳ En attente</option>
-                  <option value="en-cours">🔵 En cours</option>
-                  <option value="termine">✅ Terminé</option>
-                  <option value="saute">⏭️ Sauté</option>
-                </select>
-                <button onClick={() => moveUp(idx)} disabled={idx===0}
-                  style={{ background:'none', border:'none', cursor: idx===0 ? 'default':'pointer', fontSize:14, color: idx===0 ? '#e5e7eb' : '#6b7280', padding:'2px' }}>↑</button>
-                <button onClick={() => moveDown(idx)} disabled={idx===steps.length-1}
-                  style={{ background:'none', border:'none', cursor: idx===steps.length-1 ? 'default':'pointer', fontSize:14, color: idx===steps.length-1 ? '#e5e7eb' : '#6b7280', padding:'2px' }}>↓</button>
-                <button onClick={() => removeStep(idx)}
-                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, color:'#d1d5db', padding:'2px' }}>✕</button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Grille toggle : cliquer = ajouter numéroté, re-cliquer = retirer */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 8, marginBottom: 14,
+      }}>
+        {ROAD_MAP_STATIONS.map(station => {
+          // Compte le nb de fois que cette station apparaît
+          const count = steps.filter(s => s.stationId === station.id).length;
+          const isSelected = count > 0;
+          const firstStepIdx = steps.findIndex(s => s.stationId === station.id);
+          const cfg = isSelected ? (STATUT_CONFIG[steps[firstStepIdx]?.statut] ?? STATUT_CONFIG.planifie) : null;
 
-      {showAdd ? (
-        <div style={{ padding: '10px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e5e7eb', marginBottom: 10 }}>
-          <select value={newStation} onChange={e => setNewStation(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: fs, marginBottom: 8, outline: 'none' }}>
-            <option value="">— Choisir une étape —</option>
-            {availableStations.map(s => (
-              <option key={s.id} value={s.id}>{s.icon} {s.label}</option>
-            ))}
-          </select>
-          {newStation && (ROAD_MAP_STATIONS.find(s => s.id === newStation) as any)?.hasDescription && (
-            <input type="text" value={newDescription} onChange={e => setNewDescription(e.target.value)}
-              placeholder="Ex: Peinture chez XYZ Inc."
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: fs, marginBottom: 8, outline: 'none', boxSizing: 'border-box' }} />
-          )}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={addStep} disabled={!newStation}
-              style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: newStation ? '#22c55e' : '#e5e7eb', color: newStation ? 'white' : '#9ca3af', fontWeight: 700, fontSize: fs, cursor: newStation ? 'pointer' : 'not-allowed' }}>
-              + Ajouter
+          return (
+            <button
+              key={station.id}
+              onClick={() => toggleStation(station.id)}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `2px solid ${isSelected ? station.color : '#e2e8f0'}`,
+                background: isSelected ? `${station.color}12` : '#f8fafc',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+                transition: 'all 0.15s',
+                textAlign: 'left',
+                position: 'relative',
+              }}
+            >
+              {isSelected ? (
+                <span style={{
+                  width: 24, height: 24, borderRadius: 6,
+                  background: station.color, color: 'white',
+                  fontSize: 12, fontWeight: 800, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {count > 1 ? count : firstStepIdx + 1}
+                </span>
+              ) : (
+                <span style={{
+                  width: 24, height: 24, borderRadius: 6,
+                  border: '2px dashed #cbd5e1',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, fontSize: 15, color: '#94a3b8',
+                }}>+</span>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fs, fontWeight: isSelected ? 700 : 500, color: isSelected ? station.color : '#64748b', lineHeight: 1.2 }}>
+                  {station.icon} {station.label}
+                </div>
+                {cfg && (
+                  <div style={{ fontSize: 10, color: cfg.color, marginTop: 2 }}>
+                    {cfg.dot} {cfg.label}{count > 1 ? ` (×${count})` : ''}
+                  </div>
+                )}
+              </div>
             </button>
-            <button onClick={() => { setShowAdd(false); setNewStation(''); setNewDescription(''); }}
-              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: fs, cursor: 'pointer' }}>
-              Annuler
-            </button>
+          );
+        })}
+      </div>
+
+      {/* Liste des étapes sélectionnées pour ajuster statut, ordre, description */}
+      {steps.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+            Étapes planifiées
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {steps.map((step, idx) => {
+              const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
+              const cfg = STATUT_CONFIG[step.statut] ?? STATUT_CONFIG.planifie;
+              return (
+                <div key={step.id ?? `${step.stationId}-${idx}`} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 10px', borderRadius: 8,
+                  background: cfg.bg, border: `1px solid ${cfg.color}25`,
+                }}>
+                  <span style={{
+                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                    background: (station as any)?.color ?? '#64748b',
+                    color: 'white', fontSize: 10, fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{idx + 1}</span>
+                  <span style={{ fontSize: fs, flex: 1 }}>{station?.icon} {station?.label}</span>
+                  {(station as any)?.hasDescription && (
+                    <input
+                      type="text"
+                      value={step.description ?? ''}
+                      onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, description: e.target.value } : s))}
+                      placeholder="Description (ex: XYZ Inc.)"
+                      style={{ fontSize: 11, padding: '3px 6px', borderRadius: 5, border: '1px solid #d1d5db', width: 130, outline: 'none' }}
+                    />
+                  )}
+                  <select
+                    value={step.statut}
+                    onChange={e => changeStatut(idx, e.target.value as RoadMapEtape['statut'])}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '3px 6px',
+                      border: `1px solid ${cfg.color}60`, background: cfg.bg, color: cfg.color,
+                      cursor: 'pointer', outline: 'none',
+                    }}
+                  >
+                    <option value="planifie">⬜ Planifié</option>
+                    <option value="en-attente">⏳ En attente</option>
+                    <option value="en-cours">🔵 En cours</option>
+                    <option value="termine">✅ Terminé</option>
+                    <option value="saute">⏭️ Sauté</option>
+                  </select>
+                  <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 13, color: idx === 0 ? '#e5e7eb' : '#6b7280', padding: '2px' }}>↑</button>
+                  <button onClick={() => moveDown(idx)} disabled={idx === steps.length - 1}
+                    style={{ background: 'none', border: 'none', cursor: idx === steps.length - 1 ? 'default' : 'pointer', fontSize: 13, color: idx === steps.length - 1 ? '#e5e7eb' : '#6b7280', padding: '2px' }}>↓</button>
+                  <button onClick={() => removeStep(idx)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '2px' }}>✕</button>
+                </div>
+              );
+            })}
           </div>
         </div>
-      ) : (
-        availableStations.length > 0 && (
-          <button onClick={() => setShowAdd(true)}
-            style={{ width: '100%', padding: '10px', borderRadius: 10, border: '2px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: fs, cursor: 'pointer', marginBottom: 10 }}>
-            + Ajouter une étape
-          </button>
-        )
       )}
 
       <button onClick={() => handleSave(steps)} disabled={saving}
