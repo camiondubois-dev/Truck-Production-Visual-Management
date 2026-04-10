@@ -46,28 +46,21 @@ export interface Item {
   inventaireId?: string;
   clientId?: string;
   photoUrl?: string;
-  // Statut commercial (eau & détail)
   etatCommercial?: EtatCommercial;
   clientAcheteur?: string;
-  // Réservoir
   aUnReservoir?: boolean;
   reservoirId?: string;
-  // Livraison
   dateLivraisonPlanifiee?: string;
   dateLivraisonReelle?: string;
-  // Camion eau
   variante?: 'Neuf' | 'Usagé';
   annee?: number;
   marque?: string;
   modele?: string;
-  // Client externe
   nomClient?: string;
   telephone?: string;
   descriptionTravail?: string;
   vehicule?: string;
-  // Camion détail
   descriptionTravaux?: string;
-  // UNIFIÉ — même système pour les 3 types
   progression: StationProgress[];
   stationsActives: string[];
   documents?: Document[];
@@ -93,4 +86,5 @@ export interface GarageContextType {
   updateStationsActives: (itemId: string, stationsActives: string[]) => void;
   ajouterDocument: (itemId: string, doc: Document) => void;
   supprimerDocument: (itemId: string, docId: string) => void;
+  marquerPret: (inventaireId: string) => Promise<void>;
 }
