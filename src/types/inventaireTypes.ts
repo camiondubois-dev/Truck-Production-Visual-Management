@@ -31,4 +31,5 @@ export interface VehiculeInventaire {
   etapesFaites?: EtapeFaite[];
   aUnReservoir?: boolean;
   reservoirId?: string;
+  estPret?: boolean;
 }
