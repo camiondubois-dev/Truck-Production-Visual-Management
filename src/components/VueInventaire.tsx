@@ -830,7 +830,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
   const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
   const [savingReservoir, setSavingReservoir] = useState(false);
-  const { mettreAJourItem, items } = useGarage();
+  const { marquerPret } = useGarage();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeLabel = v.type === 'eau' ? 'Camion à eau' : v.type === 'client' ? 'Client externe' : 'Camion détail';
 
