@@ -823,7 +823,31 @@ function PanneauDetail({ item, stations, onClose, onStationStatusChange, onSuppr
               <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: '8px' }}>Maximum 3 documents atteint</div>
             )}
           </div>
-
+{/* Marquer comme prêt */}
+{!toutesTerminees && (
+  <div style={{ marginBottom: 16 }}>
+    <button
+      onClick={() => {
+        const nouvelleProgression = item.progression.map(p => ({
+          ...p,
+          status: 'termine' as const,
+        }));
+        mettreAJourItem(item.id, { progression: nouvelleProgression });
+      }}
+      style={{
+        width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+        background: '#22c55e', color: 'white', fontWeight: 700,
+        fontSize: 14, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      }}
+    >
+      ✅ Marquer comme prêt
+    </button>
+    <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center', marginTop: 6 }}>
+      Coche toutes les étapes comme terminées
+    </div>
+  </div>
+)}
           {/* Livrer & Archiver */}
           {toutesTerminees && (
             <div style={{ marginBottom: 16 }}>
