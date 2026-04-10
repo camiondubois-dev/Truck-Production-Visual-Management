@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
 
-function fromDB(row: any): VehiculeInventaire {
+export function fromDB(row: any): VehiculeInventaire {
   return {
     id: row.id,
     statut: row.statut,
@@ -26,6 +26,8 @@ function fromDB(row: any): VehiculeInventaire {
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
     estPret: row.est_pret ?? false,
+    etatCommercial: row.etat_commercial ?? 'non-vendu',
+    dateLivraisonPlanifiee: row.date_livraison_planifiee ?? undefined,
   };
 }
 
@@ -54,6 +56,8 @@ function toDB(v: VehiculeInventaire): any {
     a_un_reservoir: v.aUnReservoir ?? false,
     reservoir_id: v.reservoirId ?? null,
     est_pret: v.estPret ?? false,
+    etat_commercial: v.etatCommercial ?? 'non-vendu',
+    date_livraison_planifiee: v.dateLivraisonPlanifiee ?? null,
   };
 }
 
@@ -62,6 +66,7 @@ export const inventaireService = {
     const { data, error } = await supabase
       .from('prod_inventaire')
       .select('*')
+      .neq('statut', 'archive')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(fromDB);
@@ -150,6 +155,28 @@ export const inventaireService = {
     const { error } = await supabase
       .from('prod_inventaire')
       .update({ est_pret: estPret, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async mettreAJourCommercial(id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ etat_commercial: etatCommercial, date_livraison_planifiee: dateLivraisonPlanifiee, client_acheteur: clientAcheteur, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    // Sync vers prod_items si le véhicule est en production
+    await supabase
+      .from('prod_items')
+      .update({ etat_commercial: etatCommercial, date_livraison_planifiee: dateLivraisonPlanifiee, client_acheteur: clientAcheteur, updated_at: new Date().toISOString() })
+      .eq('inventaire_id', id)
+      .neq('etat', 'termine');
+  },
+
+  async archiver(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ statut: 'archive', est_pret: false, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },

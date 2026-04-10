@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
+import { fromDB as inventaireFromDB } from '../services/inventaireService';
 import { supabase } from '../lib/supabase';
 import { reservoirService } from '../services/reservoirService';
 import { useInventaire } from '../contexts/InventaireContext';
@@ -271,7 +272,7 @@ export function VueInventaire() {
     const timer = setTimeout(async () => {
       if (!recherche.trim()) { setSearchResults(null); return; }
       const results = await searchTable('prod_inventaire', recherche, INVENTAIRE_COLS);
-      setSearchResults(results as VehiculeInventaire[]);
+      setSearchResults(results.map(inventaireFromDB));
     }, 300);
     return () => clearTimeout(timer);
   }, [recherche]);

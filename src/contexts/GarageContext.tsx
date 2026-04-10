@@ -42,6 +42,22 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const mettreAJourItem = async (itemId: string, patch: Partial<Item>) => {
     await itemsService.mettreAJour(itemId, patch);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+    // Sync réservoir et statut commercial vers prod_inventaire si l'item est lié
+    const needsSync = patch.aUnReservoir !== undefined || patch.reservoirId !== undefined
+      || patch.etatCommercial !== undefined || patch.dateLivraisonPlanifiee !== undefined
+      || patch.clientAcheteur !== undefined;
+    if (needsSync) {
+      const item = items.find(i => i.id === itemId);
+      if (item?.inventaireId) {
+        const syncPatch: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (patch.aUnReservoir !== undefined)          syncPatch.a_un_reservoir = patch.aUnReservoir;
+        if ('reservoirId' in patch)                    syncPatch.reservoir_id = patch.reservoirId ?? null;
+        if (patch.etatCommercial !== undefined)        syncPatch.etat_commercial = patch.etatCommercial ?? null;
+        if ('dateLivraisonPlanifiee' in patch)         syncPatch.date_livraison_planifiee = patch.dateLivraisonPlanifiee ?? null;
+        if ('clientAcheteur' in patch)                 syncPatch.client_acheteur = patch.clientAcheteur ?? null;
+        await supabase.from('prod_inventaire').update(syncPatch).eq('id', item.inventaireId);
+      }
+    }
   };
 
   const marquerPret = async (inventaireId: string) => {
