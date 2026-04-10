@@ -11,7 +11,8 @@ const ETAPES_IDS = [
   'soudure-specialisee', 'peinture',
 ];
 
-type FiltreType = 'tous' | 'eau' | 'detail';
+type FiltreType   = 'tous' | 'eau' | 'detail';
+type FiltreStatut = 'tous' | 'disponibles' | 'prets' | 'vendus';
 type Ecran = 'pin' | 'login' | 'ok';
 
 // ─── PIN ────────────────────────────────────────────────────────────────────
@@ -310,10 +311,12 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
 // ─── Vue principale ──────────────────────────────────────────────────────────
 
 function VueTerrainMain() {
-  const [camions, setCamions]         = useState<VehiculeInventaire[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [filtreType, setFiltreType]   = useState<FiltreType>('tous');
-  const [selectedId, setSelectedId]   = useState<string | null>(null);
+  const [camions, setCamions]           = useState<VehiculeInventaire[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [filtreType, setFiltreType]     = useState<FiltreType>('tous');
+  const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');
+  const [recherche, setRecherche]       = useState('');
+  const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [showCreation, setShowCreation] = useState(false);
 
   const charger = async () => {
@@ -329,10 +332,21 @@ function VueTerrainMain() {
 
   useEffect(() => { charger(); }, []);
 
+  const q = recherche.trim().toLowerCase();
+
   const filtrés = camions
-    .filter(c => filtreType === 'tous' || c.type === filtreType)
+    .filter(c => {
+      if (filtreType !== 'tous' && c.type !== filtreType) return false;
+      if (filtreStatut === 'disponibles' && c.estPret) return false;
+      if (filtreStatut === 'prets' && !c.estPret) return false;
+      if (filtreStatut === 'vendus' && c.etatCommercial !== 'vendu' && c.etatCommercial !== 'reserve') return false;
+      if (q) {
+        const haystack = [c.numero, c.marque, c.modele, c.annee?.toString(), c.variante].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    })
     .sort((a, b) => {
-      // Non-prêts en premier
       if (a.estPret && !b.estPret) return 1;
       if (!a.estPret && b.estPret) return -1;
       return a.numero.localeCompare(b.numero);
@@ -359,7 +373,7 @@ function VueTerrainMain() {
       <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '16px 16px 0', position: 'sticky', top: 0, zIndex: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>🚛</span>
+            <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="" style={{ height: 28 }} />
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#111827' }}>Vue Terrain</div>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{nbPrets} / {camions.length} prêts</div>
@@ -371,17 +385,45 @@ function VueTerrainMain() {
           </button>
         </div>
 
-        {/* Filtres */}
-        <div style={{ display: 'flex', gap: 6, paddingBottom: 12 }}>
-          {([['tous', 'Tous'], ['eau', '💧 Eau'], ['detail', '🏷️ Détail']] as [FiltreType, string][]).map(([id, label]) => (
-            <button key={id} onClick={() => setFiltreType(id)}
-              style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: filtreType === id ? 700 : 400, border: filtreType === id ? 'none' : '1px solid #e5e7eb', background: filtreType === id ? '#111827' : 'white', color: filtreType === id ? 'white' : '#6b7280', cursor: 'pointer' }}>
-              {label}
-              <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.7 }}>
-                {camions.filter(c => id === 'tous' || c.type === id).length}
-              </span>
+        {/* Barre de recherche */}
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: '#9ca3af' }}>🔍</span>
+          <input
+            type="search" value={recherche} onChange={e => setRecherche(e.target.value)}
+            placeholder="Numéro, marque, modèle..."
+            style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 15, outline: 'none', boxSizing: 'border-box', background: '#f8fafc' }}
+          />
+          {recherche && (
+            <button onClick={() => setRecherche('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: 16, color: '#9ca3af', cursor: 'pointer', padding: 4 }}>✕</button>
+          )}
+        </div>
+
+        {/* Filtre statut */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
+          {([
+            ['tous',        'Tous',         camions.length],
+            ['disponibles', 'Disponibles',  camions.filter(c => !c.estPret).length],
+            ['prets',       '✅ Prêts',      camions.filter(c => c.estPret).length],
+            ['vendus',      '✓ Vendus',      camions.filter(c => c.etatCommercial === 'vendu' || c.etatCommercial === 'reserve').length],
+          ] as [FiltreStatut, string, number][]).map(([id, label, count]) => (
+            <button key={id} onClick={() => setFiltreStatut(id)}
+              style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: filtreStatut === id ? 700 : 400, border: filtreStatut === id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === id ? '#1d4ed8' : 'white', color: filtreStatut === id ? 'white' : '#6b7280', cursor: 'pointer', flexShrink: 0 }}>
+              {label} <span style={{ opacity: 0.75 }}>{count}</span>
             </button>
           ))}
+        </div>
+
+        {/* Filtre type */}
+        <div style={{ display: 'flex', gap: 6, paddingBottom: 12 }}>
+          {([['tous', 'Tous types'], ['eau', '💧 Eau'], ['detail', '🏷️ Détail']] as [FiltreType, string][]).map(([id, label]) => (
+            <button key={id} onClick={() => setFiltreType(id)}
+              style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: filtreType === id ? 700 : 400, border: filtreType === id ? 'none' : '1px solid #e5e7eb', background: filtreType === id ? '#111827' : 'white', color: filtreType === id ? 'white' : '#6b7280', cursor: 'pointer' }}>
+              {label}
+            </button>
+          ))}
+          {filtrés.length !== camions.length && (
+            <span style={{ fontSize: 12, color: '#9ca3af', alignSelf: 'center', marginLeft: 4 }}>{filtrés.length} résultat{filtrés.length !== 1 ? 's' : ''}</span>
+          )}
         </div>
       </div>
 
