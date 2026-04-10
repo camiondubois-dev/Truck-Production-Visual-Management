@@ -1137,7 +1137,48 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
               {isSubmitting ? 'Création...' : '🚛 Créer un job depuis ce véhicule'}
             </button>
           )}
-
+{/* Marquer comme prêt */}
+{v.statut === 'en-production' && (
+  <button
+    onClick={async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const etapesFaites = CHECKLIST_STATIONS.map(s => ({
+        stationId: s.id,
+        fait: true,
+        date: today,
+      }));
+      await onEtapesChange(v.id, etapesFaites);
+      // Mettre à jour aussi prod_items si le camion est en production
+      if (v.jobId) {
+        const { supabase } = await import('../lib/supabase');
+        const { data: prodItem } = await supabase
+          .from('prod_items')
+          .select('progression, stations_actives')
+          .eq('inventaire_id', v.id)
+          .neq('etat', 'termine')
+          .maybeSingle();
+        if (prodItem) {
+          const nouvelleProgression = (prodItem.progression ?? []).map((p: any) => ({
+            ...p,
+            status: p.status === 'non-requis' ? 'non-requis' : 'termine',
+          }));
+          await supabase
+            .from('prod_items')
+            .update({ progression: nouvelleProgression })
+            .eq('inventaire_id', v.id)
+            .neq('etat', 'termine');
+        }
+      }
+    }}
+    style={{
+      width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+      background: '#22c55e', color: 'white', fontWeight: 700,
+      fontSize: 14, cursor: 'pointer',
+    }}
+  >
+    ✅ Marquer comme prêt
+  </button>
+)}
           {/* ── RETOUR INVENTAIRE ── */}
           {v.statut === 'en-production' && (
             !confirmerRetour ? (
