@@ -26,11 +26,9 @@ const TYPE_JOB_CONFIG = {
   autres:        { label: 'Autres travaux',         emoji: '📋', color: '#1f2937' },
 } as const;
 
-const PRIORITE_CONFIG: Record<1 | 2 | 3, { label: string; dot: string; border: string }> = {
-  1: { label: 'Urgent', dot: '#ef4444', border: '#ef4444' },
-  2: { label: 'Normal', dot: '#f59e0b', border: '#f59e0b' },
-  3: { label: 'Faible', dot: '#22c55e', border: '#22c55e' },
-};
+// Couleur du badge de position selon le rang
+const positionColor = (rank: number) =>
+  rank === 1 ? '#ef4444' : rank === 2 ? '#f97316' : rank === 3 ? '#f59e0b' : '#6b7280';
 
 type ModalState =
   | { type: 'assign'; slot: Slot; position: { x: number; y: number }; preSelectedItem?: Item }
@@ -64,11 +62,11 @@ export function PlancherView() {
     return map;
   }, [items]);
 
-  // Met à jour la priorité d'une étape road_map depuis le plancher
+  // Met à jour la priorité (position) d'une étape road_map depuis le plancher
   const handleSetPriorite = useCallback(async (
     inventaireId: string,
     stationId: string,
-    priorite: 1 | 2 | 3 | undefined,
+    priorite: number | undefined,
   ) => {
     const vehicule = vehicules.find(v => v.id === inventaireId);
     if (!vehicule?.roadMap) return;
@@ -506,71 +504,9 @@ function HorlogeWidget() {
 // ── Types internes ─────────────────────────────────────────────
 interface QueueEntry {
   item: Item;
-  priorite?: 1 | 2 | 3;
+  priorite?: number;
   inventaireId?: string;
   stationId?: string;
-}
-
-const prioriteRank = (p?: 1 | 2 | 3) => p === 1 ? 0 : p === 3 ? 2 : 1;
-
-// ── Popover de priorité ────────────────────────────────────────
-function PrioritePopover({ entry, position, onSelect, onClose }: {
-  entry: QueueEntry;
-  position: { x: number; y: number };
-  onSelect: (p: 1 | 2 | 3 | undefined) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: 'fixed', top: position.y, left: position.x, zIndex: 300,
-        background: '#1a1814', border: '1px solid rgba(255,255,255,0.2)',
-        borderRadius: 8, padding: 10, width: 160,
-        boxShadow: '0 6px 24px rgba(0,0,0,0.8)',
-      }}
-    >
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-        Priorité #{entry.item.numero}
-      </div>
-      {([1, 2, 3] as const).map(p => (
-        <button
-          key={p}
-          onClick={() => { onSelect(entry.priorite === p ? undefined : p); onClose(); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            width: '100%', padding: '7px 10px', borderRadius: 6,
-            border: 'none', cursor: 'pointer',
-            background: entry.priorite === p ? `${PRIORITE_CONFIG[p].dot}22` : 'transparent',
-            color: entry.priorite === p ? PRIORITE_CONFIG[p].dot : 'rgba(255,255,255,0.7)',
-            fontSize: 12, fontWeight: entry.priorite === p ? 700 : 500,
-            marginBottom: 2,
-          }}
-          onMouseEnter={e => (e.currentTarget.style.background = `${PRIORITE_CONFIG[p].dot}18`)}
-          onMouseLeave={e => (e.currentTarget.style.background = entry.priorite === p ? `${PRIORITE_CONFIG[p].dot}22` : 'transparent')}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: PRIORITE_CONFIG[p].dot, flexShrink: 0 }} />
-          {PRIORITE_CONFIG[p].label}
-          {entry.priorite === p && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-        </button>
-      ))}
-      {entry.priorite && (
-        <button
-          onClick={() => { onSelect(undefined); onClose(); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            width: '100%', padding: '6px 10px', borderRadius: 6,
-            border: 'none', cursor: 'pointer', background: 'transparent',
-            color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4,
-          }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-        >
-          Effacer priorité
-        </button>
-      )}
-    </div>
-  );
 }
 
 // ── StationBlock ───────────────────────────────────────────────
@@ -583,21 +519,19 @@ interface StationBlockProps {
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
   vehicules: VehiculeInventaire[];
   itemByInvId: Record<string, Item>;
-  onSetPriorite: (inventaireId: string, stationId: string, priorite: 1 | 2 | 3 | undefined) => Promise<void>;
+  onSetPriorite: (inventaireId: string, stationId: string, priorite: number | undefined) => Promise<void>;
   style?: React.CSSProperties;
 }
 
 function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
-  const [prioPopover, setPrioPopover] = useState<{ entry: QueueEntry; x: number; y: number } | null>(null);
-
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
-  // File d'attente enrichie avec priorités road_map
+  // File d'attente : road_map en-attente + fallback, triée par position (priorite)
   const finalQueue = useMemo((): QueueEntry[] => {
     const seenIds = new Set<string>();
     const queue: QueueEntry[] = [];
 
-    // 1. Items avec étape road_map 'en-attente' pour ce garage (source principale)
+    // 1. Camions avec étape road_map 'en-attente' pour ce garage
     if (roadMapStations.length > 0) {
       for (const v of vehicules) {
         if (!v.roadMap) continue;
@@ -612,7 +546,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       }
     }
 
-    // 2. Fallback: logique existante pour items sans road_map (dernierGarageId / stationActuelle)
+    // 2. Fallback : logique dernierGarageId / stationActuelle pour camions sans road_map
     for (const item of allEnAttente) {
       if (seenIds.has(item.id)) continue;
       const isForThisGarage =
@@ -623,24 +557,45 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       queue.push({ item });
     }
 
-    // Trier: 1 (urgent) → 2/indéfini (normal) → 3 (faible)
-    return queue.sort((a, b) => prioriteRank(a.priorite) - prioriteRank(b.priorite));
+    // Trier par position (priorite). Sans position → fin de liste.
+    return queue.sort((a, b) => {
+      if (a.priorite == null && b.priorite == null) return 0;
+      if (a.priorite == null) return 1;
+      if (b.priorite == null) return -1;
+      return a.priorite - b.priorite;
+    });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
 
-  const handlePrioriteClick = (e: React.MouseEvent, entry: QueueEntry) => {
-    e.stopPropagation();
-    if (!entry.inventaireId) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.min(rect.right + 6, window.innerWidth - 170);
-    const y = Math.min(rect.top, window.innerHeight - 160);
-    setPrioPopover({ entry, x, y });
+  // Monter un camion dans la file (swap avec celui au-dessus)
+  const handleMoveUp = async (idx: number) => {
+    if (idx === 0) return;
+    const newOrder = [...finalQueue];
+    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    await saveNewOrder(newOrder);
   };
 
-  const hasUrgent = finalQueue.some(e => e.priorite === 1);
+  // Descendre un camion dans la file (swap avec celui en-dessous)
+  const handleMoveDown = async (idx: number) => {
+    if (idx === finalQueue.length - 1) return;
+    const newOrder = [...finalQueue];
+    [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    await saveNewOrder(newOrder);
+  };
+
+  // Réassigne les positions 1..N et sauvegarde ceux qui ont changé
+  const saveNewOrder = async (newOrder: QueueEntry[]) => {
+    const saves: Promise<void>[] = [];
+    newOrder.forEach((entry, i) => {
+      const newPrio = i + 1;
+      if (entry.inventaireId && entry.stationId && entry.priorite !== newPrio) {
+        saves.push(onSetPriorite(entry.inventaireId, entry.stationId, newPrio));
+      }
+    });
+    await Promise.all(saves);
+  };
 
   return (
     <div
-      onClick={() => setPrioPopover(null)}
       style={{
         width: '100%', height: '92%',
         background: '#161410',
@@ -651,31 +606,27 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         ...style,
       }}
     >
-      {/* En-tête avec compteur file d'attente */}
+      {/* En-tête */}
       <div style={{
         padding: '6px 12px',
         background: `${station.color}18`,
         borderBottom: `1px solid ${station.color}30`,
         fontFamily: 'monospace',
         fontSize: 'clamp(9px, 1vw, 13px)',
-        fontWeight: 700,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        color: station.color,
-        flexShrink: 0,
+        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: station.color, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span>{station.label}</span>
         {finalQueue.length > 0 && (
           <span style={{
-            background: hasUrgent ? '#ef444422' : `${station.color}18`,
-            color: hasUrgent ? '#ef4444' : station.color,
-            border: `1px solid ${hasUrgent ? '#ef444455' : `${station.color}44`}`,
+            background: `${station.color}18`,
+            color: station.color,
+            border: `1px solid ${station.color}44`,
             borderRadius: 4, padding: '1px 8px',
-            fontSize: 'clamp(8px, 0.85vw, 11px)',
-            fontWeight: 700, letterSpacing: '0.05em',
+            fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 700,
           }}>
-            {finalQueue.length} en attente{hasUrgent ? ' ⚠' : ''}
+            {finalQueue.length} en attente
           </span>
         )}
       </div>
@@ -701,110 +652,116 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         ))}
       </div>
 
-      {/* File d'attente triée par priorité */}
+      {/* File d'attente numérotée */}
       {finalQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
-          padding: '6px 8px 5px',
+          padding: '5px 8px 6px',
           flexShrink: 0,
           background: 'rgba(0,0,0,0.25)',
+          maxHeight: '38%',
+          overflowY: 'auto',
         }}>
           <div style={{
-            fontSize: 'clamp(8px, 0.8vw, 9px)',
+            fontSize: 'clamp(8px, 0.75vw, 9px)',
             fontFamily: 'monospace', fontWeight: 700,
             letterSpacing: '0.08em', textTransform: 'uppercase',
-            color: '#f59e0b', marginBottom: 5,
+            color: '#f59e0b', marginBottom: 4,
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
             File d'attente
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {finalQueue.map((entry) => {
-              const { item, priorite } = entry;
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {finalQueue.map((entry, idx) => {
+              const { item } = entry;
+              const rank = idx + 1;
               const couleur = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
-              const pCfg = priorite ? PRIORITE_CONFIG[priorite] : null;
+              const rankColor = positionColor(rank);
               return (
-                <div
-                  key={item.id}
-                  title={`${item.label}${pCfg ? ` — Priorité: ${pCfg.label}` : ''}`}
-                  onClick={(e) => onWaitingItemClick(e, item, station.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 3,
-                    background: `${couleur}13`,
-                    border: `1px solid ${pCfg ? pCfg.border + '88' : couleur + '55'}`,
-                    borderLeft: `3px solid ${pCfg ? pCfg.dot : couleur + '88'}`,
-                    borderRadius: 4, padding: '3px 7px 3px 5px',
-                    cursor: item.slotId ? 'default' : 'pointer',
-                    fontSize: 'clamp(9px, 0.9vw, 11px)',
-                    fontFamily: 'monospace', color: couleur, fontWeight: 700,
-                    transition: 'transform 0.15s, background 0.15s',
-                    opacity: item.slotId ? 0.5 : 1,
-                  }}
-                  onMouseEnter={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = `${couleur}22`; } }}
-                  onMouseLeave={(e) => { if (!item.slotId) { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = `${couleur}13`; } }}
-                >
-                  {/* Dot de priorité — clic pour changer */}
-                  <span
-                    title={pCfg ? `${pCfg.label} — clic pour changer` : entry.inventaireId ? 'Définir priorité' : ''}
-                    onClick={entry.inventaireId ? (e) => handlePrioriteClick(e, entry) : undefined}
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {/* Badge de position */}
+                  <span style={{
+                    width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
+                    borderRadius: 4, flexShrink: 0,
+                    background: rankColor,
+                    color: 'white', fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 900,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'monospace',
+                  }}>
+                    {rank}
+                  </span>
+
+                  {/* Chip camion */}
+                  <div
+                    title={item.label}
+                    onClick={(e) => onWaitingItemClick(e, item, station.id)}
                     style={{
-                      width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                      background: pCfg ? pCfg.dot : 'rgba(255,255,255,0.15)',
-                      cursor: entry.inventaireId ? 'pointer' : 'default',
-                      border: pCfg ? 'none' : '1px solid rgba(255,255,255,0.25)',
-                      transition: 'transform 0.1s',
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 4,
+                      background: `${couleur}13`,
+                      border: `1px solid ${couleur}44`,
+                      borderRadius: 4, padding: '2px 6px',
+                      cursor: item.slotId ? 'default' : 'pointer',
+                      fontSize: 'clamp(9px, 0.9vw, 11px)',
+                      fontFamily: 'monospace', color: couleur, fontWeight: 700,
+                      opacity: item.slotId ? 0.5 : 1,
+                      minWidth: 0, overflow: 'hidden',
                     }}
-                    onMouseEnter={(e) => { if (entry.inventaireId) { e.stopPropagation(); e.currentTarget.style.transform = 'scale(1.5)'; } }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                  />
-                  {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(10px, 1vw, 12px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
-                  <span>#{item.numero}</span>
-                  {item.slotId && (
-                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#dbeafe', color: '#1e40af', padding: '1px 3px', borderRadius: 2 }}>
-                      SLOT
-                    </span>
-                  )}
-                  {item.urgence && (
-                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 3px', borderRadius: 2 }}>
-                      URG
-                    </span>
-                  )}
-                  {item.etatCommercial === 'vendu' && (
-                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#fee2e2', color: '#dc2626', padding: '1px 3px', borderRadius: 2 }}>
-                      VDU
-                    </span>
-                  )}
-                  {item.etatCommercial === 'reserve' && (
-                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 3px', borderRadius: 2 }}>
-                      RÉS
-                    </span>
-                  )}
-                  {item.etatCommercial === 'location' && (
-                    <span style={{ fontSize: 'clamp(7px, 0.7vw, 8px)', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '1px 3px', borderRadius: 2 }}>
-                      LOC
-                    </span>
+                    onMouseEnter={(e) => { if (!item.slotId) e.currentTarget.style.background = `${couleur}22`; }}
+                    onMouseLeave={(e) => { if (!item.slotId) e.currentTarget.style.background = `${couleur}13`; }}
+                  >
+                    {item.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)' }}>{item.type === 'client' ? '🔧' : '🏷️'}</span>}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{item.numero}</span>
+                    {item.etatCommercial === 'vendu' && (
+                      <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fee2e2', color: '#dc2626', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>VDU</span>
+                    )}
+                    {item.etatCommercial === 'reserve' && (
+                      <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>RÉS</span>
+                    )}
+                    {item.etatCommercial === 'location' && (
+                      <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>LOC</span>
+                    )}
+                  </div>
+
+                  {/* Boutons haut/bas (seulement si on a un inventaireId pour sauvegarder) */}
+                  {entry.inventaireId && (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
+                        disabled={idx === 0}
+                        title="Remonter"
+                        style={{
+                          background: 'none', border: 'none', padding: '1px 3px',
+                          cursor: idx === 0 ? 'default' : 'pointer',
+                          color: idx === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
+                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                          transition: 'color 0.1s',
+                        }}
+                        onMouseEnter={e => { if (idx !== 0) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = idx === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
+                      >▲</button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
+                        disabled={idx === finalQueue.length - 1}
+                        title="Descendre"
+                        style={{
+                          background: 'none', border: 'none', padding: '1px 3px',
+                          cursor: idx === finalQueue.length - 1 ? 'default' : 'pointer',
+                          color: idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
+                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                          transition: 'color 0.1s',
+                        }}
+                        onMouseEnter={e => { if (idx !== finalQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
+                      >▼</button>
+                    </>
                   )}
                 </div>
               );
             })}
           </div>
         </div>
-      )}
-
-      {/* Popover de priorité */}
-      {prioPopover && (
-        <PrioritePopover
-          entry={prioPopover.entry}
-          position={{ x: prioPopover.x, y: prioPopover.y }}
-          onSelect={async (p) => {
-            if (prioPopover.entry.inventaireId && prioPopover.entry.stationId) {
-              await onSetPriorite(prioPopover.entry.inventaireId, prioPopover.entry.stationId, p);
-            }
-            setPrioPopover(null);
-          }}
-          onClose={() => setPrioPopover(null)}
-        />
       )}
     </div>
   );

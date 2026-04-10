@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
-import { inventaireService } from '../services/inventaireService';
+import { inventaireService, fromDB } from '../services/inventaireService';
+import { supabase } from '../lib/supabase';
 
 interface InventaireContextType {
   vehicules: VehiculeInventaire[];
@@ -31,6 +32,34 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       .then(setVehicules)
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, []);
+
+  // Real-time : toute modification de prod_inventaire (de n'importe quelle source)
+  // met à jour le state local → PlancherView, VueInventaire, etc. voient les données fraîches
+  useEffect(() => {
+    const channel = supabase
+      .channel('inventaire-realtime')
+      .on(
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'prod_inventaire' },
+        (payload: any) => {
+          const updated = fromDB(payload.new);
+          setVehicules(prev => prev.map(v => v.id === updated.id ? updated : v));
+        }
+      )
+      .on(
+        'postgres_changes' as any,
+        { event: 'INSERT', schema: 'public', table: 'prod_inventaire' },
+        (payload: any) => {
+          const inserted = fromDB(payload.new);
+          setVehicules(prev => {
+            if (prev.some(v => v.id === inserted.id)) return prev;
+            return [inserted, ...prev];
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const importerVehicules = async (nouveaux: VehiculeInventaire[]) => {
