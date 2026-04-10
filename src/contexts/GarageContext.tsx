@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Item, GarageContextType, EtatItem } from '../types/item.types';
-import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
+import { SLOT_TO_GARAGE, STATION_TO_GARAGE, GARAGES_COLONNES } from '../data/garageData';
 import { itemsService } from '../services/itemsService';
 import { logEntreeGarage, logSortieGarage } from '../services/timeLogService';
 import { supabase } from '../lib/supabase';
+import { inventaireService } from '../services/inventaireService';
+import type { RoadMapEtape } from '../types/inventaireTypes';
 
 const GarageContext = createContext<GarageContextType | null>(null);
 
@@ -113,6 +115,26 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     await itemsService.mettreAJour(itemId, patch);
     if (garageId) await logEntreeGarage(itemId, garageId, slotId);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+    // Sync road_map: mark station as en-cours
+    if (item?.inventaireId && garageId) {
+      const { data: inv } = await supabase
+        .from('prod_inventaire')
+        .select('road_map')
+        .eq('id', item.inventaireId)
+        .single();
+      if (inv?.road_map) {
+        const stationsForGarage = GARAGES_COLONNES
+          .filter(g => g.id === garageId)
+          .map(g => g.id);
+        const updated = (inv.road_map as RoadMapEtape[]).map(e =>
+          stationsForGarage.includes(e.stationId) && e.statut === 'en-attente'
+            ? { ...e, statut: 'en-cours' as const } : e
+        );
+        await supabase.from('prod_inventaire')
+          .update({ road_map: updated, updated_at: new Date().toISOString() })
+          .eq('id', item.inventaireId);
+      }
+    }
   };
 
   const retirerVersAttente = async (itemId: string) => {
@@ -189,6 +211,13 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     const patch = { stationActuelle: nouvelleStation, progression: nouvelleProgression };
     await itemsService.mettreAJour(itemId, patch);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
+    // Sync road_map: mark station terminé, advance next step to en-attente
+    if (status === 'termine') {
+      const item = items.find(i => i.id === itemId);
+      if (item?.inventaireId) {
+        await inventaireService.avancerRoadMap(item.inventaireId, stationId);
+      }
+    }
   };
 
   const updateStationsActives = async (itemId: string, stationsActives: string[]) => {

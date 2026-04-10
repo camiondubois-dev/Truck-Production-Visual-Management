@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
 
 export function fromDB(row: any): VehiculeInventaire {
   return {
@@ -23,6 +23,7 @@ export function fromDB(row: any): VehiculeInventaire {
     descriptionTravaux: row.description_travaux ?? undefined,
     photoUrl: row.photo_url ?? undefined,
     etapesFaites: row.etapes_faites ?? [],
+    roadMap: row.road_map ?? [],
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
     estPret: row.est_pret ?? false,
@@ -53,6 +54,7 @@ function toDB(v: VehiculeInventaire): any {
     description_travaux: v.descriptionTravaux ?? null,
     photo_url: v.photoUrl ?? null,
     etapes_faites: v.etapesFaites ?? [],
+    road_map: v.roadMap ?? [],
     a_un_reservoir: v.aUnReservoir ?? false,
     reservoir_id: v.reservoirId ?? null,
     est_pret: v.estPret ?? false,
@@ -149,6 +151,39 @@ export const inventaireService = {
       .update({ etapes_faites: etapesFaites, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  async mettreAJourRoadMap(id: string, roadMap: RoadMapEtape[]): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ road_map: roadMap, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async avancerRoadMap(id: string, stationTermineeId: string): Promise<void> {
+    const { data } = await supabase
+      .from('prod_inventaire')
+      .select('road_map')
+      .eq('id', id)
+      .single();
+    if (!data?.road_map) return;
+    const roadMap: RoadMapEtape[] = data.road_map;
+    const updated = roadMap.map(e =>
+      e.stationId === stationTermineeId ? { ...e, statut: 'termine' as const } : e
+    );
+    // Set next 'planifie' step to 'en-attente'
+    const doneIdx = updated.findIndex(e => e.stationId === stationTermineeId);
+    if (doneIdx >= 0) {
+      const next = updated.slice(doneIdx + 1).find(e => e.statut === 'planifie');
+      if (next) {
+        const nextIdx = updated.findIndex(e => e.stationId === next.stationId);
+        updated[nextIdx] = { ...updated[nextIdx], statut: 'en-attente' };
+      }
+    }
+    await supabase.from('prod_inventaire')
+      .update({ road_map: updated, updated_at: new Date().toISOString() })
+      .eq('id', id);
   },
 
   async mettreAJourReservoir(id: string, aUnReservoir: boolean, reservoirId: string | null): Promise<void> {

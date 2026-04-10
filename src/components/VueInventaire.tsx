@@ -17,10 +17,12 @@ import {
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
-import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL } from '../data/etapes';
+import { CHECKLIST_STATIONS, RETOUCHE_ID, RETOUCHE_LABEL, ROAD_MAP_STATIONS } from '../data/etapes';
+import { RoadMapEditor } from './RoadMapEditor';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+type FiltreDept = 'tous' | string; // station ID
 
 const generateId    = () => `item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const generateVehId = () => `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -245,7 +247,7 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
 }
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir, marquerPret } = useInventaire();
+  const { vehicules, importerVehicules, marquerEnProduction, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
   const { ajouterItem, supprimerItem } = useGarage();
   const { profile: session } = useAuth();
   const isGestion = session?.role === 'gestion';
@@ -253,6 +255,7 @@ export function VueInventaire() {
   const INVENTAIRE_COLS = ['numero', 'marque', 'modele', 'nom_client', 'client_acheteur', 'notes'];
   const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
+  const [filtreDept, setFiltreDept] = useState<FiltreDept>('tous');
   const [recherche, setRecherche] = useState('');
   const [searchResults, setSearchResults] = useState<VehiculeInventaire[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -274,12 +277,20 @@ export function VueInventaire() {
   const baseList = (searchResults !== null ? searchResults : vehicules)
     .map(v => typeOverrides[v.id] ? { ...v, type: typeOverrides[v.id]! } : v);
 
+  const deptCounts = ROAD_MAP_STATIONS.reduce((acc, s) => {
+    acc[s.id] = vehicules.filter(v =>
+      (v.roadMap ?? []).some(e => e.stationId === s.id && (e.statut === 'en-attente' || e.statut === 'en-cours'))
+    ).length;
+    return acc;
+  }, {} as Record<string, number>);
+
   const filtres = [...baseList]
     .filter(v => {
       if (filtreStatut === 'pret' && !v.estPret) return false;
       if (filtreStatut === 'vendu' && v.etatCommercial !== 'vendu' && v.etatCommercial !== 'reserve' && v.etatCommercial !== 'location') return false;
       if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && filtreStatut !== 'vendu' && v.statut !== filtreStatut) return false;
       if (filtreType !== 'tous' && v.type !== filtreType) return false;
+      if (filtreDept !== 'tous' && !(v.roadMap ?? []).some(e => e.stationId === filtreDept && (e.statut === 'en-attente' || e.statut === 'en-cours'))) return false;
       return true;
     })
     .sort((a, b) => {
@@ -426,6 +437,23 @@ export function VueInventaire() {
           ))}
         </div>
 
+        {/* Filtre département */}
+        {ROAD_MAP_STATIONS.some(s => deptCounts[s.id] > 0) && (
+          <div style={{ display: 'flex', gap: 8, padding: '8px 24px 12px', background: 'white', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', alignSelf: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Départements :</span>
+            <button onClick={() => setFiltreDept('tous')}
+              style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, border: filtreDept === 'tous' ? 'none' : '1px solid #e5e7eb', background: filtreDept === 'tous' ? '#374151' : 'white', color: filtreDept === 'tous' ? 'white' : '#6b7280', fontWeight: filtreDept === 'tous' ? 700 : 400, cursor: 'pointer' }}>
+              Tous
+            </button>
+            {ROAD_MAP_STATIONS.filter(s => deptCounts[s.id] > 0).map(s => (
+              <button key={s.id} onClick={() => setFiltreDept(filtreDept === s.id ? 'tous' : s.id)}
+                style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, border: filtreDept === s.id ? 'none' : '1px solid #e5e7eb', background: filtreDept === s.id ? s.color : 'white', color: filtreDept === s.id ? 'white' : '#6b7280', fontWeight: filtreDept === s.id ? 700 : 400, cursor: 'pointer' }}>
+                {s.icon} {s.label} <span style={{ opacity: 0.8 }}>({deptCounts[s.id]})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Table */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {vehicules.length === 0 ? (
@@ -533,6 +561,9 @@ export function VueInventaire() {
           onEtapesChange={mettreAJourEtapes}
           onReservoirChange={mettreAJourReservoir}
           onMarquerPret={marquerPret}
+          onMettreAJour={(updated) => {
+            mettreAJourRoadMap(updated.id, updated.roadMap ?? []);
+          }}
         />
       )}
 
@@ -546,7 +577,7 @@ export function VueInventaire() {
   );
 }
 
-function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange, onMarquerPret }: {
+function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmitting, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange, onMarquerPret, onMettreAJour }: {
   vehicule: VehiculeInventaire;
   onClose: () => void;
   onCreerJob: () => void;
@@ -557,7 +588,9 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
   onEtapesChange: (id: string, etapes: EtapeFaite[]) => Promise<void>;
   onReservoirChange: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
   onMarquerPret: (id: string, estPret: boolean) => Promise<void>;
+  onMettreAJour: (updated: VehiculeInventaire) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<'info' | 'roadmap'>('info');
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [confirmerRetour, setConfirmerRetour] = useState(false);
   const [savingEtape, setSavingEtape] = useState<string | null>(null);
@@ -645,6 +678,42 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
             {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>✅ Prêt</span>}
           </div>
         </div>
+
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', gap: 4, paddingBottom: 16, borderBottom: '1px solid #e5e7eb', marginBottom: 16 }}>
+          {(['info', 'roadmap'] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: activeTab === tab ? 700 : 400, fontSize: 13,
+                background: activeTab === tab ? '#111827' : '#f1f5f9',
+                color: activeTab === tab ? 'white' : '#6b7280',
+              }}>
+              {tab === 'info' ? '📋 Infos' : '🗺️ Road Map'}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'roadmap' && (
+          <div>
+            {/* Road map summary badges */}
+            {(v.roadMap ?? []).length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                {(['en-attente','en-cours'] as const).map(st => {
+                  const n = (v.roadMap??[]).filter(e=>e.statut===st).length;
+                  if (!n) return null;
+                  const cfg = st === 'en-cours' ? {bg:'#eff6ff',color:'#1d4ed8'} : {bg:'#fff7ed',color:'#c2410c'};
+                  return <span key={st} style={{fontSize:11,padding:'2px 10px',borderRadius:10,fontWeight:700,background:cfg.bg,color:cfg.color}}>{st==='en-cours'?'🔵':'⏳'} {n} {st==='en-cours'?'en cours':'en attente'}</span>;
+                })}
+              </div>
+            )}
+            <RoadMapEditor
+              vehicule={v}
+              onSaved={updated => onMettreAJour(updated)}
+              compact={false}
+            />
+          </div>
+        )}
+
+        {activeTab === 'info' && <>
 
         {/* Photo */}
         <div style={{ marginBottom: 20 }}>
@@ -907,6 +976,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onCreerJob, isSubmittin
             )
           )}
         </div>
+        </>}
       </div>
     </div>
   );
