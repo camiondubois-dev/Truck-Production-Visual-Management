@@ -5,7 +5,7 @@ import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { TERRAIN_PIN } from '../config/terrain';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
-import { ROAD_MAP_STATIONS } from '../data/etapes';
+import { ROAD_MAP_STATIONS, RETOUCHE_ID } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 
