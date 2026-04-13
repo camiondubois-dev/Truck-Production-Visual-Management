@@ -58,6 +58,18 @@ export function PlancherView() {
   const [showWizard, setShowWizard] = useState(false);
   const [tempJobs, setTempJobs] = useState<Record<string, JobTemporaire>>({});
 
+  // Fermer tout modal en appuyant sur Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalState(null);
+        setShowWizard(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const allEnAttente = [...enAttente.eau, ...enAttente.client, ...enAttente.detail];
 
   // Index inventaireId → Item pour croiser road_map et prod_items
@@ -585,10 +597,6 @@ interface StationBlockProps {
 function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
-  // Optimistic local queue: set immediately on click, cleared when vehicules refreshes from Supabase
-  const [localQueue, setLocalQueue] = useState<QueueEntry[] | null>(null);
-  useEffect(() => { setLocalQueue(null); }, [vehicules]);
-
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
   const finalQueue = useMemo((): QueueEntry[] => {
     const seenVehIds = new Set<string>();
@@ -637,24 +645,35 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
 
-  // displayQueue: local optimistic order while Supabase save is in-flight; falls back to finalQueue
-  const displayQueue = localQueue ?? finalQueue;
+  // Drag-and-drop state
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   // Monter un camion dans la file (swap avec celui au-dessus)
   const handleMoveUp = async (idx: number) => {
     if (idx === 0) return;
-    const newOrder = [...displayQueue];
+    const newOrder = [...finalQueue];
     [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
-    setLocalQueue(newOrder); // immediate visual feedback
     await saveNewOrder(newOrder);
   };
 
   // Descendre un camion dans la file (swap avec celui en-dessous)
   const handleMoveDown = async (idx: number) => {
-    if (idx === displayQueue.length - 1) return;
-    const newOrder = [...displayQueue];
+    if (idx === finalQueue.length - 1) return;
+    const newOrder = [...finalQueue];
     [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
-    setLocalQueue(newOrder); // immediate visual feedback
+    await saveNewOrder(newOrder);
+  };
+
+  // Drag-and-drop reorder
+  const handleDrop = async (dropIdx: number) => {
+    if (dragIdx === null || dragIdx === dropIdx) {
+      setDragIdx(null); setDragOverIdx(null); return;
+    }
+    const newOrder = [...finalQueue];
+    const [moved] = newOrder.splice(dragIdx, 1);
+    newOrder.splice(dropIdx, 0, moved);
+    setDragIdx(null); setDragOverIdx(null);
     await saveNewOrder(newOrder);
   };
 
@@ -662,10 +681,8 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
   const saveNewOrder = async (newOrder: QueueEntry[]) => {
     const saves: Promise<void>[] = [];
     newOrder.forEach((entry, i) => {
-      const newPrio = i + 1;
-      // Toujours sauvegarder si l'entrée a un stationId (pas seulement si priorité a changé)
       if (entry.stationId) {
-        saves.push(onSetPriorite(entry.vehicule.id, entry.stationId, newPrio));
+        saves.push(onSetPriorite(entry.vehicule.id, entry.stationId, i + 1));
       }
     });
     await Promise.all(saves);
@@ -695,7 +712,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span>{station.label}</span>
-        {displayQueue.length > 0 && (
+        {finalQueue.length > 0 && (
           <span style={{
             background: `${station.color}18`,
             color: station.color,
@@ -703,7 +720,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             borderRadius: 4, padding: '1px 8px',
             fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 700,
           }}>
-            {displayQueue.length} en attente
+            {finalQueue.length} en attente
           </span>
         )}
       </div>
@@ -730,7 +747,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       </div>
 
       {/* File d'attente numérotée */}
-      {displayQueue.length > 0 && (
+      {finalQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
           padding: '5px 8px 6px',
@@ -751,7 +768,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {displayQueue.map((entry, idx) => {
+            {finalQueue.map((entry, idx) => {
               const { vehicule, item } = entry;
               const rank = idx + 1;
               const couleur = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -762,8 +779,27 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                 : `${vehicule.marque ?? ''} ${vehicule.modele ?? ''} ${vehicule.annee ?? ''}`.trim() || vehicule.numero);
               const etatCommercial = item?.etatCommercial ?? vehicule.etatCommercial;
               const entryKey = entry.stepId ?? `${vehicule.id}-${entry.stationId ?? idx}`;
+              const isDragging = dragIdx === idx;
+              const isOver = dragOverIdx === idx && dragIdx !== null && dragIdx !== idx;
+              const canDrag = !!entry.stationId;
               return (
-                <div key={entryKey} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div
+                  key={entryKey}
+                  draggable={canDrag}
+                  onDragStart={() => { if (canDrag) { setDragIdx(idx); setDragOverIdx(null); } }}
+                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                  onDragOver={(e) => { if (canDrag || dragIdx !== null) { e.preventDefault(); setDragOverIdx(idx); } }}
+                  onDragLeave={() => setDragOverIdx(null)}
+                  onDrop={() => handleDrop(idx)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    opacity: isDragging ? 0.4 : 1,
+                    borderTop: isOver && dragIdx !== null && dragIdx > idx ? '2px solid #f59e0b' : '2px solid transparent',
+                    borderBottom: isOver && dragIdx !== null && dragIdx < idx ? '2px solid #f59e0b' : '2px solid transparent',
+                    transition: 'opacity 0.1s',
+                    cursor: canDrag ? 'grab' : 'default',
+                  }}
+                >
                   {/* Badge de position */}
                   <span style={{
                     width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
@@ -832,17 +868,17 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                       >▲</button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
-                        disabled={idx === displayQueue.length - 1}
+                        disabled={idx === finalQueue.length - 1}
                         title="Descendre"
                         style={{
                           background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: idx === displayQueue.length - 1 ? 'default' : 'pointer',
-                          color: idx === displayQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
+                          cursor: idx === finalQueue.length - 1 ? 'default' : 'pointer',
+                          color: idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
                           fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
                           transition: 'color 0.1s',
                         }}
-                        onMouseEnter={e => { if (idx !== displayQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = idx === displayQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
+                        onMouseEnter={e => { if (idx !== finalQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
                       >▼</button>
                     </>
                   )}
@@ -1152,6 +1188,13 @@ function PeintureStationBlock({
   const [dispos, setDispos] = useState<ReservoirSlotInfo[]>([]);
   const [modal, setModal] = useState<PeintureModal>(null);
 
+  // Fermer le modal peinture avec Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setModal(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const charger = async () => {
     const { data: enPeinture } = await supabase
       .from('prod_reservoirs')
@@ -1179,13 +1222,15 @@ function PeintureStationBlock({
     if (slot.futur) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const MODAL_W = 300;
-    const MODAL_H = 360;
-    const MARGIN = 10;
+    const MODAL_H = Math.min(480, window.innerHeight * 0.7); // adaptive height estimate
+    const MARGIN = 12;
+    // Préférer à gauche du slot si pas assez de place à droite
     let x = rect.right + MARGIN;
-    let y = rect.top;
-    if (x + MODAL_W > window.innerWidth) x = rect.left - MODAL_W - MARGIN;
+    if (x + MODAL_W > window.innerWidth - MARGIN) x = rect.left - MODAL_W - MARGIN;
     if (x < MARGIN) x = MARGIN;
-    if (y + MODAL_H > window.innerHeight) y = window.innerHeight - MODAL_H - MARGIN;
+    // Aligner en haut du slot, mais garantir que le modal reste dans l'écran
+    let y = rect.top;
+    if (y + MODAL_H > window.innerHeight - MARGIN) y = window.innerHeight - MODAL_H - MARGIN;
     if (y < MARGIN) y = MARGIN;
 
     const reservoir = peintureSlots[slot.id];
@@ -1319,10 +1364,11 @@ function PeintureStationBlock({
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 200,
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 300,
             background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}55`,
             borderRadius: 10, padding: 16, width: 290,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7)', maxHeight: '70vh',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+            maxHeight: 'min(480px, 70vh)',
             display: 'flex', flexDirection: 'column',
           }}
         >
@@ -1373,7 +1419,7 @@ function PeintureStationBlock({
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 200,
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 300,
             background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}`,
             borderRadius: 10, padding: 16, width: 280,
             boxShadow: '0 8px 32px rgba(0,0,0,0.7)',

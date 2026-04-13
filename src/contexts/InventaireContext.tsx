@@ -113,9 +113,13 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const mettreAJourRoadMap = async (id: string, roadMap: RoadMapEtape[]) => {
+    // Mise à jour optimiste : le UI reflète le changement IMMÉDIATEMENT,
+    // avant même que Supabase réponde (~300-600 ms de latence évités)
+    setVehicules(prev => prev.map(v => v.id === id ? { ...v, roadMap } : v));
+
     await inventaireService.mettreAJourRoadMap(id, roadMap);
     // ── Lifecycle automatique ──────────────────────────────────────
-    const vehicule = vehicules.find(v => v.id === id);
+    const vehicule = vehicules.find(v => v.id === id); // lecture du snapshot PRÉ-update (closure)
     if (vehicule) {
       const activeSteps = roadMap.filter(s => s.statut === 'en-attente' || s.statut === 'en-cours');
       const allDone = roadMap.length > 0 && roadMap.every(s => s.statut === 'termine' || s.statut === 'saute');
