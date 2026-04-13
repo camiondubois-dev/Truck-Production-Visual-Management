@@ -56,14 +56,44 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   }, [items]);
 
   // Véhicules du bon type, triés par numéro
+  // Inclut les items orphelins (prod_items sans prod_inventaire) — notamment les jobs clients existants
   const mesVehicules = useMemo(() => {
     const filtered = vehicules.filter(v => v.type === type);
-    return [...filtered].sort((a, b) => {
+    const invIds = new Set(filtered.map(v => v.id));
+    // Items orphelins: dans prod_items du bon type mais sans entrée prod_inventaire correspondante
+    const orphelins: VehiculeInventaire[] = items
+      .filter(i => i.type === type && i.etat !== 'termine' && (!i.inventaireId || !invIds.has(i.inventaireId)))
+      .map(i => ({
+        id: i.inventaireId || i.id,
+        statut: 'en-production' as const,
+        dateImport: i.dateCreation ?? new Date().toISOString(),
+        dateEnProduction: i.dateCreation,
+        jobId: i.id,
+        numero: i.numero ?? '',
+        type: i.type as 'eau' | 'client' | 'detail',
+        nomClient: i.nomClient,
+        telephone: i.telephone,
+        vehicule: i.vehicule,
+        descriptionTravail: i.descriptionTravail,
+        descriptionTravaux: i.descriptionTravaux,
+        notes: i.notes,
+        roadMap: (i.stationsActives ?? []).map((sid: string, idx: number) => {
+          const prog = i.progression?.find((p: any) => p.stationId === sid);
+          const statut = prog?.status === 'termine' ? 'termine' as const
+            : prog?.status === 'en-cours' ? 'en-cours' as const
+            : 'en-attente' as const;
+          return { id: `synth-${i.id}-${idx}`, stationId: sid, statut, priorite: idx + 1 };
+        }),
+        estPret: false,
+        etatCommercial: i.etatCommercial as any ?? 'non-vendu',
+      }));
+    const combined = [...filtered, ...orphelins];
+    return combined.sort((a, b) => {
       const na = parseInt(a.numero.replace(/\D/g, '') || '0');
       const nb = parseInt(b.numero.replace(/\D/g, '') || '0');
       return na - nb;
     });
-  }, [vehicules, type]);
+  }, [vehicules, items, type]);
 
   // Filtre actif appliqué
   const vehiculesFiltres = useMemo(() => {
