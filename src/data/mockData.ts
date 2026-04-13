@@ -1,13 +1,14 @@
 import { Item, StationProgress } from '../types/item.types';
 
+// Aligné sur ROAD_MAP_STATIONS (etapes.ts) — source unique d'ordre et de labels
 export const TOUTES_STATIONS_COMMUNES = [
   { id: 'soudure-generale',     label: 'Soudure générale',      labelCourt: 'Soud. Gén.',  color: '#f97316', ordre: 0 },
-  { id: 'sous-traitants',       label: 'Sous-traitants',        labelCourt: 'S-Trait.',    color: '#a855f7', ordre: 1 },
+  { id: 'mecanique-generale',   label: 'Mécanique générale',    labelCourt: 'Méc. Gén.',   color: '#3b82f6', ordre: 1 },
   { id: 'mecanique-moteur',     label: 'Mécanique moteur',      labelCourt: 'Méc. Mot.',   color: '#3b82f6', ordre: 2 },
-  { id: 'mecanique-generale',   label: 'Mécanique générale',    labelCourt: 'Méc. Gén.',   color: '#3b82f6', ordre: 3 },
-  { id: 'soudure-specialisee',  label: 'Soudure camions à eau', labelCourt: 'Soud. Eau',   color: '#f97316', ordre: 4 },
+  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',   labelCourt: 'Soud. Spéc.', color: '#f97316', ordre: 3 },
+  { id: 'mecanique-electrique', label: 'Mécanique électrique',  labelCourt: 'Méc. Élec.',  color: '#3b82f6', ordre: 4 },
   { id: 'peinture',             label: 'Peinture',              labelCourt: 'Peinture',    color: '#6b7280', ordre: 5 },
-  { id: 'mecanique-electrique', label: 'Mécanique électrique',  labelCourt: 'Méc. Élec.',  color: '#3b82f6', ordre: 6 },
+  { id: 'sous-traitants',       label: 'Sous-traitants',        labelCourt: 'S-Trait.',    color: '#a855f7', ordre: 6 },
 ];
 
 export const PIPELINE_EAU_USAGE = [

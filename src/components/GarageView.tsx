@@ -63,7 +63,7 @@ const GARAGES: Record<string, GarageConfig> = {
   },
   soudureSpecialisee: {
     id: 'soudure-specialisee',
-    label: 'Soudure Spécialisée Camions à Eau',
+    label: 'Soudure spécialisée',
     accentColor: '#ff6b35',
     cols: 2,
     slots: [{ id: '5' }, { id: '6' }, { id: '4' }, { id: '3' }],

@@ -2,14 +2,15 @@ import type { Item, GarageColonne, TypeItem } from '../types/item.types';
 
 // ── GARAGES / COLONNES ────────────────────────────────────────
 
+// Aligné sur ROAD_MAP_STATIONS (etapes.ts) — même ordre et labels
 export const GARAGES_COLONNES: GarageColonne[] = [
   { id: 'soudure-generale',     label: 'Soudure générale',      labelCourt: 'Soud. Gén.',  color: '#f97316' },
-  { id: 'sous-traitants',       label: 'Sous-traitants',        labelCourt: 'S-Trait.',    color: '#a855f7' },
-  { id: 'mecanique-moteur',     label: 'Mécanique moteur',      labelCourt: 'Méc. Mot.',   color: '#3b82f6' },
   { id: 'mecanique-generale',   label: 'Mécanique générale',    labelCourt: 'Méc. Gén.',   color: '#3b82f6' },
-  { id: 'soudure-specialisee',  label: 'Soudure camions à eau', labelCourt: 'Soud. Eau',   color: '#f97316' },
-  { id: 'peinture',             label: 'Peinture',              labelCourt: 'Peinture',    color: '#6b7280' },
+  { id: 'mecanique-moteur',     label: 'Mécanique moteur',      labelCourt: 'Méc. Mot.',   color: '#3b82f6' },
+  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',   labelCourt: 'Soud. Spéc.', color: '#f97316' },
   { id: 'mecanique-electrique', label: 'Mécanique électrique',  labelCourt: 'Méc. Élec.',  color: '#3b82f6' },
+  { id: 'peinture',             label: 'Peinture',              labelCourt: 'Peinture',    color: '#6b7280' },
+  { id: 'sous-traitants',       label: 'Sous-traitants',        labelCourt: 'S-Trait.',    color: '#a855f7' },
 ];
 
 export const GARAGES_DEFAUT: Record<TypeItem, string[]> = {
@@ -108,8 +109,8 @@ export const STATION_LABEL: Record<string, string> = {
   'mecanique-moteur':     'Mécanique moteur',
   'mecanique-electrique': 'Mécanique électrique',
   'mecanique-generale':   'Mécanique générale',
-  'soudure-specialisee':  'Soudure camions à eau',
-  'soudure-eau':          'Soudure camions à eau',
+  'soudure-specialisee':  'Soudure spécialisée',
+  'soudure-eau':          'Soudure spécialisée',
   'peinture':             'Peinture',
   'livraison':            'Livraison',
   'test-final':           'Test final',
@@ -173,7 +174,7 @@ export const STATIONS: {
   },
   {
     id: 'soudure-specialisee',
-    label: 'Soudure Spécialisée Camions à Eau',
+    label: 'Soudure spécialisée',
     color: '#f97316',
     gridCols: 2,
     slots: [
