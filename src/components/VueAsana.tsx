@@ -418,26 +418,26 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
               </div>
             );
           }
-          const allSaute = steps.every(r => r.statut === 'saute');
-          const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
+          const anySaute = steps.some(r => r.statut === 'saute');
+          const allTermine = steps.length > 0 && steps.every(r => r.statut === 'termine');
           const anyEnCours = steps.some(r => r.statut === 'en-cours');
           const anyEnAttente = steps.some(r => r.statut === 'en-attente');
           const count = steps.length;
           return (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #f1f5f9', padding: '10px 0', position: 'relative' }}>
-              {allSaute ? (
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f3f4f6', border: '2px solid #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14, fontWeight: 800 }}>✕</div>
-              ) : allTermine ? (
+              {allTermine ? (
                 <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15, fontWeight: 700, boxShadow: '0 2px 6px rgba(34,197,94,0.3)' }}>✓</div>
               ) : anyEnCours ? (
                 <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, boxShadow: '0 2px 8px rgba(59,130,246,0.35)', animation: 'pulse 2s infinite' }}>🚛</div>
               ) : anyEnAttente ? (
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'white', boxShadow: '0 2px 6px rgba(245,158,11,0.3)' }}>⏳</div>
+              ) : anySaute ? (
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', fontSize: 11, fontWeight: 800 }}>✕</div>
               ) : (
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', border: '2px solid #d1d5db' }} />
               )}
               {count > 1 && (
-                <span style={{ position: 'absolute', top: 4, right: '50%', marginRight: -22, fontSize: 9, background: allSaute ? '#9ca3af' : allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 10, padding: '1px 5px', fontWeight: 800, lineHeight: 1.3 }}>{count}</span>
+                <span style={{ position: 'absolute', top: 4, right: '50%', marginRight: -22, fontSize: 9, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : anyEnAttente ? '#f59e0b' : anySaute ? '#dc2626' : '#9ca3af', color: 'white', borderRadius: 10, padding: '1px 5px', fontWeight: 800, lineHeight: 1.3 }}>{count}</span>
               )}
             </div>
           );
