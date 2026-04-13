@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Item, GarageContextType, EtatItem } from '../types/item.types';
-import { SLOT_TO_GARAGE, STATION_TO_GARAGE, GARAGES_COLONNES } from '../data/garageData';
+import { SLOT_TO_GARAGE, STATION_TO_GARAGE, GARAGE_TO_ROAD_MAP_STATIONS } from '../data/garageData';
 import { itemsService } from '../services/itemsService';
 import { logEntreeGarage, logSortieGarage } from '../services/timeLogService';
 import { supabase } from '../lib/supabase';
@@ -94,17 +94,43 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
       .eq('inventaire_id', inventaireId)
       .neq('etat', 'termine')
       .maybeSingle();
-    if (!data) return;
-    const nouvelleProgression = (data.progression ?? []).map((p: any) => ({
-      ...p,
-      status: p.status === 'non-requis' ? 'non-requis' : 'termine',
-    }));
-    await itemsService.mettreAJour(data.id, { progression: nouvelleProgression });
-    // Rafraîchir le state local
-    setItems(prev => prev.map(i => i.id !== data.id ? i : {
-      ...i,
-      progression: nouvelleProgression,
-    }));
+
+    const now = new Date().toISOString();
+
+    if (data) {
+      // Marquer toute la progression comme terminée
+      const nouvelleProgression = (data.progression ?? []).map((p: any) => ({
+        ...p,
+        status: p.status === 'non-requis' ? 'non-requis' : 'termine',
+      }));
+      // Fermer le job prod_items
+      await supabase.from('prod_items').update({
+        progression: nouvelleProgression,
+        etat: 'termine',
+        date_archive: now,
+        updated_at: now,
+      }).eq('id', data.id);
+      setItems(prev => prev.map(i => i.id !== data.id ? i : {
+        ...i,
+        progression: nouvelleProgression,
+        etat: 'termine' as import('../types/item.types').EtatItem,
+        dateArchive: now,
+      }));
+    }
+
+    // Marquer toutes les étapes road_map comme terminées + statut=disponible + est_pret=true
+    const { data: inv } = await supabase.from('prod_inventaire').select('road_map').eq('id', inventaireId).single();
+    const roadMapFini = (inv?.road_map ?? []).map((s: any) =>
+      s.statut === 'saute' ? s : { ...s, statut: 'termine' as const }
+    );
+    await supabase.from('prod_inventaire').update({
+      est_pret: true,
+      statut: 'disponible',
+      job_id: null,
+      date_en_production: null,
+      road_map: roadMapFini,
+      updated_at: now,
+    }).eq('id', inventaireId);
   };
 
   const assignerSlot = async (itemId: string, slotId: string) => {
@@ -147,11 +173,9 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', item.inventaireId)
         .single();
       if (inv?.road_map) {
-        const stationsForGarage = GARAGES_COLONNES
-          .filter(g => g.id === garageId)
-          .map(g => g.id);
+        const stationsForGarage = GARAGE_TO_ROAD_MAP_STATIONS[garageId] ?? [garageId];
         const updated = (inv.road_map as RoadMapEtape[]).map(e =>
-          stationsForGarage.includes(e.stationId) && e.statut === 'en-attente'
+          stationsForGarage.includes(e.stationId) && (e.statut === 'en-attente' || e.statut === 'planifie')
             ? { ...e, statut: 'en-cours' as const } : e
         );
         await supabase.from('prod_inventaire')
