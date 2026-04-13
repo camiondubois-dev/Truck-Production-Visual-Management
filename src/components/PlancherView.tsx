@@ -8,6 +8,7 @@ import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
+import { RoadMapEditor } from './RoadMapEditor';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
 import type { Slot, Item } from '../types/item.types';
@@ -37,6 +38,8 @@ type ModalState =
   | { type: 'job-type'; slot: Slot; position: { x: number; y: number } }
   | { type: 'job-titre'; slot: Slot; typeJob: JobTemporaire['typeJob']; position: { x: number; y: number } }
   | { type: 'job-occupe'; job: JobTemporaire; slot: Slot; position: { x: number; y: number } }
+  | { type: 'inventaire-picker'; slot: Slot; position: { x: number; y: number } }
+  | { type: 'inventaire-roadmap'; slot: Slot; vehicule: VehiculeInventaire; position: { x: number; y: number } }
   | null;
 
 export function PlancherView() {
@@ -237,9 +240,38 @@ export function PlancherView() {
           position={modalState.position}
           preSelectedItem={modalState.preSelectedItem}
           onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
+          onChoisirInventaire={() => setModalState({ type: 'inventaire-picker', slot: modalState.slot, position: modalState.position })}
           itemOccupant={slotMap[modalState.slot.id]}
           onRetirerOccupant={retirerVersAttente}
           onTerminerOccupant={terminerItem}
+        />
+      )}
+
+      {modalState?.type === 'inventaire-picker' && (
+        <ModalInventairePicker
+          slot={modalState.slot}
+          position={modalState.position}
+          vehicules={vehicules}
+          onSelect={(v) => setModalState({ type: 'inventaire-roadmap', slot: modalState.slot, vehicule: v, position: modalState.position })}
+          onClose={() => setModalState(null)}
+        />
+      )}
+
+      {modalState?.type === 'inventaire-roadmap' && (
+        <ModalRoadMapSlot
+          slot={modalState.slot}
+          vehicule={modalState.vehicule}
+          position={modalState.position}
+          onAssigner={async (v) => {
+            try {
+              const jobId = await inventaireService.creerProdItemDepuisVehicule(v);
+              const freshItems = await rechargerItems();
+              const newItem = freshItems.find(i => i.inventaireId === v.id && i.etat !== 'termine');
+              if (newItem) assignerSlot(newItem.id, modalState.slot.id);
+            } catch (err) { console.error(err); }
+            setModalState(null);
+          }}
+          onClose={() => setModalState(null)}
         />
       )}
 
@@ -953,6 +985,132 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
           Disponible
         </span>
       )}
+    </div>
+  );
+}
+
+// ── ModalInventairePicker ─────────────────────────────────────────────────────
+function ModalInventairePicker({ slot, position, vehicules, onSelect, onClose }: {
+  slot: Slot;
+  position: { x: number; y: number };
+  vehicules: VehiculeInventaire[];
+  onSelect: (v: VehiculeInventaire) => void;
+  onClose: () => void;
+}) {
+  const [recherche, setRecherche] = useState('');
+  const q = recherche.trim().toLowerCase();
+
+  const liste = vehicules
+    .filter(v => v.statut !== 'archive')
+    .filter(v => !q || [v.numero, v.marque, v.modele, v.annee?.toString(), v.nomClient]
+      .filter(Boolean).join(' ').toLowerCase().includes(q))
+    .sort((a, b) => a.numero.localeCompare(b.numero));
+
+  const tc = (t: string) => t === 'eau' ? '#f97316' : t === 'client' ? '#3b82f6' : '#22c55e';
+  const ti = (t: string) => t === 'eau' ? '💧' : t === 'client' ? '🔧' : '🏷️';
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+      background: '#1a1814', border: '1px solid rgba(99,179,237,0.4)',
+      borderRadius: 12, padding: 16, width: 340,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)', maxHeight: '75vh',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ fontFamily: 'monospace', color: '#63b3ed', fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        📋 Inventaire — Slot {slot.id}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
+        Choisir un camion pour configurer son road map et l'état
+      </div>
+      <input autoFocus type="text" value={recherche} onChange={e => setRecherche(e.target.value)}
+        placeholder="# numéro, marque, client..."
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: 12, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
+      />
+      <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {liste.length === 0 && (
+          <div style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun véhicule trouvé</div>
+        )}
+        {liste.map(v => (
+          <div key={v.id} onClick={() => onSelect(v)} style={{
+            padding: '9px 12px', borderRadius: 7, cursor: 'pointer',
+            background: `${tc(v.type)}10`, border: `1px solid ${tc(v.type)}35`, transition: 'background 0.12s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = `${tc(v.type)}22`)}
+          onMouseLeave={e => (e.currentTarget.style.background = `${tc(v.type)}10`)}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{ti(v.type)}</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: tc(v.type), fontSize: 13 }}>#{v.numero}</span>
+              {v.estPret && <span style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>PRÊT</span>}
+              {v.statut === 'en-production' && <span style={{ fontSize: 9, background: '#fff7ed', color: '#c2410c', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>EN PROD</span>}
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+                {(v.roadMap ?? []).length} étape{(v.roadMap ?? []).length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {(v.marque || v.modele || v.nomClient) && (
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>
+                {[v.marque, v.modele, v.annee, v.nomClient ? `· ${v.nomClient}` : ''].filter(Boolean).join(' ')}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <button onClick={onClose} style={{ width: '100%', marginTop: 10, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+// ── ModalRoadMapSlot ──────────────────────────────────────────────────────────
+function ModalRoadMapSlot({ slot, vehicule, position, onAssigner, onClose }: {
+  slot: Slot;
+  vehicule: VehiculeInventaire;
+  position: { x: number; y: number };
+  onAssigner: (v: VehiculeInventaire) => void;
+  onClose: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const typeColor = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
+
+  const handleAssigner = async () => {
+    setSaving(true);
+    try { await onAssigner(vehicule); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed',
+      top: Math.min(position.y, window.innerHeight - 640),
+      left: Math.min(position.x, window.innerWidth - 420),
+      zIndex: 200,
+      background: '#1a1814', border: `1px solid ${typeColor}55`,
+      borderRadius: 12, padding: 16, width: 400,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      maxHeight: '82vh', overflowY: 'auto',
+    }}>
+      <div style={{ fontFamily: 'monospace', color: typeColor, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        🗺️ Road Map — #{vehicule.numero} → Slot {slot.id}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
+        {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
+        {vehicule.nomClient ? ` · ${vehicule.nomClient}` : ''}
+      </div>
+      <div style={{ background: 'white', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+        <RoadMapEditor vehicule={vehicule} onSaved={() => {}} compact={false} />
+      </div>
+      <button onClick={handleAssigner} disabled={saving} style={{
+        width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+        background: saving ? '#374151' : typeColor, color: 'white',
+        fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer', marginBottom: 6,
+      }}>
+        {saving ? '⏳ Assignation...' : `✓ Assigner au Slot ${slot.id}`}
+      </button>
+      <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
+        Annuler
+      </button>
     </div>
   );
 }
