@@ -206,15 +206,14 @@ export function PlancherView() {
     <div
       onClick={() => setModalState(null)}
       style={{
-        width: '100vw', minHeight: '100dvh',
+        width: '100vw', height: '100dvh',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
-        gridTemplateRows: 'auto auto',
-        alignContent: 'start',
-        gap: '12px', padding: '12px',
+        gridTemplateRows: '1fr 1fr',
+        gap: '8px', padding: '8px',
         background: '#0f0e0b',
         boxSizing: 'border-box',
-        overflow: 'auto',
+        overflow: 'hidden',
         position: 'relative',
       }}
     >
@@ -231,7 +230,7 @@ export function PlancherView() {
         + Nouveau
       </button>
 
-      <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
         <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
       </div>
@@ -246,7 +245,7 @@ export function PlancherView() {
 
       <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '2', gridRow: '2' }} />
 
-      <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
+      <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
         <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
@@ -727,12 +726,13 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
   return (
     <div
       style={{
-        width: '100%', height: '92%',
+        width: '100%', height: '100%',
         background: '#161410',
         border: `1.5px solid ${station.color}40`,
         borderRadius: 8,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
+        minHeight: 0,
         ...style,
       }}
     >
@@ -1336,12 +1336,13 @@ function PeintureStationBlock({
     <div
       onClick={() => setModal(null)}
       style={{
-        width: '100%', height: '92%',
+        width: '100%', height: '100%',
         background: '#161410',
         border: `1.5px solid ${PEINTURE_COLOR}40`,
         borderRadius: 8,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
+        minHeight: 0,
         ...style,
       }}
     >
@@ -1413,7 +1414,7 @@ function PeintureStationBlock({
                   <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: PEINTURE_COLOR, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     🎨 RÉSERVOIR
                   </div>
-                  <span style={{ fontFamily: 'monospace', fontSize: 'clamp(13px, 1.5vw, 18px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 'clamp(20px, 2.5vw, 32px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
                     #{reservoir.numero}
                   </span>
                   <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.3 }}>
