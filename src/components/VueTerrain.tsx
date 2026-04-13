@@ -211,25 +211,12 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     onMisAJour({ ...v, variante: val ?? undefined });
   };
 
-  // Marquer prêt (réservoir si besoin + estPret)
+  // Marquer prêt
   const handleMarquerPret = async () => {
     setSaving(true);
     try {
-      if (v.type === 'eau' && !v.aUnReservoir) {
-        if (reservoirChoisi) {
-          await reservoirService.installerSurInventaire(reservoirChoisi, v.id);
-          await inventaireService.mettreAJourReservoir(v.id, true, reservoirChoisi);
-        } else {
-          await inventaireService.mettreAJourReservoir(v.id, true, null);
-        }
-      }
       await inventaireService.marquerPret(v.id, true);
-      onMisAJour({
-        ...v,
-        estPret: true,
-        aUnReservoir: v.type === 'eau' ? true : v.aUnReservoir,
-        reservoirId: reservoirChoisi || v.reservoirId,
-      });
+      onMisAJour({ ...v, estPret: true });
       setSaved(true);
       setTimeout(onClose, 900);
     } finally { setSaving(false); }
@@ -327,7 +314,23 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Réservoir</div>
             {v.aUnReservoir ? (
-              <span style={{ fontSize: 13, background: '#dcfce7', color: '#166534', padding: '6px 14px', borderRadius: 8, fontWeight: 700 }}>✅ Réservoir installé</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 13, background: '#dcfce7', color: '#166534', padding: '6px 14px', borderRadius: 8, fontWeight: 700 }}>✅ Réservoir installé</span>
+                <button onClick={async () => {
+                  setSaving(true);
+                  try {
+                    // Désinstaller le réservoir si un numéro est associé
+                    if (v.reservoirId) {
+                      await reservoirService.desinstallerDeInventaire(v.reservoirId, v.id);
+                    }
+                    await inventaireService.mettreAJourReservoir(v.id, false, null);
+                    onMisAJour({ ...v, aUnReservoir: false, reservoirId: undefined });
+                  } finally { setSaving(false); }
+                }} disabled={saving}
+                  style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: 12, cursor: saving ? 'wait' : 'pointer' }}>
+                  ↩️ Retirer
+                </button>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <select value={reservoirChoisi} onChange={e => setReservoirChoisi(e.target.value)}
@@ -338,6 +341,21 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
                   ))}
                 </select>
                 <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>Laissez vide = réservoir installé sans numéro</div>
+                <button onClick={async () => {
+                  setSaving(true);
+                  try {
+                    if (reservoirChoisi) {
+                      await reservoirService.installerSurInventaire(reservoirChoisi, v.id);
+                      await inventaireService.mettreAJourReservoir(v.id, true, reservoirChoisi);
+                    } else {
+                      await inventaireService.mettreAJourReservoir(v.id, true, null);
+                    }
+                    onMisAJour({ ...v, aUnReservoir: true, reservoirId: reservoirChoisi || v.reservoirId });
+                  } finally { setSaving(false); }
+                }} disabled={saving}
+                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: saving ? '#e5e7eb' : '#0ea5e9', color: saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer' }}>
+                  {saving ? 'Sauvegarde...' : '💧 Marquer réservoir installé'}
+                </button>
               </div>
             )}
           </div>
@@ -428,6 +446,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
                     <button onClick={async () => {
                       setAssigningSlot(true);
                       try {
+                        // Libérer l'ancien occupant
                         await supabase.from('prod_items')
                           .update({ slot_id: null, etat: 'en-attente', updated_at: new Date().toISOString() })
                           .eq('id', slotConflict.item.id);
@@ -436,10 +455,22 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
                             ? { ...e, statut: 'en-cours' as const } : e
                         );
                         await inventaireService.mettreAJourRoadMap(v.id, updatedRoadMap);
+                        // Assigner le slot au nouveau camion
+                        const { data: prodItem } = await supabase
+                          .from('prod_items')
+                          .select('id')
+                          .eq('inventaire_id', v.id)
+                          .neq('etat', 'termine')
+                          .maybeSingle();
+                        if (prodItem) {
+                          await supabase.from('prod_items')
+                            .update({ slot_id: slotChoisi, etat: 'en-slot', updated_at: new Date().toISOString() })
+                            .eq('id', prodItem.id);
+                        }
                         onMisAJour({ ...v, roadMap: updatedRoadMap });
                         setSlotConflict(null);
                         setShowSlotAssign(false);
-                        alert(`Camion assigné au slot ${slotChoisi} ✓`);
+                        alert(`✓ Slot ${slotChoisi} assigné`);
                       } finally { setAssigningSlot(false); }
                     }}
                       style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
@@ -473,10 +504,23 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
                         ? { ...e, statut: 'en-cours' as const } : e
                     );
                     await inventaireService.mettreAJourRoadMap(v.id, updatedRoadMap);
+                    // Mettre à jour le slot dans prod_items
+                    const { data: prodItem } = await supabase
+                      .from('prod_items')
+                      .select('id')
+                      .eq('inventaire_id', v.id)
+                      .neq('etat', 'termine')
+                      .maybeSingle();
+                    if (prodItem) {
+                      await supabase.from('prod_items')
+                        .update({ slot_id: slotChoisi, etat: 'en-slot', updated_at: new Date().toISOString() })
+                        .eq('id', prodItem.id);
+                    }
                     onMisAJour({ ...v, roadMap: updatedRoadMap });
                     setShowSlotAssign(false);
                     setSlotGarageChoisi('');
                     setSlotChoisi('');
+                    alert(`✓ Slot ${slotChoisi} assigné`);
                   } finally { setAssigningSlot(false); }
                 }} disabled={assigningSlot}
                   style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: assigningSlot ? '#e5e7eb' : '#111827', color: assigningSlot ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 14, cursor: assigningSlot ? 'wait' : 'pointer' }}>
