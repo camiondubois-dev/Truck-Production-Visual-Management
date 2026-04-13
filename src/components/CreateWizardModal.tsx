@@ -1134,12 +1134,15 @@ if (form.type !== 'client' && !form.numero) return;
           ) : <div />}
 
           {source === 'nouveau' && estDerniereEtape && (
-            <button type="button" onClick={handleCreer} disabled={!form.numero}
+            <button
+              type="button"
+              onClick={handleCreer}
+              disabled={form.type !== 'client' && !form.numero}
               style={{
                 padding: '10px 28px', borderRadius: 8, border: 'none',
-                background: form.numero ? '#f97316' : '#fed7aa',
+                background: (form.type === 'client' || form.numero) ? '#f97316' : '#fed7aa',
                 color: 'white', fontWeight: 700, fontSize: 14,
-                cursor: form.numero ? 'pointer' : 'not-allowed',
+                cursor: (form.type === 'client' || form.numero) ? 'pointer' : 'not-allowed',
               }}>
               Créer le job ✓
             </button>

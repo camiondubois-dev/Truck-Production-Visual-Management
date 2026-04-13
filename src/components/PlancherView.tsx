@@ -585,6 +585,10 @@ interface StationBlockProps {
 function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
+  // Optimistic local queue: set immediately on click, cleared when vehicules refreshes from Supabase
+  const [localQueue, setLocalQueue] = useState<QueueEntry[] | null>(null);
+  useEffect(() => { setLocalQueue(null); }, [vehicules]);
+
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
   const finalQueue = useMemo((): QueueEntry[] => {
     const seenVehIds = new Set<string>();
@@ -633,28 +637,34 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
 
+  // displayQueue: local optimistic order while Supabase save is in-flight; falls back to finalQueue
+  const displayQueue = localQueue ?? finalQueue;
+
   // Monter un camion dans la file (swap avec celui au-dessus)
   const handleMoveUp = async (idx: number) => {
     if (idx === 0) return;
-    const newOrder = [...finalQueue];
+    const newOrder = [...displayQueue];
     [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    setLocalQueue(newOrder); // immediate visual feedback
     await saveNewOrder(newOrder);
   };
 
   // Descendre un camion dans la file (swap avec celui en-dessous)
   const handleMoveDown = async (idx: number) => {
-    if (idx === finalQueue.length - 1) return;
-    const newOrder = [...finalQueue];
+    if (idx === displayQueue.length - 1) return;
+    const newOrder = [...displayQueue];
     [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    setLocalQueue(newOrder); // immediate visual feedback
     await saveNewOrder(newOrder);
   };
 
-  // Réassigne les positions 1..N et sauvegarde ceux qui ont changé
+  // Réassigne les positions 1..N et sauvegarde dans Supabase via road_map
   const saveNewOrder = async (newOrder: QueueEntry[]) => {
     const saves: Promise<void>[] = [];
     newOrder.forEach((entry, i) => {
       const newPrio = i + 1;
-      if (entry.stationId && entry.priorite !== newPrio) {
+      // Toujours sauvegarder si l'entrée a un stationId (pas seulement si priorité a changé)
+      if (entry.stationId) {
         saves.push(onSetPriorite(entry.vehicule.id, entry.stationId, newPrio));
       }
     });
@@ -685,7 +695,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span>{station.label}</span>
-        {finalQueue.length > 0 && (
+        {displayQueue.length > 0 && (
           <span style={{
             background: `${station.color}18`,
             color: station.color,
@@ -693,7 +703,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             borderRadius: 4, padding: '1px 8px',
             fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 700,
           }}>
-            {finalQueue.length} en attente
+            {displayQueue.length} en attente
           </span>
         )}
       </div>
@@ -720,7 +730,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       </div>
 
       {/* File d'attente numérotée */}
-      {finalQueue.length > 0 && (
+      {displayQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
           padding: '5px 8px 6px',
@@ -741,7 +751,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {finalQueue.map((entry, idx) => {
+            {displayQueue.map((entry, idx) => {
               const { vehicule, item } = entry;
               const rank = idx + 1;
               const couleur = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -822,17 +832,17 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                       >▲</button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
-                        disabled={idx === finalQueue.length - 1}
+                        disabled={idx === displayQueue.length - 1}
                         title="Descendre"
                         style={{
                           background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: idx === finalQueue.length - 1 ? 'default' : 'pointer',
-                          color: idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
+                          cursor: idx === displayQueue.length - 1 ? 'default' : 'pointer',
+                          color: idx === displayQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
                           fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
                           transition: 'color 0.1s',
                         }}
-                        onMouseEnter={e => { if (idx !== finalQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
+                        onMouseEnter={e => { if (idx !== displayQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = idx === displayQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
                       >▼</button>
                     </>
                   )}
