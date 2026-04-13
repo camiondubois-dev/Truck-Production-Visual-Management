@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(gh pr:*)",
+      "Bash(cp \"C:\\\\Users\\\\user\\\\Truck-Production-Visual-Management\\\\.claude\\\\worktrees\\\\affectionate-raman\\\\src\\\\contexts\\\\InventaireContext.tsx\" \"C:\\\\Users\\\\user\\\\Truck-Production-Visual-Management\\\\src\\\\contexts\\\\InventaireContext.tsx\")",
+      "Bash(cp \"C:\\\\Users\\\\user\\\\Truck-Production-Visual-Management\\\\.claude\\\\worktrees\\\\affectionate-raman\\\\src\\\\components\\\\PlancherView.tsx\" \"C:\\\\Users\\\\user\\\\Truck-Production-Visual-Management\\\\src\\\\components\\\\PlancherView.tsx\")",
+      "Bash(npx vite:*)"
     ]
   }
 }

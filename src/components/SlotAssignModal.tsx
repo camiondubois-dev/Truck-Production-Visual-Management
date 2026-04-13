@@ -14,12 +14,13 @@ interface SlotAssignModalProps {
   position: { x: number; y: number };
   preSelectedItem?: Item;
   onJobTemporaire?: () => void;
-itemOccupant?: Item;
+  onChoisirInventaire?: () => void;
+  itemOccupant?: Item;
   onRetirerOccupant?: (itemId: string) => void;
   onTerminerOccupant?: (itemId: string) => void;
 }
 
-export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire, itemOccupant, onRetirerOccupant, onTerminerOccupant }: SlotAssignModalProps) {
+export function SlotAssignModal({ slot, enAttente, onAssign, onClose, position, preSelectedItem, onJobTemporaire, onChoisirInventaire, itemOccupant, onRetirerOccupant, onTerminerOccupant }: SlotAssignModalProps) {
 
   // Trouver le garage de ce slot
   const garageSlot = SLOT_TO_GARAGE[slot.id];
@@ -198,11 +199,27 @@ if (itemOccupant) {
         </div>
       ))}
 
+      {onChoisirInventaire && (
+        <button
+          onClick={() => { onChoisirInventaire(); }}
+          style={{
+            width: '100%', marginTop: 10, padding: '9px', borderRadius: 6,
+            border: '1px solid rgba(99,179,237,0.4)', background: 'rgba(99,179,237,0.07)',
+            color: 'rgba(147,210,255,0.85)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,179,237,0.14)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(99,179,237,0.07)')}
+        >
+          📋 Choisir depuis l'inventaire
+        </button>
+      )}
+
       {onJobTemporaire && (
         <button
           onClick={() => { onJobTemporaire(); }}
           style={{
-            width: '100%', marginTop: 10, padding: '8px', borderRadius: 6,
+            width: '100%', marginTop: 6, padding: '8px', borderRadius: 6,
             border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)',
             color: 'rgba(255,255,255,0.55)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,

@@ -53,7 +53,7 @@ export function TruckDetailPanel({
         top: 0,
         right: 0,
         width: 360,
-        height: '100vh',
+        height: '100dvh',
         background: '#ffffff',
         borderLeft: '1px solid #e5e7eb',
         display: 'flex',

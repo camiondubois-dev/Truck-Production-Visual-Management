@@ -908,7 +908,7 @@ function Etape3Eau({ form, setF }: { form: FormState; setF: (p: Partial<FormStat
 // ── Composant principal ───────────────────────────────────────
 
 export function CreateWizardModal({ initialType, onCreate, onClose }: WizardCreationProps) {
-  const { marquerEnProduction } = useInventaire();
+  const { marquerEnProduction, ajouterVehicule } = useInventaire();
   const { ajouterClient } = useClients();
 
  const [source, setSource] = useState<'choix' | 'inventaire' | 'nouveau'>('choix');
@@ -957,7 +957,7 @@ const [etape, setEtape] = useState(1);
     }
   };
 
-  const handleCreer = () => {
+  const handleCreer = async () => {
    if (!form.type) return;
 if (form.type !== 'client' && !form.numero) return;
 
@@ -1037,8 +1037,41 @@ if (form.type !== 'client' && !form.numero) return;
 };
     }
 
-    if (form.inventaireId) {
-      marquerEnProduction(form.inventaireId, id);
+    // Si pas d'inventaireId réel, créer une entrée prod_inventaire pour le véhicule
+    let inventaireId = form.inventaireId;
+    const isVirtuel = !inventaireId || inventaireId.startsWith('client-virtuel-');
+
+    if (isVirtuel) {
+      const invId = `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+      const stationsActives = nouvelItem.stationsActives ?? [];
+      const roadMap = stationsActives.map((sid: string, idx: number) => ({
+        id: `rm-${Date.now()}-${Math.random().toString(36).slice(2,5)}-${idx}`,
+        stationId: sid,
+        statut: 'en-attente' as const,
+        priorite: idx + 1,
+      }));
+      const vehiculeInv = {
+        id: invId,
+        statut: 'en-production' as const,
+        dateImport: now,
+        dateEnProduction: now,
+        jobId: id,
+        numero: form.numero || `C-${Date.now().toString().slice(-6)}`,
+        type: form.type as 'eau' | 'client' | 'detail',
+        nomClient: form.nomClient || undefined,
+        telephone: form.telephone || undefined,
+        vehicule: form.vehicule || undefined,
+        descriptionTravail: form.descriptionTravail || undefined,
+        descriptionTravaux: form.descriptionTravaux || undefined,
+        roadMap,
+      };
+      await ajouterVehicule(vehiculeInv as any);
+      inventaireId = invId;
+      nouvelItem.inventaireId = invId;
+    }
+
+    if (inventaireId && !isVirtuel) {
+      await marquerEnProduction(inventaireId, id);
     }
 
     onCreate(nouvelItem);
@@ -1134,12 +1167,15 @@ if (form.type !== 'client' && !form.numero) return;
           ) : <div />}
 
           {source === 'nouveau' && estDerniereEtape && (
-            <button type="button" onClick={handleCreer} disabled={!form.numero}
+            <button
+              type="button"
+              onClick={handleCreer}
+              disabled={form.type !== 'client' && !form.numero}
               style={{
                 padding: '10px 28px', borderRadius: 8, border: 'none',
-                background: form.numero ? '#f97316' : '#fed7aa',
+                background: (form.type === 'client' || form.numero) ? '#f97316' : '#fed7aa',
                 color: 'white', fontWeight: 700, fontSize: 14,
-                cursor: form.numero ? 'pointer' : 'not-allowed',
+                cursor: (form.type === 'client' || form.numero) ? 'pointer' : 'not-allowed',
               }}>
               Créer le job ✓
             </button>

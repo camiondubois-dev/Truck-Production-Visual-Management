@@ -9,7 +9,9 @@ function fromDB(row: any): Reservoir {
     etat: row.etat,
     camionId: row.camion_id ?? undefined,
     notes: row.notes ?? undefined,
+    slotId: row.slot_id ?? undefined,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -21,6 +23,7 @@ function toDB(r: Reservoir): any {
     etat: r.etat,
     camion_id: r.camionId ?? null,
     notes: r.notes ?? null,
+    slot_id: r.slotId ?? null,
   };
 }
 

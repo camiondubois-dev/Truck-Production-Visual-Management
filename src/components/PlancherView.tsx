@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
+import { supabase } from '../lib/supabase';
 import { EauIcon } from './EauIcon';
 import { STATIONS } from '../data/stations';
 import { STATION_TO_GARAGE, SLOT_TO_GARAGE, GARAGE_TO_ROAD_MAP_STATIONS } from '../data/garageData';
@@ -8,6 +9,7 @@ import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
+import { RoadMapEditor } from './RoadMapEditor';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
 import type { Slot, Item } from '../types/item.types';
@@ -37,6 +39,8 @@ type ModalState =
   | { type: 'job-type'; slot: Slot; position: { x: number; y: number } }
   | { type: 'job-titre'; slot: Slot; typeJob: JobTemporaire['typeJob']; position: { x: number; y: number } }
   | { type: 'job-occupe'; job: JobTemporaire; slot: Slot; position: { x: number; y: number } }
+  | { type: 'inventaire-picker'; slot: Slot; position: { x: number; y: number } }
+  | { type: 'inventaire-roadmap'; slot: Slot; vehicule: VehiculeInventaire; position: { x: number; y: number } }
   | null;
 
 export function PlancherView() {
@@ -48,11 +52,23 @@ export function PlancherView() {
     terminerEtAvancer, rechargerItems,
   } = useGarage();
 
-  const { vehicules, mettreAJourRoadMap } = useInventaire();
+  const { vehicules, mettreAJourRoadMap, mettreAJourPriorites } = useInventaire();
 
   const [modalState, setModalState] = useState<ModalState>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [tempJobs, setTempJobs] = useState<Record<string, JobTemporaire>>({});
+
+  // Fermer tout modal en appuyant sur Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalState(null);
+        setShowWizard(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const allEnAttente = [...enAttente.eau, ...enAttente.client, ...enAttente.detail];
 
@@ -63,19 +79,25 @@ export function PlancherView() {
     return map;
   }, [items]);
 
-  // Met à jour la priorité (position) d'une étape road_map depuis le plancher
-  const handleSetPriorite = useCallback(async (
-    inventaireId: string,
-    stationId: string,
-    priorite: number | undefined,
-  ) => {
-    const vehicule = vehicules.find(v => v.id === inventaireId);
-    if (!vehicule?.roadMap) return;
-    const updated = vehicule.roadMap.map(step =>
-      step.stationId === stationId ? { ...step, priorite } : step
-    );
-    await mettreAJourRoadMap(inventaireId, updated);
-  }, [vehicules, mettreAJourRoadMap]);
+  // Reorder atomique : reçoit la nouvelle liste ordonnée depuis StationBlock,
+  // calcule les priorités 1..N pour chaque véhicule et sauvegarde en un seul appel
+  const handleReorder = useCallback(async (newOrder: QueueEntry[]) => {
+    const updatesMap = new Map<string, RoadMapEtape[]>();
+    newOrder.forEach((entry, i) => {
+      if (!entry.stationId || !entry.vehicule.roadMap) return;
+      const vid = entry.vehicule.id;
+      if (!updatesMap.has(vid)) {
+        updatesMap.set(vid, entry.vehicule.roadMap.map(s => ({ ...s })));
+      }
+      const roadMap = updatesMap.get(vid)!;
+      const stepIdx = roadMap.findIndex(s =>
+        entry.stepId ? s.id === entry.stepId : s.stationId === entry.stationId
+      );
+      if (stepIdx >= 0) roadMap[stepIdx] = { ...roadMap[stepIdx], priorite: i + 1 };
+    });
+    const updates = [...updatesMap.entries()].map(([id, roadMap]) => ({ id, roadMap }));
+    if (updates.length > 0) await mettreAJourPriorites(updates);
+  }, [mettreAJourPriorites]);
 
   const calculerPosition = (rect: DOMRect) => {
     const MODAL_WIDTH = 360;
@@ -184,7 +206,7 @@ export function PlancherView() {
     <div
       onClick={() => setModalState(null)}
       style={{
-        width: '100vw', height: '100vh',
+        width: '100vw', height: '100dvh',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
         gridTemplateRows: '1fr 1fr',
@@ -209,23 +231,23 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '3', gridRow: '1' }} />
 
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} />
+        <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
 
       {modalState?.type === 'assign' && (
@@ -237,9 +259,38 @@ export function PlancherView() {
           position={modalState.position}
           preSelectedItem={modalState.preSelectedItem}
           onJobTemporaire={() => handleJobTemporaireStart(modalState.slot, modalState.position)}
+          onChoisirInventaire={() => setModalState({ type: 'inventaire-picker', slot: modalState.slot, position: modalState.position })}
           itemOccupant={slotMap[modalState.slot.id]}
           onRetirerOccupant={retirerVersAttente}
           onTerminerOccupant={terminerItem}
+        />
+      )}
+
+      {modalState?.type === 'inventaire-picker' && (
+        <ModalInventairePicker
+          slot={modalState.slot}
+          position={modalState.position}
+          vehicules={vehicules}
+          onSelect={(v) => setModalState({ type: 'inventaire-roadmap', slot: modalState.slot, vehicule: v, position: modalState.position })}
+          onClose={() => setModalState(null)}
+        />
+      )}
+
+      {modalState?.type === 'inventaire-roadmap' && (
+        <ModalRoadMapSlot
+          slot={modalState.slot}
+          vehicule={modalState.vehicule}
+          position={modalState.position}
+          onAssigner={async (v) => {
+            try {
+              const jobId = await inventaireService.creerProdItemDepuisVehicule(v);
+              const freshItems = await rechargerItems();
+              const newItem = freshItems.find(i => i.inventaireId === v.id && i.etat !== 'termine');
+              if (newItem) assignerSlot(newItem.id, modalState.slot.id);
+            } catch (err) { console.error(err); }
+            setModalState(null);
+          }}
+          onClose={() => setModalState(null)}
         />
       )}
 
@@ -545,11 +596,11 @@ interface StationBlockProps {
   onCreateAndAssign: (e: React.MouseEvent, vehicule: VehiculeInventaire, garageId: string) => Promise<void>;
   vehicules: VehiculeInventaire[];
   itemByInvId: Record<string, Item>;
-  onSetPriorite: (inventaireId: string, stationId: string, priorite: number | undefined) => Promise<void>;
+  onReorder: (newOrder: QueueEntry[]) => Promise<void>;
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onSetPriorite, style }: StationBlockProps) {
+function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
@@ -600,32 +651,76 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
 
-  // Monter un camion dans la file (swap avec celui au-dessus)
-  const handleMoveUp = async (idx: number) => {
+  // ── localQueue : source d'affichage locale ──────────────────────────────
+  // Mis à jour IMMÉDIATEMENT lors d'un reorder (pas d'attente réseau).
+  // Remis à null seulement si des items sont ajoutés/retirés de la file.
+  const [localQueue, setLocalQueue] = useState<QueueEntry[] | null>(null);
+  const queueSignature = finalQueue.map(e => e.vehicule.id).join('|');
+  const prevSigRef = useRef(queueSignature);
+  useEffect(() => {
+    if (prevSigRef.current !== queueSignature) {
+      prevSigRef.current = queueSignature;
+      setLocalQueue(null); // nouvel item ou item retiré → réinitialiser
+    }
+  }, [queueSignature]);
+  const displayQueue = localQueue ?? finalQueue;
+
+  // Drag-and-drop state
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  // Badge picker
+  const [pickerIdx, setPickerIdx] = useState<number | null>(null);
+
+  // Fermer le picker si on clique ailleurs
+  useEffect(() => {
+    if (pickerIdx === null) return;
+    const close = () => setPickerIdx(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [pickerIdx]);
+
+  // Applique un nouvel ordre : mise à jour locale immédiate + save DB en arrière-plan
+  const applyReorder = (newOrder: QueueEntry[]) => {
+    setLocalQueue(newOrder);
+    onReorder(newOrder); // fire-and-forget, pas d'await → pas de blocage UI
+  };
+
+  // Monter d'un rang
+  const handleMoveUp = (idx: number) => {
     if (idx === 0) return;
-    const newOrder = [...finalQueue];
+    const newOrder = [...displayQueue];
     [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
-    await saveNewOrder(newOrder);
+    applyReorder(newOrder);
   };
 
-  // Descendre un camion dans la file (swap avec celui en-dessous)
-  const handleMoveDown = async (idx: number) => {
-    if (idx === finalQueue.length - 1) return;
-    const newOrder = [...finalQueue];
+  // Descendre d'un rang
+  const handleMoveDown = (idx: number) => {
+    if (idx === displayQueue.length - 1) return;
+    const newOrder = [...displayQueue];
     [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
-    await saveNewOrder(newOrder);
+    applyReorder(newOrder);
   };
 
-  // Réassigne les positions 1..N et sauvegarde ceux qui ont changé
-  const saveNewOrder = async (newOrder: QueueEntry[]) => {
-    const saves: Promise<void>[] = [];
-    newOrder.forEach((entry, i) => {
-      const newPrio = i + 1;
-      if (entry.stationId && entry.priorite !== newPrio) {
-        saves.push(onSetPriorite(entry.vehicule.id, entry.stationId, newPrio));
-      }
-    });
-    await Promise.all(saves);
+  // Drag-and-drop
+  const handleDrop = (dropIdx: number) => {
+    if (dragIdx === null || dragIdx === dropIdx) {
+      setDragIdx(null); setDragOverIdx(null); return;
+    }
+    const newOrder = [...displayQueue];
+    const [moved] = newOrder.splice(dragIdx, 1);
+    newOrder.splice(dropIdx, 0, moved);
+    setDragIdx(null); setDragOverIdx(null);
+    applyReorder(newOrder);
+  };
+
+  // Picker : sauter directement à une position
+  const handlePickerMove = (fromIdx: number, toIdx: number) => {
+    setPickerIdx(null);
+    if (fromIdx === toIdx) return;
+    const newOrder = [...displayQueue];
+    const [moved] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, moved);
+    applyReorder(newOrder);
   };
 
   return (
@@ -652,7 +747,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span>{station.label}</span>
-        {finalQueue.length > 0 && (
+        {displayQueue.length > 0 && (
           <span style={{
             background: `${station.color}18`,
             color: station.color,
@@ -660,7 +755,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             borderRadius: 4, padding: '1px 8px',
             fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 700,
           }}>
-            {finalQueue.length} en attente
+            {displayQueue.length} en attente
           </span>
         )}
       </div>
@@ -687,7 +782,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       </div>
 
       {/* File d'attente numérotée */}
-      {finalQueue.length > 0 && (
+      {displayQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
           padding: '5px 8px 6px',
@@ -708,7 +803,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {finalQueue.map((entry, idx) => {
+            {displayQueue.map((entry, idx) => {
               const { vehicule, item } = entry;
               const rank = idx + 1;
               const couleur = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -719,19 +814,79 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                 : `${vehicule.marque ?? ''} ${vehicule.modele ?? ''} ${vehicule.annee ?? ''}`.trim() || vehicule.numero);
               const etatCommercial = item?.etatCommercial ?? vehicule.etatCommercial;
               const entryKey = entry.stepId ?? `${vehicule.id}-${entry.stationId ?? idx}`;
+              const isDragging = dragIdx === idx;
+              const isOver = dragOverIdx === idx && dragIdx !== null && dragIdx !== idx;
+              const canDrag = true; // tous les items sont draggables
               return (
-                <div key={entryKey} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  {/* Badge de position */}
-                  <span style={{
-                    width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
-                    borderRadius: 4, flexShrink: 0,
-                    background: rankColor,
-                    color: 'white', fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 900,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'monospace',
-                  }}>
-                    {rank}
-                  </span>
+                <div
+                  key={entryKey}
+                  draggable={canDrag}
+                  onDragStart={() => { if (canDrag) { setDragIdx(idx); setDragOverIdx(null); } }}
+                  onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                  onDragOver={(e) => { if (canDrag || dragIdx !== null) { e.preventDefault(); setDragOverIdx(idx); } }}
+                  onDragLeave={() => setDragOverIdx(null)}
+                  onDrop={() => handleDrop(idx)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    opacity: isDragging ? 0.4 : 1,
+                    borderTop: isOver && dragIdx !== null && dragIdx > idx ? '2px solid #f59e0b' : '2px solid transparent',
+                    borderBottom: isOver && dragIdx !== null && dragIdx < idx ? '2px solid #f59e0b' : '2px solid transparent',
+                    transition: 'opacity 0.1s',
+                    cursor: canDrag ? 'grab' : 'default',
+                  }}
+                >
+                  {/* Badge de position — clic pour choisir la position directement */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setPickerIdx(pickerIdx === idx ? null : idx); }}
+                      style={{
+                        width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
+                        borderRadius: 4,
+                        background: rankColor,
+                        color: 'white', fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 900,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: 'monospace',
+                        cursor: 'pointer',
+                        outline: pickerIdx === idx ? `2px solid ${rankColor}` : 'none',
+                        outlineOffset: 1,
+                      }}
+                    >
+                      {rank}
+                    </span>
+                    {/* Mini picker de position */}
+                    {pickerIdx === idx && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', top: '110%', left: 0, zIndex: 60,
+                          background: '#1a1a1a', border: '1px solid #f59e0b66',
+                          borderRadius: 6, padding: '3px',
+                          display: 'flex', flexDirection: 'column', gap: 1,
+                          minWidth: 28, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        }}
+                      >
+                        {displayQueue.map((_, pos) => (
+                          <button
+                            key={pos}
+                            onClick={() => handlePickerMove(idx, pos)}
+                            style={{
+                              background: pos === idx ? `${positionColor(pos+1)}33` : 'transparent',
+                              border: 'none',
+                              color: pos === idx ? positionColor(pos+1) : 'rgba(255,255,255,0.65)',
+                              padding: '3px 6px', borderRadius: 4,
+                              cursor: 'pointer',
+                              fontSize: 'clamp(9px, 0.9vw, 11px)',
+                              fontWeight: pos === idx ? 900 : 400,
+                              fontFamily: 'monospace',
+                              textAlign: 'center',
+                            }}
+                          >
+                            {pos + 1}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Chip camion */}
                   <div
@@ -770,39 +925,33 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                     )}
                   </div>
 
-                  {/* Boutons haut/bas (toujours si entry a un stationId) */}
-                  {entry.stationId && (
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
-                        disabled={idx === 0}
-                        title="Remonter"
-                        style={{
-                          background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: idx === 0 ? 'default' : 'pointer',
-                          color: idx === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
-                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
-                          transition: 'color 0.1s',
-                        }}
-                        onMouseEnter={e => { if (idx !== 0) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = idx === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
-                      >▲</button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
-                        disabled={idx === finalQueue.length - 1}
-                        title="Descendre"
-                        style={{
-                          background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: idx === finalQueue.length - 1 ? 'default' : 'pointer',
-                          color: idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)',
-                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
-                          transition: 'color 0.1s',
-                        }}
-                        onMouseEnter={e => { if (idx !== finalQueue.length - 1) e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = idx === finalQueue.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)'; }}
-                      >▼</button>
-                    </>
-                  )}
+                  {/* Boutons ▲▼ — sur TOUS les items */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
+                    title="Remonter"
+                    style={{
+                      background: 'none', border: 'none', padding: '1px 3px',
+                      cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                      transition: 'color 0.1s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
+                  >▲</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
+                    title="Descendre"
+                    style={{
+                      background: 'none', border: 'none', padding: '1px 3px',
+                      cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                      transition: 'color 0.1s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
+                  >▼</button>
                 </div>
               );
             })}
@@ -952,6 +1101,435 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
         <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.18)', marginTop: 'auto' }}>
           Disponible
         </span>
+      )}
+    </div>
+  );
+}
+
+// ── ModalInventairePicker ─────────────────────────────────────────────────────
+function ModalInventairePicker({ slot, position, vehicules, onSelect, onClose }: {
+  slot: Slot;
+  position: { x: number; y: number };
+  vehicules: VehiculeInventaire[];
+  onSelect: (v: VehiculeInventaire) => void;
+  onClose: () => void;
+}) {
+  const [recherche, setRecherche] = useState('');
+  const q = recherche.trim().toLowerCase();
+
+  const liste = vehicules
+    .filter(v => v.statut !== 'archive')
+    .filter(v => !q || [v.numero, v.marque, v.modele, v.annee?.toString(), v.nomClient]
+      .filter(Boolean).join(' ').toLowerCase().includes(q))
+    .sort((a, b) => a.numero.localeCompare(b.numero));
+
+  const tc = (t: string) => t === 'eau' ? '#f97316' : t === 'client' ? '#3b82f6' : '#22c55e';
+  const ti = (t: string) => t === 'eau' ? '💧' : t === 'client' ? '🔧' : '🏷️';
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+      background: '#1a1814', border: '1px solid rgba(99,179,237,0.4)',
+      borderRadius: 12, padding: 16, width: 340,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)', maxHeight: '75vh',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ fontFamily: 'monospace', color: '#63b3ed', fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        📋 Inventaire — Slot {slot.id}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
+        Choisir un camion pour configurer son road map et l'état
+      </div>
+      <input autoFocus type="text" value={recherche} onChange={e => setRecherche(e.target.value)}
+        placeholder="# numéro, marque, client..."
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: 12, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
+      />
+      <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {liste.length === 0 && (
+          <div style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun véhicule trouvé</div>
+        )}
+        {liste.map(v => (
+          <div key={v.id} onClick={() => onSelect(v)} style={{
+            padding: '9px 12px', borderRadius: 7, cursor: 'pointer',
+            background: `${tc(v.type)}10`, border: `1px solid ${tc(v.type)}35`, transition: 'background 0.12s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = `${tc(v.type)}22`)}
+          onMouseLeave={e => (e.currentTarget.style.background = `${tc(v.type)}10`)}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{ti(v.type)}</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: tc(v.type), fontSize: 13 }}>#{v.numero}</span>
+              {v.estPret && <span style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>PRÊT</span>}
+              {v.statut === 'en-production' && <span style={{ fontSize: 9, background: '#fff7ed', color: '#c2410c', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>EN PROD</span>}
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+                {(v.roadMap ?? []).length} étape{(v.roadMap ?? []).length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {(v.marque || v.modele || v.nomClient) && (
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>
+                {[v.marque, v.modele, v.annee, v.nomClient ? `· ${v.nomClient}` : ''].filter(Boolean).join(' ')}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <button onClick={onClose} style={{ width: '100%', marginTop: 10, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+// ── ModalRoadMapSlot ──────────────────────────────────────────────────────────
+function ModalRoadMapSlot({ slot, vehicule, position, onAssigner, onClose }: {
+  slot: Slot;
+  vehicule: VehiculeInventaire;
+  position: { x: number; y: number };
+  onAssigner: (v: VehiculeInventaire) => void;
+  onClose: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const typeColor = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
+
+  const handleAssigner = async () => {
+    setSaving(true);
+    try { await onAssigner(vehicule); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed',
+      top: Math.min(position.y, window.innerHeight - 640),
+      left: Math.min(position.x, window.innerWidth - 420),
+      zIndex: 200,
+      background: '#1a1814', border: `1px solid ${typeColor}55`,
+      borderRadius: 12, padding: 16, width: 400,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      maxHeight: '82vh', overflowY: 'auto',
+    }}>
+      <div style={{ fontFamily: 'monospace', color: typeColor, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+        🗺️ Road Map — #{vehicule.numero} → Slot {slot.id}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
+        {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
+        {vehicule.nomClient ? ` · ${vehicule.nomClient}` : ''}
+      </div>
+      <div style={{ background: 'white', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+        <RoadMapEditor vehicule={vehicule} onSaved={() => {}} compact={false} />
+      </div>
+      <button onClick={handleAssigner} disabled={saving} style={{
+        width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+        background: saving ? '#374151' : typeColor, color: 'white',
+        fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer', marginBottom: 6,
+      }}>
+        {saving ? '⏳ Assignation...' : `✓ Assigner au Slot ${slot.id}`}
+      </button>
+      <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
+        Annuler
+      </button>
+    </div>
+  );
+}
+
+// ── PeintureStationBlock ──────────────────────────────────────────────────────
+// La station Peinture gère exclusivement des réservoirs (prod_reservoirs),
+// pas des camions. Chaque slot peut accueillir un réservoir en peinture.
+
+interface ReservoirSlotInfo {
+  id: string;
+  numero: string;
+  type: string;
+}
+
+type PeintureModal =
+  | { type: 'assigner'; slot: Slot; position: { x: number; y: number } }
+  | { type: 'occupe';   slot: Slot; reservoir: ReservoirSlotInfo; position: { x: number; y: number } }
+  | null;
+
+function PeintureStationBlock({
+  station,
+  style,
+}: {
+  station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
+  style?: React.CSSProperties;
+}) {
+  const [peintureSlots, setPeintureSlots] = useState<Record<string, ReservoirSlotInfo>>({});
+  const [dispos, setDispos] = useState<ReservoirSlotInfo[]>([]);
+  const [modal, setModal] = useState<PeintureModal>(null);
+
+  // Fermer le modal peinture avec Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setModal(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const charger = async () => {
+    const { data: enPeinture } = await supabase
+      .from('prod_reservoirs')
+      .select('id, numero, type, slot_id')
+      .eq('etat', 'en-peinture');
+
+    const map: Record<string, ReservoirSlotInfo> = {};
+    (enPeinture ?? []).forEach((r: any) => {
+      if (r.slot_id) map[r.slot_id] = { id: r.id, numero: r.numero, type: r.type };
+    });
+    setPeintureSlots(map);
+
+    const { data: disponibles } = await supabase
+      .from('prod_reservoirs')
+      .select('id, numero, type')
+      .eq('etat', 'disponible')
+      .order('numero', { ascending: true });
+    setDispos((disponibles ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type })));
+  };
+
+  useEffect(() => { charger(); }, []);
+
+  const handleSlotClick = (e: React.MouseEvent, slot: Slot) => {
+    e.stopPropagation();
+    if (slot.futur) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const MODAL_W = 300;
+    const MODAL_H = Math.min(480, window.innerHeight * 0.7); // adaptive height estimate
+    const MARGIN = 12;
+    // Préférer à gauche du slot si pas assez de place à droite
+    let x = rect.right + MARGIN;
+    if (x + MODAL_W > window.innerWidth - MARGIN) x = rect.left - MODAL_W - MARGIN;
+    if (x < MARGIN) x = MARGIN;
+    // Aligner en haut du slot, mais garantir que le modal reste dans l'écran
+    let y = rect.top;
+    if (y + MODAL_H > window.innerHeight - MARGIN) y = window.innerHeight - MODAL_H - MARGIN;
+    if (y < MARGIN) y = MARGIN;
+
+    const reservoir = peintureSlots[slot.id];
+    if (reservoir) {
+      setModal({ type: 'occupe', slot, reservoir, position: { x, y } });
+    } else {
+      setModal({ type: 'assigner', slot, position: { x, y } });
+    }
+  };
+
+  const assignerReservoir = async (reservoirId: string, slotId: string) => {
+    await supabase
+      .from('prod_reservoirs')
+      .update({ etat: 'en-peinture', slot_id: slotId, updated_at: new Date().toISOString() })
+      .eq('id', reservoirId);
+    await charger();
+    setModal(null);
+  };
+
+  const retirerReservoir = async (reservoirId: string) => {
+    await supabase
+      .from('prod_reservoirs')
+      .update({ etat: 'disponible', slot_id: null, updated_at: new Date().toISOString() })
+      .eq('id', reservoirId);
+    await charger();
+    setModal(null);
+  };
+
+  const PEINTURE_COLOR = '#94a3b8';
+
+  return (
+    <div
+      onClick={() => setModal(null)}
+      style={{
+        width: '100%', height: '92%',
+        background: '#161410',
+        border: `1.5px solid ${PEINTURE_COLOR}40`,
+        borderRadius: 8,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        ...style,
+      }}
+    >
+      {/* En-tête */}
+      <div style={{
+        padding: '6px 12px',
+        background: `${PEINTURE_COLOR}18`,
+        borderBottom: `1px solid ${PEINTURE_COLOR}30`,
+        fontFamily: 'monospace',
+        fontSize: 'clamp(9px, 1vw, 13px)',
+        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: PEINTURE_COLOR, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span>{station.label}</span>
+        <span style={{
+          fontSize: 'clamp(7px, 0.75vw, 9px)', color: `${PEINTURE_COLOR}88`,
+          fontWeight: 500, letterSpacing: '0.05em',
+        }}>
+          RÉSERVOIRS
+        </span>
+      </div>
+
+      {/* Grille des slots */}
+      <div style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${station.gridCols}, 1fr)`,
+        gap: '6px', padding: '8px',
+        minHeight: 0, overflow: 'auto',
+      }}>
+        {station.slots.map((slot) => {
+          const reservoir = peintureSlots[slot.id];
+          return (
+            <div
+              key={slot.id}
+              onClick={(e) => handleSlotClick(e, slot)}
+              style={{
+                background: reservoir ? `${PEINTURE_COLOR}18` : '#1c1a14',
+                border: reservoir
+                  ? `2px solid ${PEINTURE_COLOR}`
+                  : slot.futur
+                  ? '1px dashed rgba(255,255,255,0.08)'
+                  : '1px dashed rgba(255,255,255,0.1)',
+                borderRadius: 6, padding: '8px 10px',
+                cursor: slot.futur ? 'default' : 'pointer',
+                display: 'flex', flexDirection: 'column', gap: 4,
+                minHeight: 0, height: '100%', boxSizing: 'border-box',
+                transition: 'background 0.15s, transform 0.1s',
+                opacity: slot.futur ? 0.4 : 1,
+              }}
+              onMouseEnter={(e) => { if (!slot.futur) e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: 'clamp(10px, 1.1vw, 14px)',
+                fontWeight: 700, color: '#ff5533', lineHeight: 1,
+              }}>
+                #{slot.id}
+              </span>
+
+              {slot.futur ? (
+                <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.3)', marginTop: 'auto', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Futur
+                </span>
+              ) : reservoir ? (
+                <>
+                  <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: PEINTURE_COLOR, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    🎨 RÉSERVOIR
+                  </div>
+                  <span style={{ fontFamily: 'monospace', fontSize: 'clamp(13px, 1.5vw, 18px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
+                    #{reservoir.numero}
+                  </span>
+                  <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.3 }}>
+                    {reservoir.type}
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.18)', marginTop: 'auto', textAlign: 'center' }}>
+                  + Réservoir
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal: assigner un réservoir au slot */}
+      {modal?.type === 'assigner' && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 300,
+            background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}55`,
+            borderRadius: 10, padding: 16, width: 290,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+            maxHeight: 'min(480px, 70vh)',
+            display: 'flex', flexDirection: 'column',
+          }}
+        >
+          <div style={{ fontFamily: 'monospace', color: PEINTURE_COLOR, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+            🎨 Slot {modal.slot.id} — Peinture
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+            Choisir un réservoir à peindre
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {dispos.length === 0 ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>
+                Aucun réservoir disponible
+              </div>
+            ) : (
+              dispos.map(r => (
+                <div
+                  key={r.id}
+                  onClick={() => assignerReservoir(r.id, modal.slot.id)}
+                  style={{
+                    padding: '10px 12px', borderRadius: 7,
+                    background: `${PEINTURE_COLOR}12`,
+                    border: `1px solid ${PEINTURE_COLOR}30`,
+                    cursor: 'pointer', transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${PEINTURE_COLOR}22`)}
+                  onMouseLeave={e => (e.currentTarget.style.background = `${PEINTURE_COLOR}12`)}
+                >
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, color: PEINTURE_COLOR, fontSize: 13 }}>
+                    #{r.numero}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{r.type}</div>
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => setModal(null)}
+            style={{ width: '100%', marginTop: 10, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {/* Modal: slot occupé par un réservoir */}
+      {modal?.type === 'occupe' && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 300,
+            background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}`,
+            borderRadius: 10, padding: 16, width: 280,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          }}
+        >
+          <div style={{ fontFamily: 'monospace', color: PEINTURE_COLOR, fontWeight: 700, marginBottom: 8, fontSize: 13 }}>
+            🎨 Slot {modal.slot.id} — En peinture
+          </div>
+          <div style={{
+            padding: '10px 12px', borderRadius: 8,
+            background: `${PEINTURE_COLOR}12`,
+            border: `1px solid ${PEINTURE_COLOR}30`,
+            marginBottom: 14,
+          }}>
+            <div style={{ fontFamily: 'monospace', fontWeight: 900, color: 'white', fontSize: 16 }}>
+              #{modal.reservoir.numero}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+              {modal.reservoir.type}
+            </div>
+          </div>
+          <button
+            onClick={() => retirerReservoir(modal.reservoir.id)}
+            style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#f59e0b', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+          >
+            ↩ Retirer du slot
+          </button>
+          <button
+            onClick={() => retirerReservoir(modal.reservoir.id)}
+            style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#22c55e', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+          >
+            ✓ Peinture terminée
+          </button>
+          <button
+            onClick={() => setModal(null)}
+            style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+          >
+            Fermer
+          </button>
+        </div>
       )}
     </div>
   );

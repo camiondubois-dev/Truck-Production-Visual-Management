@@ -341,7 +341,7 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
   if (loading) return (
     <div style={{
       display: 'flex', justifyContent: 'center', alignItems: 'center',
-      height: '100vh', background: '#1a1a1a', color: 'white', fontSize: '18px',
+      height: '100dvh', background: '#1a1a1a', color: 'white', fontSize: '18px',
     }}>
       Chargement...
     </div>

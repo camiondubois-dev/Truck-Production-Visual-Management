@@ -116,7 +116,7 @@ export const VueDepartement = () => {
     <div
       onClick={() => setModalState(null)}
       style={{
-        width: '100vw', height: '100vh',
+        width: '100vw', height: '100dvh',
         background: '#0d0c08',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',

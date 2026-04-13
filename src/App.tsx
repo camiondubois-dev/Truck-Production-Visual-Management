@@ -22,7 +22,7 @@ export default function App() {
   if (loading) {
     return (
       <div style={{
-        width: '100vw', height: '100vh',
+        width: '100vw', height: '100dvh',
         background: '#0f0e0b',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'rgba(255,255,255,0.4)', fontSize: 14, fontFamily: 'monospace',
@@ -41,7 +41,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0f0e0b' }}>
+    <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0f0e0b' }}>
       <Navigation currentTab={currentTab} onTabChange={(id) => setCurrentTab(id as Tab)} />
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
         {currentTab === 'plancher'    && <PlancherView />}

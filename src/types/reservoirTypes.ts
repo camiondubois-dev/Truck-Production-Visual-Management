@@ -1,5 +1,5 @@
 export type TypeReservoir = '2500g' | '3750g' | '4000g' | '5000g';
-export type EtatReservoir = 'disponible' | 'installe';
+export type EtatReservoir = 'disponible' | 'installe' | 'en-peinture';
 
 export interface Reservoir {
   id: string;
@@ -8,6 +8,7 @@ export interface Reservoir {
   etat: EtatReservoir;
   camionId?: string;
   notes?: string;
+  slotId?: string;
   createdAt: string;
   updatedAt: string;
 }

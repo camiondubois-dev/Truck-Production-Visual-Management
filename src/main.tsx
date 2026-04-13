@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, Component, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AuthProvider } from './contexts/AuthContext';
 import { RoleProvider } from './contexts/RoleContext';
@@ -9,14 +9,35 @@ import App from './App.tsx';
 import { VueTerrain } from './components/VueTerrain';
 import './index.css';
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      const err = this.state.error as Error;
+      return (
+        <div style={{ padding: 40, fontFamily: 'monospace', background: '#1a1a2e', minHeight: '100dvh', color: 'white' }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444', marginBottom: 16 }}>⚠️ Erreur de rendu</div>
+          <pre style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 8, fontSize: 13, overflow: 'auto', color: '#fca5a5' }}>
+            {err.message}{'\n\n'}{err.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const isTerrainRoute = window.location.pathname.startsWith('/terrain');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isTerrainRoute ? (
-      <InventaireProvider>
-        <VueTerrain />
-      </InventaireProvider>
+      <ErrorBoundary>
+        <InventaireProvider>
+          <VueTerrain />
+        </InventaireProvider>
+      </ErrorBoundary>
     ) : (
       <AuthProvider>
         <RoleProvider>

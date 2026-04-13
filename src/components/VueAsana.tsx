@@ -7,8 +7,9 @@ import { CreateWizardModal } from './CreateWizardModal';
 import { PopupAssignationSlot } from './PopupAssignationSlot';
 import { photoService } from '../services/photoService';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
+import { RoadMapEditor } from './RoadMapEditor';
 import type { TypeItem, Item, EtatCommercial, Document } from '../types/item.types';
-import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
+import type { VehiculeInventaire } from '../types/inventaireTypes';
 import { useClients } from '../contexts/ClientContext';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ interface VueAsanaProps {
   };
 }
 
-type FiltreVue = 'tous' | 'a-planifier' | 'pret' | string; // string = stationId
+type FiltreVue = 'tous' | 'a-planifier' | 'dans-le-garage' | 'en-attente' | 'pret' | string; // string = stationId
 type Section = 'a-planifier' | 'en-attente' | 'dans-le-garage' | 'pret' | 'archive';
 
 // ── Helper: détermine la section d'un véhicule ───────────────────
@@ -73,6 +74,12 @@ export function VueAsana({ type, config }: VueAsanaProps) {
     if (filtreActif === 'pret') {
       return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
     }
+    if (filtreActif === 'dans-le-garage') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
+    }
+    if (filtreActif === 'en-attente') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
+    }
     // Filtre par station: camions qui ont cette étape active (en-attente ou en-cours)
     return mesVehicules.filter(v => {
       if (!v.roadMap) return false;
@@ -93,7 +100,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const totalActifs = aPlanifier.length + enAttente.length + dansLeGarage.length + prets.length;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f8fafc' }}>
+    <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selectedVehicule ? 380 : 0, transition: 'margin-right 0.3s ease',
@@ -125,15 +132,19 @@ export function VueAsana({ type, config }: VueAsanaProps) {
           background: 'white', flexWrap: 'wrap', flexShrink: 0,
         }}>
           <FiltreBtn active={filtreActif === 'tous'} onClick={() => setFiltreActif('tous')} label={`Tous (${totalActifs})`} />
-          <FiltreBtn active={filtreActif === 'a-planifier'} onClick={() => setFiltreActif('a-planifier')} label="📋 À planifier" />
+          <FiltreBtn active={filtreActif === 'dans-le-garage'} onClick={() => setFiltreActif('dans-le-garage')} label={`🔧 Dans le garage (${dansLeGarage.length})`} color="#3b82f6" />
+          <FiltreBtn active={filtreActif === 'pret'} onClick={() => setFiltreActif('pret')} label={`✅ Prêt (${prets.length})`} color="#22c55e" />
+          <FiltreBtn active={filtreActif === 'a-planifier'} onClick={() => setFiltreActif('a-planifier')} label={`📋 À planifier (${aPlanifier.length})`} />
+          <FiltreBtn active={filtreActif === 'en-attente'} onClick={() => setFiltreActif('en-attente')} label={`⏳ En attente (${enAttente.length})`} color="#f59e0b" />
+          <div style={{ width: 1, background: '#e5e7eb', margin: '0 2px', alignSelf: 'stretch' }} />
           {ROAD_MAP_STATIONS.map(s => {
             const nb = mesVehicules.filter(v => v.roadMap?.some(r => r.stationId === s.id && (r.statut === 'en-attente' || r.statut === 'en-cours'))).length;
+            if (nb === 0) return null;
             return (
               <FiltreBtn key={s.id} active={filtreActif === s.id} onClick={() => setFiltreActif(s.id)}
-                label={`${s.icon} ${s.label}${nb > 0 ? ` (${nb})` : ''}`} color={s.color} />
+                label={`${s.icon} ${s.label} (${nb})`} color={s.color} />
             );
           })}
-          <FiltreBtn active={filtreActif === 'pret'} onClick={() => setFiltreActif('pret')} label={`✅ Prêt (${prets.length})`} color="#22c55e" />
         </div>
 
         {/* ── Tableau ─────────────────────────────────────────── */}
@@ -525,15 +536,7 @@ function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const montrerCommercial = v.type === 'eau' || v.type === 'detail';
   const etatCommercial = v.etatCommercial ?? 'non-vendu';
   const clientLie = v.clientId ? clients.find(c => c.id === v.clientId) : null;
-  const roadMap = (v.roadMap ?? []).sort((a, b) => a.ordre - b.ordre);
 
-  const handleStepStatut = async (stepId: string | undefined, stepIdx: number, newStatut: RoadMapEtape['statut']) => {
-    const updated = roadMap.map((s, i) => {
-      if (stepId ? s.id === stepId : i === stepIdx) return { ...s, statut: newStatut };
-      return s;
-    });
-    await mettreAJourRoadMap(v.id, updated);
-  };
 
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fichier = e.target.files?.[0];
@@ -579,7 +582,7 @@ function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   return (
     <>
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'fixed', right: 0, top: 0, width: 380, height: '100vh',
+        position: 'fixed', right: 0, top: 0, width: 380, height: '100dvh',
         background: 'white', borderLeft: '1px solid #e5e7eb',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
       }}>
@@ -696,54 +699,11 @@ function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               🗺 Plan de production
             </div>
-            {roadMap.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '16px', borderRadius: 8, border: '1px dashed #e5e7eb' }}>
-                Aucune étape planifiée.<br />Configurez le Road Map dans l'onglet Inventaire.
-              </div>
-            ) : (
-              roadMap.map((step, idx) => {
-                const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
-                const cfg = STATUT_CFG[step.statut] ?? STATUT_CFG.planifie;
-                return (
-                  <div key={step.id ?? `${step.stationId}-${idx}`} style={{
-                    padding: '10px 12px', marginBottom: 6, borderRadius: 8,
-                    background: cfg.bg, border: `1px solid ${cfg.color}30`,
-                    borderLeft: `3px solid ${cfg.color}`,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', minWidth: 16 }}>{idx + 1}</span>
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#111827' }}>
-                        {station?.icon} {station?.label ?? step.stationId}
-                      </span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
-                    </div>
-                    {step.description && (
-                      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontStyle: 'italic' }}>{step.description}</div>
-                    )}
-                    <div style={{ display: 'flex', gap: 3 }}>
-                      {(['planifie', 'en-attente', 'en-cours', 'termine', 'saute'] as const).map(statut => {
-                        const sc = STATUT_CFG[statut];
-                        const isActive = step.statut === statut;
-                        return (
-                          <button key={statut}
-                            onClick={() => handleStepStatut(step.id, idx, statut)}
-                            style={{
-                              flex: 1, padding: '4px 2px', fontSize: 8, fontWeight: 600,
-                              borderRadius: 4, cursor: 'pointer', border: 'none',
-                              background: isActive ? sc.color : '#f1f5f9',
-                              color: isActive ? 'white' : '#9ca3af',
-                              transition: 'all 0.1s', whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {sc.icon} {statut === 'en-attente' ? 'Attente' : statut === 'en-cours' ? 'En cours' : statut === 'planifie' ? 'Planifié' : statut === 'termine' ? 'Terminé' : 'Sauté'}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+            <RoadMapEditor
+              vehicule={v}
+              onSaved={() => {}}
+              compact={false}
+            />
           </div>
 
           {/* ── Informations ─────────────────────── */}

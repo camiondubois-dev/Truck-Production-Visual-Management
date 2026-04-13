@@ -141,7 +141,7 @@ export function GarageView() {
       onClick={() => setTooltip(null)}
       style={{
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
         gridTemplateRows: '1fr 1fr',

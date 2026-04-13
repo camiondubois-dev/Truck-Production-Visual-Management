@@ -41,7 +41,7 @@ export function ListeItemsView({ type }: ListeItemsViewProps) {
         maxWidth: 1400,
         margin: '0 auto',
         background: '#0f0e0b',
-        minHeight: '100vh',
+        minHeight: '100dvh',
       }}
     >
       <div style={{ marginBottom: 32 }}>

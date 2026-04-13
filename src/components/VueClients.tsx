@@ -82,7 +82,7 @@ export function VueClients() {
     items.filter(i => i.clientId === clientId);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selected ? 420 : 0, transition: 'margin-right 0.3s ease',
@@ -391,7 +391,7 @@ function PanneauDetailClient({ client, jobs, onClose, onMettreAJour, onSupprimer
 
   return (
     <div style={{
-      position: 'fixed', right: 0, top: 0, width: 420, height: '100vh',
+      position: 'fixed', right: 0, top: 0, width: 420, height: '100dvh',
       background: 'white', borderLeft: '1px solid #e5e7eb',
       boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
     }}>

@@ -382,7 +382,7 @@ export function VueReservoirs() {
   };
 
   return (
-    <div style={{ height: '100vh', background: '#f8fafc', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100dvh', background: '#f8fafc', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
