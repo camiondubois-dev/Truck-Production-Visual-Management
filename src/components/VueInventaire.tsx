@@ -347,7 +347,7 @@ export function VueInventaire() {
   const enProd = vehicules.filter(v => v.statut === 'en-production').length;
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginRight: selected ? 400 : 0, transition: 'margin-right 0.3s ease' }}>
 
         {/* Header */}

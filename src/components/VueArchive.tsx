@@ -47,13 +47,13 @@ export function VueArchive() {
   const selectedItem = tries.find(i => i.id === selectedId) ?? null;
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh', background: '#f8fafc', fontSize: 18, color: '#9ca3af' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', background: '#f8fafc', fontSize: 18, color: '#9ca3af' }}>
       Chargement des archives...
     </div>
   );
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selectedItem ? 400 : 0,

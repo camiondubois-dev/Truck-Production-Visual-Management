@@ -130,7 +130,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const totalActifs = aPlanifier.length + enAttente.length + dansLeGarage.length + prets.length;
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selectedVehicule ? 380 : 0, transition: 'margin-right 0.3s ease',
