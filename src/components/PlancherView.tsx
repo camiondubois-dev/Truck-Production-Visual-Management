@@ -14,7 +14,9 @@ import { RoadMapEditor } from './RoadMapEditor';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
-import type { Slot, Item } from '../types/item.types';
+import { photoService } from '../services/photoService';
+import { useClients } from '../contexts/ClientContext';
+import type { Slot, Item, Document } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 export interface JobTemporaire {
@@ -1626,16 +1628,26 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
   onTerminerEtAvancer?: (itemId: string) => void;
   onTerminerItem?: (itemId: string) => void;
 }) {
-  const { mettreAJourRoadMap, marquerPret, mettreAJourCommercial, mettreAJourReservoir } = useInventaire();
-  const { marquerPret: marquerPretGarage } = useGarage();
+  const {
+    mettreAJourRoadMap, mettreAJourPhotoInventaire, marquerPret,
+    mettreAJourCommercial, mettreAJourReservoir, marquerDisponible,
+  } = useInventaire();
+  const { marquerPret: marquerPretGarage, supprimerItem, ajouterDocument, supprimerDocument } = useGarage();
+  const { clients } = useClients();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeIcon = v.type === 'eau' ? '💧' : v.type === 'client' ? '🔧' : '🏷️';
+  const montrerCommercial = v.type === 'eau' || v.type === 'detail';
+  const etatCommercial = v.etatCommercial ?? 'non-vendu';
+  const clientLie = (v as any).clientId ? clients.find((c: any) => c.id === (v as any).clientId) : null;
 
-  // ── Réservoir state ──
+  // ── State ──
   const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
   const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
   const [reservoirSelectionne, setReservoirSelectionne] = useState('');
   const [savingReservoir, setSavingReservoir] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [confirmerRetour, setConfirmerRetour] = useState(false);
 
   useEffect(() => {
     if (v.type !== 'eau') return;
@@ -1648,6 +1660,7 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
     }
   }, [v.id, v.type, v.aUnReservoir, v.reservoirId]);
 
+  // ── Handlers ──
   const handleAssignerReservoir = async () => {
     if (!reservoirSelectionne) return;
     setSavingReservoir(true);
@@ -1656,23 +1669,60 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
       await mettreAJourReservoir(v.id, true, reservoirSelectionne);
     } finally { setSavingReservoir(false); }
   };
-
   const handleMarquerAvecReservoir = async () => {
     setSavingReservoir(true);
     try {
       await mettreAJourReservoir(v.id, true, null);
-      if (v.jobId) {
-        await supabase.from('prod_items').update({ a_un_reservoir: true, reservoir_id: null }).eq('inventaire_id', v.id);
-      }
+      if (v.jobId) await supabase.from('prod_items').update({ a_un_reservoir: true, reservoir_id: null }).eq('inventaire_id', v.id);
     } finally { setSavingReservoir(false); }
   };
-
   const handleRetirerReservoir = async () => {
     setSavingReservoir(true);
     try {
       if (v.reservoirId) await reservoirService.desinstallerDeInventaire(v.reservoirId, v.id);
       await mettreAJourReservoir(v.id, false, null);
     } finally { setSavingReservoir(false); }
+  };
+
+  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fichier = e.target.files?.[0];
+    if (!fichier) return;
+    if (fichier.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
+    setUploadingPhoto(true);
+    try {
+      if (v.photoUrl) await photoService.supprimerPhoto(v.photoUrl);
+      const url = await photoService.uploaderPhoto(fichier, 'items');
+      await mettreAJourPhotoInventaire(v.id, url);
+    } catch { alert("Erreur lors de l'upload"); }
+    finally { setUploadingPhoto(false); }
+    e.target.value = '';
+  };
+  const handleSupprimerPhoto = async () => {
+    if (!v.photoUrl) return;
+    await photoService.supprimerPhoto(v.photoUrl);
+    await mettreAJourPhotoInventaire(v.id, null);
+  };
+
+  const changerEtatCommercial = async (val: typeof etatCommercial) => {
+    await mettreAJourCommercial(v.id, val as any, v.dateLivraisonPlanifiee ?? null, val === 'non-vendu' ? null : (v.clientAcheteur ?? null));
+  };
+  const changerClientAcheteur = async (nom: string) => {
+    await mettreAJourCommercial(v.id, etatCommercial as any, v.dateLivraisonPlanifiee ?? null, nom || null);
+  };
+  const changerDateLivraison = async (date: string) => {
+    await mettreAJourCommercial(v.id, etatCommercial as any, date || null, v.clientAcheteur ?? null);
+  };
+
+  const handleRetourInventaire = async () => {
+    await marquerDisponible(v.id);
+    if (item) await supprimerItem(item.id);
+    onClose();
+  };
+
+  const handleMarquerPret = async () => {
+    if (item) await marquerPretGarage(v.id);
+    else await marquerPret(v.id, true);
+    onClose();
   };
 
   const formatDateRelative = (dateStr: string) => {
@@ -1684,16 +1734,10 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
     return 'quelques min';
   };
 
-  const handleMarquerPret = async () => {
-    if (item) {
-      await marquerPretGarage(v.id);
-    } else {
-      await marquerPret(v.id, true);
-    }
-    onClose();
-  };
+  const SECTION_LABEL = { fontSize: 11, fontWeight: 700 as const, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 8 };
 
   return (
+    <>
     <div onClick={e => e.stopPropagation()} style={{
       position: 'fixed', right: 0, top: 0, width: 420, height: '100dvh',
       background: '#1a1814', borderLeft: '2px solid rgba(255,255,255,0.1)',
@@ -1705,9 +1749,7 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 24 }}>{typeIcon}</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 800, color: typeColor }}>
-              #{v.numero}
-            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 800, color: typeColor }}>#{v.numero}</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
               {item?.slotId && `Slot ${item.slotId}`}
               {item?.slotId && item?.dateEntreeSlot && ` · depuis ${formatDateRelative(item.dateEntreeSlot)}`}
@@ -1716,152 +1758,132 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
             </div>
           </div>
           <button onClick={onClose}
-            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
-              padding: '6px 10px', cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
-              fontSize: 16, fontWeight: 700 }}
+            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 16, fontWeight: 700 }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
           >✕</button>
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 6 }}>
-          {v.marque} {v.modele} {v.annee ? `(${v.annee})` : ''} — {v.variante ?? v.type}
-          {v.nomClient && <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {v.nomClient}</span>}
+          {v.marque} {v.modele} {v.annee ? `(${v.annee})` : ''}{v.variante ? ` — ${v.variante}` : ''}
+          {v.nomClient && <span style={{ color: 'rgba(255,255,255,0.4)' }}> — {v.nomClient}</span>}
         </div>
-
-        {/* Badges */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-          {v.statut === 'en-production' && item?.slotId && (
-            <span style={{ fontSize: 11, background: '#f9731620', color: '#f97316', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>🔨 En garage</span>
-          )}
-          {v.statut === 'en-production' && !item?.slotId && (
-            <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⏳ En attente</span>
-          )}
-          {v.estPret && (
-            <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>✅ Prêt</span>
-          )}
+          {v.statut === 'en-production' && item?.slotId && <span style={{ fontSize: 11, background: '#f9731620', color: '#f97316', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>🔨 En garage</span>}
+          {v.statut === 'en-production' && !item?.slotId && <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⏳ En attente</span>}
+          {v.estPret && <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>✅ Prêt</span>}
           {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
-            <span style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 5, fontWeight: 700,
-              background: v.etatCommercial === 'vendu' ? '#22c55e20' : v.etatCommercial === 'location' ? '#7c3aed20' : '#f59e0b20',
-              color: v.etatCommercial === 'vendu' ? '#4ade80' : v.etatCommercial === 'location' ? '#a78bfa' : '#fbbf24',
-            }}>
-              {v.etatCommercial === 'vendu' ? `✓ Vendu${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`
-                : v.etatCommercial === 'location' ? `🔑 Location${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`
-                : `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`}
+            <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5, fontWeight: 700, background: v.etatCommercial === 'vendu' ? '#22c55e20' : v.etatCommercial === 'location' ? '#7c3aed20' : '#f59e0b20', color: v.etatCommercial === 'vendu' ? '#4ade80' : v.etatCommercial === 'location' ? '#a78bfa' : '#fbbf24' }}>
+              {v.etatCommercial === 'vendu' ? `✓ Vendu${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` : v.etatCommercial === 'location' ? `🔑 Location${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` : `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`}
             </span>
           )}
-          {v.aUnReservoir && (
-            <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>💧 TANK</span>
-          )}
-          {!v.aUnReservoir && v.type === 'eau' && (
-            <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⚠️ SANS TANK</span>
-          )}
+          {v.aUnReservoir && <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>💧 TANK</span>}
+          {!v.aUnReservoir && v.type === 'eau' && <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⚠️ SANS TANK</span>}
         </div>
       </div>
 
       {/* Zone scrollable */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        {/* Photo */}
-        {v.photoUrl && (
-          <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <img src={v.photoUrl} alt={`Photo ${v.numero}`}
-              style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+
+        {/* ── Photo (upload/changer/supprimer) ── */}
+        <div style={{ marginBottom: 20 }}>
+          {v.photoUrl ? (
+            <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <img src={v.photoUrl} alt={`Photo ${v.numero}`} style={{ width: '100%', height: 190, objectFit: 'cover', display: 'block' }} />
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+                <label style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(0,0,0,0.65)', color: 'white', fontSize: 11, fontWeight: 600 }}>
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
+                  📷 Changer
+                </label>
+                <button onClick={handleSupprimerPhoto}
+                  style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(239,68,68,0.8)', color: 'white', border: 'none', fontSize: 11, fontWeight: 600 }}>
+                  🗑
+                </button>
+              </div>
+              {uploadingPhoto && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>
+                  ⏳ Upload en cours...
+                </div>
+              )}
+            </div>
+          ) : (
+            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px', borderRadius: 10, border: '2px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = typeColor; (e.currentTarget as HTMLLabelElement).style.color = typeColor; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = 'rgba(255,255,255,0.15)'; (e.currentTarget as HTMLLabelElement).style.color = 'rgba(255,255,255,0.4)'; }}
+            >
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
+              <span style={{ fontSize: 28 }}>📷</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{uploadingPhoto ? '⏳ Upload en cours...' : 'Ajouter une photo'}</span>
+            </label>
+          )}
+        </div>
+
+        {/* ── Statut commercial (eau/détail seulement) ── */}
+        {montrerCommercial && (
+          <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={SECTION_LABEL}>Statut commercial</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: etatCommercial !== 'non-vendu' ? 10 : 0 }}>
+              {([
+                { val: 'non-vendu', label: 'Non vendu', icon: '○', color: '#94a3b8' },
+                { val: 'reserve', label: 'Réservé', icon: '🔒', color: '#f59e0b' },
+                { val: 'vendu', label: 'Vendu', icon: '✓', color: '#22c55e' },
+                { val: 'location', label: 'Location', icon: '🔑', color: '#7c3aed' },
+              ] as const).map(({ val, label, icon, color }) => (
+                <button key={val} onClick={() => changerEtatCommercial(val)}
+                  style={{ flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer', border: etatCommercial === val ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.12)', background: etatCommercial === val ? `${color}20` : 'rgba(255,255,255,0.04)', color: etatCommercial === val ? color : 'rgba(255,255,255,0.4)', fontWeight: etatCommercial === val ? 700 : 500, fontSize: 11, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 14 }}>{icon}</span>{label}
+                </button>
+              ))}
+            </div>
+            {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input type="text" defaultValue={v.clientAcheteur ?? ''} onBlur={e => changerClientAcheteur(e.target.value)}
+                  placeholder="Nom du client (optionnel)"
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: '#1a1814', color: 'white', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+                <input type="date" defaultValue={v.dateLivraisonPlanifiee ?? ''} onBlur={e => changerDateLivraison(e.target.value)}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: '#1a1814', color: 'white', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* Statut Commercial */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            Statut commercial
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['non-vendu', 'reserve', 'vendu', 'location'] as const).map(etat => {
-              const selected = (v.etatCommercial ?? 'non-vendu') === etat;
-              const cfg = {
-                'non-vendu': { label: 'Non vendu', icon: '○', color: '#94a3b8' },
-                'reserve': { label: 'Réservé', icon: '🔒', color: '#f59e0b' },
-                'vendu': { label: 'Vendu', icon: '✓', color: '#22c55e' },
-                'location': { label: 'Location', icon: '🔑', color: '#7c3aed' },
-              }[etat];
-              return (
-                <button key={etat}
-                  onClick={() => mettreAJourCommercial(v.id, etat, v.dateLivraisonPlanifiee ?? null, v.clientAcheteur ?? null)}
-                  style={{
-                    flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer',
-                    border: selected ? `2px solid ${cfg.color}` : '1px solid rgba(255,255,255,0.12)',
-                    background: selected ? `${cfg.color}20` : 'rgba(255,255,255,0.04)',
-                    color: selected ? cfg.color : 'rgba(255,255,255,0.4)',
-                    fontWeight: selected ? 700 : 500, fontSize: 11,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  }}
-                >
-                  <span style={{ fontSize: 14 }}>{cfg.icon}</span>
-                  {cfg.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Réservoir (camions eau seulement) */}
+        {/* ── Réservoir (eau seulement) ── */}
         {v.type === 'eau' && (
           <div style={{ marginBottom: 20, padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-              💧 Réservoir
-            </div>
+            <div style={SECTION_LABEL}>💧 Réservoir</div>
             {v.aUnReservoir ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, background: '#22c55e25', color: '#4ade80', padding: '4px 12px', borderRadius: 8, fontWeight: 700 }}>✅ Réservoir installé</span>
-                  {reservoirInstalle && (
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
-                      #{reservoirInstalle.numero} — {reservoirInstalle.type}
-                    </span>
-                  )}
+                  {reservoirInstalle && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>#{reservoirInstalle.numero} — {reservoirInstalle.type}</span>}
                 </div>
                 <button onClick={handleRetirerReservoir} disabled={savingReservoir}
-                  style={{ padding: '7px 14px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
-                    border: '1px solid #ef444460', background: 'transparent', color: '#ef4444',
-                    fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
+                  style={{ padding: '7px 14px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer', border: '1px solid #ef444460', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
                   {savingReservoir ? 'En cours...' : 'Retirer le réservoir'}
                 </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
-                    Assigner un réservoir de l'inventaire
-                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Assigner un réservoir de l'inventaire</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <select value={reservoirSelectionne} onChange={e => setReservoirSelectionne(e.target.value)}
-                      style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.2)',
-                        background: '#1a1814', color: reservoirSelectionne ? 'white' : 'rgba(255,255,255,0.4)',
-                        fontSize: 12, outline: 'none' }}>
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.2)', background: '#1a1814', color: reservoirSelectionne ? 'white' : 'rgba(255,255,255,0.4)', fontSize: 12, outline: 'none' }}>
                       <option value="">— Choisir un réservoir —</option>
-                      {reservoirsDisponibles.map(r => (
-                        <option key={r.id} value={r.id}>#{r.numero} ({r.type})</option>
-                      ))}
+                      {reservoirsDisponibles.map(r => <option key={r.id} value={r.id}>#{r.numero} ({r.type})</option>)}
                     </select>
                     <button onClick={handleAssignerReservoir} disabled={!reservoirSelectionne || savingReservoir}
-                      style={{ padding: '7px 14px', borderRadius: 7, border: 'none',
-                        cursor: !reservoirSelectionne || savingReservoir ? 'not-allowed' : 'pointer',
-                        background: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.1)' : '#f97316',
-                        color: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.3)' : 'white',
-                        fontWeight: 700, fontSize: 12 }}>
+                      style={{ padding: '7px 14px', borderRadius: 7, border: 'none', cursor: !reservoirSelectionne || savingReservoir ? 'not-allowed' : 'pointer', background: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.1)' : '#f97316', color: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.3)' : 'white', fontWeight: 700, fontSize: 12 }}>
                       {savingReservoir ? '...' : 'Assigner'}
                     </button>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>ou</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>ou</span>
                   <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
                 </div>
                 <button onClick={handleMarquerAvecReservoir} disabled={savingReservoir}
-                  style={{ padding: '8px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
-                    border: '1px solid rgba(255,255,255,0.15)', background: 'transparent',
-                    color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600,
-                    opacity: savingReservoir ? 0.5 : 1 }}>
+                  style={{ padding: '8px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer', border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
                   {savingReservoir ? 'En cours...' : '✅ Marquer comme ayant un réservoir'}
                 </button>
               </div>
@@ -1869,63 +1891,159 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
           </div>
         )}
 
-        {/* Road Map Editor */}
+        {/* ── Road Map ── */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            🗺 Plan de production
-          </div>
-          <RoadMapEditor
-            vehicule={v}
-            onSaved={async (updated) => {
-              await mettreAJourRoadMap(v.id, updated.roadMap ?? []);
-            }}
-          />
+          <div style={SECTION_LABEL}>🗺 Plan de production</div>
+          <RoadMapEditor vehicule={v} onSaved={async (updated) => { await mettreAJourRoadMap(v.id, updated.roadMap ?? []); }} />
         </div>
 
-        {/* Informations */}
+        {/* ── Informations ── */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            Informations
-          </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.8 }}>
-            {v.variante && <div><strong>Variante:</strong> {v.variante}</div>}
-            {v.marque && <div><strong>Marque:</strong> {v.marque}</div>}
-            {v.modele && <div><strong>Modèle:</strong> {v.modele}</div>}
-            {v.annee && <div><strong>Année:</strong> {v.annee}</div>}
-            {v.nomClient && <div><strong>Client:</strong> {v.nomClient}</div>}
-            {v.telephone && <div><strong>Téléphone:</strong> {v.telephone}</div>}
-            {v.descriptionTravail && <div><strong>Travaux:</strong> {v.descriptionTravail}</div>}
+          <div style={SECTION_LABEL}>Informations</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.9 }}>
+            {v.variante && <div><span style={{ fontWeight: 600 }}>Variante:</span> {v.variante}</div>}
+            {v.marque && <div><span style={{ fontWeight: 600 }}>Marque:</span> {v.marque}</div>}
+            {v.modele && <div><span style={{ fontWeight: 600 }}>Modèle:</span> {v.modele}</div>}
+            {v.annee && <div><span style={{ fontWeight: 600 }}>Année:</span> {v.annee}</div>}
+            {v.nomClient && <div><span style={{ fontWeight: 600 }}>Client:</span> {v.nomClient}</div>}
+            {v.telephone && <div><span style={{ fontWeight: 600 }}>Téléphone:</span> {v.telephone}</div>}
+            {(v as any).vehicule && <div><span style={{ fontWeight: 600 }}>Véhicule:</span> {(v as any).vehicule}</div>}
+            {v.descriptionTravail && <div><span style={{ fontWeight: 600 }}>Description:</span> {v.descriptionTravail}</div>}
           </div>
         </div>
+
+        {/* ── Fiche client ── */}
+        {clientLie && (
+          <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#1d4ed815', border: '1px solid #1d4ed830' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Fiche client</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{clientLie.nom}</div>
+              {clientLie.telephone && <div>📞 {clientLie.telephone}</div>}
+              {clientLie.email && <div>✉️ {clientLie.email}</div>}
+              {clientLie.adresse && <div>📍 {clientLie.adresse}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* ── Documents ── */}
+        {item && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ ...SECTION_LABEL, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>📎 Documents</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>{item.documents?.length ?? 0}/3</span>
+            </div>
+            {(item.documents ?? []).map(doc => (
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>📄</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{doc.taille}</div>
+                </div>
+                <button onClick={() => setPdfOuvert({ nom: doc.nom, base64: doc.base64 })}
+                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #60a5fa', background: 'transparent', color: '#60a5fa', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  👁 Voir
+                </button>
+                <button onClick={() => supprimerDocument(item.id, doc.id)}
+                  style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  🗑
+                </button>
+              </div>
+            ))}
+            {(item.documents?.length ?? 0) < 3 && (
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1.5px dashed rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#60a5fa'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = 'rgba(255,255,255,0.15)'; }}
+              >
+                <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const base64 = reader.result as string;
+                      const tailleKB = Math.round(file.size / 1024);
+                      const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
+                      const doc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
+                      ajouterDocument(item.id, doc);
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = '';
+                  }}
+                />
+                + Ajouter un document PDF
+              </label>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Actions fixes en bas */}
       <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Actions de slot (seulement si le camion est dans un slot) */}
         {item?.slotId && onRetirerAttente && (
           <button onClick={() => { onRetirerAttente(item.id); onClose(); }}
-            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none',
-              background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ⏸ Mettre en attente — libérer le slot
           </button>
         )}
         {item?.slotId && onTerminerEtAvancer && (
           <button onClick={() => { onTerminerEtAvancer(item.id); onClose(); }}
-            style={{ width: '100%', padding: '11px', borderRadius: 8,
-              border: '1px solid #22c55e', background: 'transparent',
-              color: '#22c55e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ width: '100%', padding: '11px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ✓ Travail terminé — libérer le slot
           </button>
         )}
-        {/* Marquer comme prêt */}
         {!v.estPret && v.statut !== 'archive' && (
           <button onClick={handleMarquerPret}
-            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none',
-              background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ✅ Marquer comme prêt
           </button>
         )}
+        {v.estPret && (
+          <button onClick={() => marquerPret(v.id, false)}
+            style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            ↩ Retirer le statut Prêt
+          </button>
+        )}
+        {item && v.statut !== 'archive' && (
+          !confirmerRetour ? (
+            <button onClick={() => setConfirmerRetour(true)}
+              style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #60a5fa', background: 'transparent', color: '#60a5fa', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              ↩ Retourner à l'inventaire
+            </button>
+          ) : (
+            <div style={{ background: '#1d4ed815', border: '1px solid #1d4ed840', borderRadius: 8, padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#60a5fa', marginBottom: 6 }}>Retourner ce véhicule à l'inventaire?</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}>Le job sera supprimé et le véhicule redeviendra disponible.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setConfirmerRetour(false)}
+                  style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                  Annuler
+                </button>
+                <button onClick={handleRetourInventaire}
+                  style={{ flex: 1, padding: '8px', borderRadius: 6, border: 'none', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
+                  ↩ Confirmer
+                </button>
+              </div>
+            </div>
+          )
+        )}
       </div>
     </div>
+    {/* Modal PDF plein écran */}
+    {pdfOuvert && (
+      <div onClick={() => setPdfOuvert(null)} style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#1a1814', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#111009', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>📄</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{pdfOuvert.nom}</span>
+            </div>
+            <button onClick={() => setPdfOuvert(null)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Fermer</button>
+          </div>
+          <iframe src={pdfOuvert.base64} style={{ flex: 1, width: '100%', border: 'none', background: 'white' }} title={pdfOuvert.nom} />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
