@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
+import { supabase } from '../lib/supabase';
 import { EauIcon } from './EauIcon';
 import { STATIONS } from '../data/stations';
 import { STATION_TO_GARAGE, SLOT_TO_GARAGE, GARAGE_TO_ROAD_MAP_STATIONS } from '../data/garageData';
@@ -228,7 +229,7 @@ export function PlancherView() {
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 12 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'peinture')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onSetPriorite={handleSetPriorite} />
+        <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
 
       {modalState?.type === 'assign' && (
@@ -1111,6 +1112,299 @@ function ModalRoadMapSlot({ slot, vehicule, position, onAssigner, onClose }: {
       <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
         Annuler
       </button>
+    </div>
+  );
+}
+
+// ── PeintureStationBlock ──────────────────────────────────────────────────────
+// La station Peinture gère exclusivement des réservoirs (prod_reservoirs),
+// pas des camions. Chaque slot peut accueillir un réservoir en peinture.
+
+interface ReservoirSlotInfo {
+  id: string;
+  numero: string;
+  type: string;
+}
+
+type PeintureModal =
+  | { type: 'assigner'; slot: Slot; position: { x: number; y: number } }
+  | { type: 'occupe';   slot: Slot; reservoir: ReservoirSlotInfo; position: { x: number; y: number } }
+  | null;
+
+function PeintureStationBlock({
+  station,
+  style,
+}: {
+  station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
+  style?: React.CSSProperties;
+}) {
+  const [peintureSlots, setPeintureSlots] = useState<Record<string, ReservoirSlotInfo>>({});
+  const [dispos, setDispos] = useState<ReservoirSlotInfo[]>([]);
+  const [modal, setModal] = useState<PeintureModal>(null);
+
+  const charger = async () => {
+    const { data: enPeinture } = await supabase
+      .from('prod_reservoirs')
+      .select('id, numero, type, slot_id')
+      .eq('etat', 'en-peinture');
+
+    const map: Record<string, ReservoirSlotInfo> = {};
+    (enPeinture ?? []).forEach((r: any) => {
+      if (r.slot_id) map[r.slot_id] = { id: r.id, numero: r.numero, type: r.type };
+    });
+    setPeintureSlots(map);
+
+    const { data: disponibles } = await supabase
+      .from('prod_reservoirs')
+      .select('id, numero, type')
+      .eq('etat', 'disponible')
+      .order('numero', { ascending: true });
+    setDispos((disponibles ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type })));
+  };
+
+  useEffect(() => { charger(); }, []);
+
+  const handleSlotClick = (e: React.MouseEvent, slot: Slot) => {
+    e.stopPropagation();
+    if (slot.futur) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const MODAL_W = 300;
+    const MODAL_H = 360;
+    const MARGIN = 10;
+    let x = rect.right + MARGIN;
+    let y = rect.top;
+    if (x + MODAL_W > window.innerWidth) x = rect.left - MODAL_W - MARGIN;
+    if (x < MARGIN) x = MARGIN;
+    if (y + MODAL_H > window.innerHeight) y = window.innerHeight - MODAL_H - MARGIN;
+    if (y < MARGIN) y = MARGIN;
+
+    const reservoir = peintureSlots[slot.id];
+    if (reservoir) {
+      setModal({ type: 'occupe', slot, reservoir, position: { x, y } });
+    } else {
+      setModal({ type: 'assigner', slot, position: { x, y } });
+    }
+  };
+
+  const assignerReservoir = async (reservoirId: string, slotId: string) => {
+    await supabase
+      .from('prod_reservoirs')
+      .update({ etat: 'en-peinture', slot_id: slotId, updated_at: new Date().toISOString() })
+      .eq('id', reservoirId);
+    await charger();
+    setModal(null);
+  };
+
+  const retirerReservoir = async (reservoirId: string) => {
+    await supabase
+      .from('prod_reservoirs')
+      .update({ etat: 'disponible', slot_id: null, updated_at: new Date().toISOString() })
+      .eq('id', reservoirId);
+    await charger();
+    setModal(null);
+  };
+
+  const PEINTURE_COLOR = '#94a3b8';
+
+  return (
+    <div
+      onClick={() => setModal(null)}
+      style={{
+        width: '100%', height: '92%',
+        background: '#161410',
+        border: `1.5px solid ${PEINTURE_COLOR}40`,
+        borderRadius: 8,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        ...style,
+      }}
+    >
+      {/* En-tête */}
+      <div style={{
+        padding: '6px 12px',
+        background: `${PEINTURE_COLOR}18`,
+        borderBottom: `1px solid ${PEINTURE_COLOR}30`,
+        fontFamily: 'monospace',
+        fontSize: 'clamp(9px, 1vw, 13px)',
+        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: PEINTURE_COLOR, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span>{station.label}</span>
+        <span style={{
+          fontSize: 'clamp(7px, 0.75vw, 9px)', color: `${PEINTURE_COLOR}88`,
+          fontWeight: 500, letterSpacing: '0.05em',
+        }}>
+          RÉSERVOIRS
+        </span>
+      </div>
+
+      {/* Grille des slots */}
+      <div style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${station.gridCols}, 1fr)`,
+        gap: '6px', padding: '8px',
+        minHeight: 0, overflow: 'auto',
+      }}>
+        {station.slots.map((slot) => {
+          const reservoir = peintureSlots[slot.id];
+          return (
+            <div
+              key={slot.id}
+              onClick={(e) => handleSlotClick(e, slot)}
+              style={{
+                background: reservoir ? `${PEINTURE_COLOR}18` : '#1c1a14',
+                border: reservoir
+                  ? `2px solid ${PEINTURE_COLOR}`
+                  : slot.futur
+                  ? '1px dashed rgba(255,255,255,0.08)'
+                  : '1px dashed rgba(255,255,255,0.1)',
+                borderRadius: 6, padding: '8px 10px',
+                cursor: slot.futur ? 'default' : 'pointer',
+                display: 'flex', flexDirection: 'column', gap: 4,
+                minHeight: 0, height: '100%', boxSizing: 'border-box',
+                transition: 'background 0.15s, transform 0.1s',
+                opacity: slot.futur ? 0.4 : 1,
+              }}
+              onMouseEnter={(e) => { if (!slot.futur) e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: 'clamp(10px, 1.1vw, 14px)',
+                fontWeight: 700, color: '#ff5533', lineHeight: 1,
+              }}>
+                #{slot.id}
+              </span>
+
+              {slot.futur ? (
+                <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.3)', marginTop: 'auto', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Futur
+                </span>
+              ) : reservoir ? (
+                <>
+                  <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: PEINTURE_COLOR, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    🎨 RÉSERVOIR
+                  </div>
+                  <span style={{ fontFamily: 'monospace', fontSize: 'clamp(13px, 1.5vw, 18px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
+                    #{reservoir.numero}
+                  </span>
+                  <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.3 }}>
+                    {reservoir.type}
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.18)', marginTop: 'auto', textAlign: 'center' }}>
+                  + Réservoir
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal: assigner un réservoir au slot */}
+      {modal?.type === 'assigner' && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 200,
+            background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}55`,
+            borderRadius: 10, padding: 16, width: 290,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)', maxHeight: '70vh',
+            display: 'flex', flexDirection: 'column',
+          }}
+        >
+          <div style={{ fontFamily: 'monospace', color: PEINTURE_COLOR, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+            🎨 Slot {modal.slot.id} — Peinture
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+            Choisir un réservoir à peindre
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {dispos.length === 0 ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>
+                Aucun réservoir disponible
+              </div>
+            ) : (
+              dispos.map(r => (
+                <div
+                  key={r.id}
+                  onClick={() => assignerReservoir(r.id, modal.slot.id)}
+                  style={{
+                    padding: '10px 12px', borderRadius: 7,
+                    background: `${PEINTURE_COLOR}12`,
+                    border: `1px solid ${PEINTURE_COLOR}30`,
+                    cursor: 'pointer', transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${PEINTURE_COLOR}22`)}
+                  onMouseLeave={e => (e.currentTarget.style.background = `${PEINTURE_COLOR}12`)}
+                >
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, color: PEINTURE_COLOR, fontSize: 13 }}>
+                    #{r.numero}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{r.type}</div>
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => setModal(null)}
+            style={{ width: '100%', marginTop: 10, padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {/* Modal: slot occupé par un réservoir */}
+      {modal?.type === 'occupe' && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: modal.position.y, left: modal.position.x, zIndex: 200,
+            background: '#1a1814', border: `1px solid ${PEINTURE_COLOR}`,
+            borderRadius: 10, padding: 16, width: 280,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          }}
+        >
+          <div style={{ fontFamily: 'monospace', color: PEINTURE_COLOR, fontWeight: 700, marginBottom: 8, fontSize: 13 }}>
+            🎨 Slot {modal.slot.id} — En peinture
+          </div>
+          <div style={{
+            padding: '10px 12px', borderRadius: 8,
+            background: `${PEINTURE_COLOR}12`,
+            border: `1px solid ${PEINTURE_COLOR}30`,
+            marginBottom: 14,
+          }}>
+            <div style={{ fontFamily: 'monospace', fontWeight: 900, color: 'white', fontSize: 16 }}>
+              #{modal.reservoir.numero}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+              {modal.reservoir.type}
+            </div>
+          </div>
+          <button
+            onClick={() => retirerReservoir(modal.reservoir.id)}
+            style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#f59e0b', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+          >
+            ↩ Retirer du slot
+          </button>
+          <button
+            onClick={() => retirerReservoir(modal.reservoir.id)}
+            style={{ width: '100%', marginBottom: 8, padding: '10px', background: '#22c55e', border: 'none', borderRadius: 7, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+          >
+            ✓ Peinture terminée
+          </button>
+          <button
+            onClick={() => setModal(null)}
+            style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}
+          >
+            Fermer
+          </button>
+        </div>
+      )}
     </div>
   );
 }
