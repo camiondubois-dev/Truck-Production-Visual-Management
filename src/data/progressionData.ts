@@ -6,7 +6,7 @@ export const STATIONS: Station[] = [
   { id: 'sous-traitants', label: 'Sous-traitants', labelCourt: 'S-Trait.', color: '#a855f7', ordre: 2 },
   { id: 'mecanique-moteur', label: 'Mécanique moteur', labelCourt: 'Méc. Mot.', color: '#3b82f6', ordre: 3 },
   { id: 'mecanique-generale', label: 'Mécanique générale', labelCourt: 'Méc. Gén.', color: '#3b82f6', ordre: 4 },
-  { id: 'soudure-eau', label: 'Soudure camions à eau', labelCourt: 'Soudure Eau', color: '#f97316', ordre: 5 },
+  { id: 'soudure-eau', label: 'Soudure spécialisée', labelCourt: 'Soud. Spéc.', color: '#f97316', ordre: 5 },
   { id: 'peinture', label: 'Peinture', labelCourt: 'Peinture', color: '#6b7280', ordre: 6 },
   { id: 'mecanique-electrique', label: 'Mécanique électrique', labelCourt: 'Méc. Élec.', color: '#3b82f6', ordre: 7 },
   { id: 'livraison', label: 'Livraison', labelCourt: 'Livraison', color: '#22c55e', ordre: 8 },

@@ -486,7 +486,7 @@ function Etape2Eau({ onSelect }: { onSelect: (variante: 'Neuf' | 'Usagé') => vo
           variante: 'Neuf' as const, icon: '✨', color: '#f97316',
           pipeline: [
             'Sous-traitants (optionnel)',
-            'Soudure spécialisée camions à eau',
+            'Soudure spécialisée',
             'Peinture',
             'Mécanique électrique',
             'Livraison',

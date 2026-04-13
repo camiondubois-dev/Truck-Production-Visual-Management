@@ -20,7 +20,7 @@ const DEPARTEMENTS_CONFIG: Record<string, DepartementConfig> = {
   'mecanique-generale':  { label: 'Mécanique générale',    icon: '🔧', color: '#3b82f6', cols: 2, slots: ['9A', '10A', '9B', '10B'] },
   'mecanique-moteur':    { label: 'Mécanique moteur',      icon: '⚙️', color: '#3b82f6', cols: 3, slots: ['11', '12', '13', '16', '15', '14'] },
   'sous-traitants':      { label: 'Sous-traitants',        icon: '🤝', color: '#a855f7', cols: 2, slots: ['S-01', 'S-02', 'S-03', 'S-04', 'S-05', 'S-06'] },
-  'soudure-specialisee': { label: 'Soudure camions à eau', icon: '💧', color: '#f97316', cols: 2, slots: ['5', '6', '4', '3'] },
+  'soudure-specialisee': { label: 'Soudure spécialisée', icon: '⚡', color: '#f97316', cols: 2, slots: ['5', '6', '4', '3'] },
   'peinture':            { label: 'Peinture',              icon: '🎨', color: '#6b7280', cols: 2, slots: ['7', '8', '2', '1'] },
 };
 

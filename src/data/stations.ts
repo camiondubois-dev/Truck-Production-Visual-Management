@@ -58,7 +58,7 @@ export const STATIONS: Station[] = [
   },
   {
     id: 'soudure-specialisee',
-    label: 'Soudure Spécialisée Camions à Eau',
+    label: 'Soudure spécialisée',
     color: '#ff6b35',
     slots: [
       { id: '5', label: '5' },
