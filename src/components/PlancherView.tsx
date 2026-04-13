@@ -123,7 +123,13 @@ export function PlancherView() {
     if (tempJob) {
       setModalState({ type: 'job-occupe', job: tempJob, slot, position });
     } else if (item) {
-      setModalState({ type: 'occupe', item, slot, position });
+      // Si le camion a un inventaireId → ouvrir le panneau détail (comme VueAsana)
+      if (item.inventaireId) {
+        setModalState({ type: 'detail', vehiculeId: item.inventaireId });
+      } else {
+        // Fallback pour items legacy sans inventaire
+        setModalState({ type: 'occupe', item, slot, position });
+      }
     } else if (!slot.futur) {
       setModalState({ type: 'assign', slot, position });
     }
@@ -355,6 +361,9 @@ export function PlancherView() {
             vehicule={detailVehicule}
             item={detailItem}
             onClose={() => setModalState(null)}
+            onRetirerAttente={retirerVersAttente}
+            onTerminerEtAvancer={terminerEtAvancer}
+            onTerminerItem={terminerItem}
           />
         );
       })()}
@@ -1579,63 +1588,83 @@ function PeintureStationBlock({
 
 // ── PanneauDetailPlancher ─────────────────────────────────────────────────────
 
-function PanneauDetailPlancher({ vehicule: v, item, onClose }: {
+function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, onTerminerEtAvancer, onTerminerItem }: {
   vehicule: VehiculeInventaire;
   item?: Item;
   onClose: () => void;
+  onRetirerAttente?: (itemId: string) => void;
+  onTerminerEtAvancer?: (itemId: string) => void;
+  onTerminerItem?: (itemId: string) => void;
 }) {
-  const { mettreAJourRoadMap, marquerPret } = useInventaire();
+  const { mettreAJourRoadMap, marquerPret, mettreAJourCommercial } = useInventaire();
+  const { marquerPret: marquerPretGarage } = useGarage();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+  const typeIcon = v.type === 'eau' ? '💧' : v.type === 'client' ? '🔧' : '🏷️';
+
+  const formatDateRelative = (dateStr: string) => {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    if (diffDays > 0) return `${diffDays}j`;
+    if (diffHours > 0) return `${diffHours}h`;
+    return 'quelques min';
+  };
+
+  const handleMarquerPret = async () => {
+    if (item) {
+      await marquerPretGarage(v.id);
+    } else {
+      await marquerPret(v.id, true);
+    }
+    onClose();
+  };
 
   return (
     <div onClick={e => e.stopPropagation()} style={{
-      position: 'fixed', right: 0, top: 0, width: 400, height: '100dvh',
+      position: 'fixed', right: 0, top: 0, width: 420, height: '100dvh',
       background: '#1a1814', borderLeft: '2px solid rgba(255,255,255,0.1)',
-      boxShadow: '-8px 0 32px rgba(0,0,0,0.6)', overflowY: 'auto', zIndex: 200,
-      color: 'white',
+      boxShadow: '-8px 0 32px rgba(0,0,0,0.6)', zIndex: 200,
+      color: 'white', display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ padding: 20 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <div style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: 800, color: typeColor }}>
+      {/* Header fixe */}
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 24 }}>{typeIcon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 800, color: typeColor }}>
               #{v.numero}
             </div>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
-              {v.marque} {v.modele} {v.annee ? `(${v.annee})` : ''}
-              {v.nomClient && <span> — {v.nomClient}</span>}
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+              {item?.slotId && `Slot ${item.slotId}`}
+              {item?.slotId && item?.dateEntreeSlot && ` · depuis ${formatDateRelative(item.dateEntreeSlot)}`}
+              {!item?.slotId && v.statut === 'en-production' && 'En production'}
+              {!item?.slotId && v.statut === 'disponible' && 'Disponible'}
             </div>
           </div>
           <button onClick={onClose}
             style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
-              padding: '8px 12px', cursor: 'pointer', color: 'rgba(255,255,255,0.6)',
+              padding: '6px 10px', cursor: 'pointer', color: 'rgba(255,255,255,0.5)',
               fontSize: 16, fontWeight: 700 }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
           >✕</button>
         </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 6 }}>
+          {v.marque} {v.modele} {v.annee ? `(${v.annee})` : ''} — {v.variante ?? v.type}
+          {v.nomClient && <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {v.nomClient}</span>}
+        </div>
 
-        {/* Photo */}
-        {v.photoUrl && (
-          <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <img src={v.photoUrl} alt={`Photo ${v.numero}`}
-              style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
-          </div>
-        )}
-
-        {/* Badges statut */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
-          {item?.slotId && (
-            <span style={{ fontSize: 12, background: '#1d4ed820', color: '#60a5fa', padding: '4px 10px', borderRadius: 6, fontWeight: 700, border: '1px solid #1d4ed840' }}>
-              Slot {item.slotId}
-            </span>
+        {/* Badges */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {v.statut === 'en-production' && (
+            <span style={{ fontSize: 11, background: '#f9731620', color: '#f97316', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>🔨 En garage</span>
           )}
           {v.estPret && (
-            <span style={{ fontSize: 12, background: '#22c55e20', color: '#4ade80', padding: '4px 10px', borderRadius: 6, fontWeight: 700 }}>✅ Prêt</span>
+            <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>✅ Prêt</span>
           )}
           {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
             <span style={{
-              fontSize: 12, padding: '4px 10px', borderRadius: 6, fontWeight: 700,
+              fontSize: 11, padding: '3px 8px', borderRadius: 5, fontWeight: 700,
               background: v.etatCommercial === 'vendu' ? '#22c55e20' : v.etatCommercial === 'location' ? '#7c3aed20' : '#f59e0b20',
               color: v.etatCommercial === 'vendu' ? '#4ade80' : v.etatCommercial === 'location' ? '#a78bfa' : '#fbbf24',
             }}>
@@ -1644,32 +1673,109 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose }: {
                 : `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`}
             </span>
           )}
+          {(item as any)?.aUnReservoir && (
+            <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>💧 TANK</span>
+          )}
+          {item && !(item as any)?.aUnReservoir && v.type === 'eau' && (
+            <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⚠️ SANS TANK</span>
+          )}
+        </div>
+      </div>
+
+      {/* Zone scrollable */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        {/* Photo */}
+        {v.photoUrl && (
+          <div style={{ marginBottom: 20, borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <img src={v.photoUrl} alt={`Photo ${v.numero}`}
+              style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
+
+        {/* Statut Commercial */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Statut commercial
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['non-vendu', 'reserve', 'vendu', 'location'] as const).map(etat => {
+              const selected = (v.etatCommercial ?? 'non-vendu') === etat;
+              const cfg = {
+                'non-vendu': { label: 'Non vendu', icon: '○', color: '#94a3b8' },
+                'reserve': { label: 'Réservé', icon: '🔒', color: '#f59e0b' },
+                'vendu': { label: 'Vendu', icon: '✓', color: '#22c55e' },
+                'location': { label: 'Location', icon: '🔑', color: '#7c3aed' },
+              }[etat];
+              return (
+                <button key={etat}
+                  onClick={() => mettreAJourCommercial(v.id, etat, v.dateLivraisonPlanifiee ?? null, v.clientAcheteur ?? null)}
+                  style={{
+                    flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer',
+                    border: selected ? `2px solid ${cfg.color}` : '1px solid rgba(255,255,255,0.12)',
+                    background: selected ? `${cfg.color}20` : 'rgba(255,255,255,0.04)',
+                    color: selected ? cfg.color : 'rgba(255,255,255,0.4)',
+                    fontWeight: selected ? 700 : 500, fontSize: 11,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>{cfg.icon}</span>
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Road Map Editor */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Road Map — Étapes de production
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            🗺 Plan de production
           </div>
           <RoadMapEditor
             vehicule={v}
-            onSave={async (updated) => {
+            onSaved={async (updated) => {
               await mettreAJourRoadMap(v.id, updated.roadMap ?? []);
             }}
           />
         </div>
 
-        {/* Bouton Marquer prêt */}
+        {/* Informations */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Informations
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.8 }}>
+            {v.variante && <div><strong>Variante:</strong> {v.variante}</div>}
+            {v.marque && <div><strong>Marque:</strong> {v.marque}</div>}
+            {v.modele && <div><strong>Modèle:</strong> {v.modele}</div>}
+            {v.annee && <div><strong>Année:</strong> {v.annee}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Actions fixes en bas */}
+      <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Actions de slot (seulement si le camion est dans un slot) */}
+        {item?.slotId && onRetirerAttente && (
+          <button onClick={() => { onRetirerAttente(item.id); onClose(); }}
+            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none',
+              background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            ⏸ Mettre en attente — libérer le slot
+          </button>
+        )}
+        {item?.slotId && onTerminerEtAvancer && (
+          <button onClick={() => { onTerminerEtAvancer(item.id); onClose(); }}
+            style={{ width: '100%', padding: '11px', borderRadius: 8,
+              border: '1px solid #22c55e', background: 'transparent',
+              color: '#22c55e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            ✓ Travail terminé — libérer le slot
+          </button>
+        )}
+        {/* Marquer comme prêt */}
         {!v.estPret && v.statut !== 'archive' && (
-          <button onClick={() => marquerPret(v.id, true)}
-            style={{
-              width: '100%', padding: '12px', borderRadius: 8, border: 'none',
-              background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 14,
-              cursor: 'pointer', marginBottom: 12,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#16a34a'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#22c55e'; }}
-          >
+          <button onClick={handleMarquerPret}
+            style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none',
+              background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ✅ Marquer comme prêt
           </button>
         )}
