@@ -24,7 +24,7 @@ export function PageConnexion() {
 
   return (
     <div style={{
-      width: '100vw', height: '100vh',
+      width: '100vw', height: '100dvh',
       background: '#0f0e0b',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>

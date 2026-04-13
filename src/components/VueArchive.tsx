@@ -47,13 +47,13 @@ export function VueArchive() {
   const selectedItem = tries.find(i => i.id === selectedId) ?? null;
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f8fafc', fontSize: 18, color: '#9ca3af' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh', background: '#f8fafc', fontSize: 18, color: '#9ca3af' }}>
       Chargement des archives...
     </div>
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selectedItem ? 400 : 0,
@@ -259,7 +259,7 @@ function PanneauDetailArchive({ item, onClose, onReouvrir, onSupprimer }: {
   const dateCreation = new Date(item.dateCreation).toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100vh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
+    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100dvh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
       <div style={{ padding: 24 }}>
         <button onClick={onClose}
           style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}

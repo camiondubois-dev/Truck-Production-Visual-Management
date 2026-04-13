@@ -347,7 +347,7 @@ export function VueInventaire() {
   const enProd = vehicules.filter(v => v.statut === 'en-production').length;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginRight: selected ? 400 : 0, transition: 'margin-right 0.3s ease' }}>
 
         {/* Header */}
@@ -622,7 +622,7 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onRetourInventaire, onS
 
 
   return (
-    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100vh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
+    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100dvh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
       <div style={{ padding: 24 }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af' }}>✕</button>
 

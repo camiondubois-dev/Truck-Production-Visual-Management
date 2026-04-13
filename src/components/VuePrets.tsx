@@ -5,6 +5,7 @@ import { EauIcon } from './EauIcon';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+type FiltreCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location';
 
 function getLabelVehicule(v: VehiculeInventaire): string {
   if (v.type === 'client') {
@@ -18,12 +19,20 @@ export function VuePrets() {
   const { vehicules, mettreAJourCommercial, archiverVehicule } = useInventaire();
   const { items, archiverItem } = useGarage();
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
+  const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('tous');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const prets = vehicules.filter(v => v.estPret === true);
 
   const filtres = prets
     .filter(v => filtreType === 'tous' || v.type === filtreType)
+    .filter(v => {
+      if (filtreCommercial === 'tous') return true;
+      if (filtreCommercial === 'a-vendre') return !v.etatCommercial || v.etatCommercial === 'non-vendu';
+      if (filtreCommercial === 'a-livrer') return v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve';
+      if (filtreCommercial === 'location') return v.etatCommercial === 'location';
+      return true;
+    })
     .sort((a, b) => {
       if (a.dateLivraisonPlanifiee && !b.dateLivraisonPlanifiee) return -1;
       if (!a.dateLivraisonPlanifiee && b.dateLivraisonPlanifiee) return 1;
@@ -46,7 +55,7 @@ export function VuePrets() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginRight: selectedVehicule ? 400 : 0, transition: 'margin-right 0.3s ease' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '2px solid #e5e7eb', background: 'white' }}>
@@ -56,9 +65,16 @@ export function VuePrets() {
             <span style={{ background: '#22c55e', color: 'white', fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>
               {prets.length} véhicule{prets.length !== 1 ? 's' : ''}
             </span>
-            {aVendre > 0 && <span style={{ background: '#f59e0b', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🏷️ {aVendre} à vendre</span>}
-            {aLivrer > 0 && <span style={{ background: '#3b82f6', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🚛 {aLivrer} à livrer</span>}
-            {enLocation > 0 && <span style={{ background: '#7c3aed', color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>🔑 {enLocation} en location</span>}
+            {([
+              { id: 'a-vendre' as FiltreCommercial, label: `🏷️ ${aVendre} à vendre`,   bg: '#f59e0b', count: aVendre },
+              { id: 'a-livrer' as FiltreCommercial, label: `🚛 ${aLivrer} à livrer`,    bg: '#3b82f6', count: aLivrer },
+              { id: 'location' as FiltreCommercial, label: `🔑 ${enLocation} en location`, bg: '#7c3aed', count: enLocation },
+            ]).filter(f => f.count > 0).map(f => (
+              <button key={f.id} onClick={() => setFiltreCommercial(filtreCommercial === f.id ? 'tous' : f.id)}
+                style={{ background: f.bg, color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', opacity: filtreCommercial !== 'tous' && filtreCommercial !== f.id ? 0.5 : 1, outline: filtreCommercial === f.id ? '2px solid white' : 'none', outlineOffset: 1, transition: 'all 0.15s' }}>
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -164,7 +180,7 @@ function PanneauDetailPret({ vehicule, onClose, onArchiver, onMettreAJourCommerc
   };
 
   return (
-    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100vh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
+    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100dvh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
       <div style={{ padding: 24 }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af' }}>✕</button>
 

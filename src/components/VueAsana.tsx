@@ -22,7 +22,7 @@ interface VueAsanaProps {
   };
 }
 
-type FiltreVue = 'tous' | 'a-planifier' | 'pret' | string; // string = stationId
+type FiltreVue = 'tous' | 'a-planifier' | 'dans-le-garage' | 'en-attente' | 'pret' | string; // string = stationId
 type Section = 'a-planifier' | 'en-attente' | 'dans-le-garage' | 'pret' | 'archive';
 
 // ── Helper: détermine la section d'un véhicule ───────────────────
@@ -74,6 +74,12 @@ export function VueAsana({ type, config }: VueAsanaProps) {
     if (filtreActif === 'pret') {
       return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
     }
+    if (filtreActif === 'dans-le-garage') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
+    }
+    if (filtreActif === 'en-attente') {
+      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
+    }
     // Filtre par station: camions qui ont cette étape active (en-attente ou en-cours)
     return mesVehicules.filter(v => {
       if (!v.roadMap) return false;
@@ -94,7 +100,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const totalActifs = aPlanifier.length + enAttente.length + dansLeGarage.length + prets.length;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f8fafc' }}>
+    <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selectedVehicule ? 380 : 0, transition: 'margin-right 0.3s ease',
@@ -126,15 +132,19 @@ export function VueAsana({ type, config }: VueAsanaProps) {
           background: 'white', flexWrap: 'wrap', flexShrink: 0,
         }}>
           <FiltreBtn active={filtreActif === 'tous'} onClick={() => setFiltreActif('tous')} label={`Tous (${totalActifs})`} />
-          <FiltreBtn active={filtreActif === 'a-planifier'} onClick={() => setFiltreActif('a-planifier')} label="📋 À planifier" />
+          <FiltreBtn active={filtreActif === 'dans-le-garage'} onClick={() => setFiltreActif('dans-le-garage')} label={`🔧 Dans le garage (${dansLeGarage.length})`} color="#3b82f6" />
+          <FiltreBtn active={filtreActif === 'pret'} onClick={() => setFiltreActif('pret')} label={`✅ Prêt (${prets.length})`} color="#22c55e" />
+          <FiltreBtn active={filtreActif === 'a-planifier'} onClick={() => setFiltreActif('a-planifier')} label={`📋 À planifier (${aPlanifier.length})`} />
+          <FiltreBtn active={filtreActif === 'en-attente'} onClick={() => setFiltreActif('en-attente')} label={`⏳ En attente (${enAttente.length})`} color="#f59e0b" />
+          <div style={{ width: 1, background: '#e5e7eb', margin: '0 2px', alignSelf: 'stretch' }} />
           {ROAD_MAP_STATIONS.map(s => {
             const nb = mesVehicules.filter(v => v.roadMap?.some(r => r.stationId === s.id && (r.statut === 'en-attente' || r.statut === 'en-cours'))).length;
+            if (nb === 0) return null;
             return (
               <FiltreBtn key={s.id} active={filtreActif === s.id} onClick={() => setFiltreActif(s.id)}
-                label={`${s.icon} ${s.label}${nb > 0 ? ` (${nb})` : ''}`} color={s.color} />
+                label={`${s.icon} ${s.label} (${nb})`} color={s.color} />
             );
           })}
-          <FiltreBtn active={filtreActif === 'pret'} onClick={() => setFiltreActif('pret')} label={`✅ Prêt (${prets.length})`} color="#22c55e" />
         </div>
 
         {/* ── Tableau ─────────────────────────────────────────── */}
@@ -572,7 +582,7 @@ function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   return (
     <>
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'fixed', right: 0, top: 0, width: 380, height: '100vh',
+        position: 'fixed', right: 0, top: 0, width: 380, height: '100dvh',
         background: 'white', borderLeft: '1px solid #e5e7eb',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
       }}>

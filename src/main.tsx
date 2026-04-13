@@ -16,7 +16,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     if (this.state.error) {
       const err = this.state.error as Error;
       return (
-        <div style={{ padding: 40, fontFamily: 'monospace', background: '#1a1a2e', minHeight: '100vh', color: 'white' }}>
+        <div style={{ padding: 40, fontFamily: 'monospace', background: '#1a1a2e', minHeight: '100dvh', color: 'white' }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444', marginBottom: 16 }}>⚠️ Erreur de rendu</div>
           <pre style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 8, fontSize: 13, overflow: 'auto', color: '#fca5a5' }}>
             {err.message}{'\n\n'}{err.stack}
