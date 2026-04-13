@@ -341,85 +341,110 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
   const section = getSectionVehicule(v, item);
   const isArchive = v.statut === 'archive';
 
+  // Préparer les données road map pour la timeline
+  const stationsData = ROAD_MAP_STATIONS.map(s => {
+    const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
+    const allTermine = steps.length > 0 && steps.every(r => r.statut === 'termine' || r.statut === 'saute');
+    const anyEnCours = steps.some(r => r.statut === 'en-cours');
+    const anyEnAttente = steps.some(r => r.statut === 'en-attente');
+    return { ...s, steps, allTermine, anyEnCours, anyEnAttente, count: steps.length, present: steps.length > 0 };
+  });
+  const hasRoadMap = stationsData.some(s => s.present);
+
   return (
     <div onClick={onClick}
       style={{
-        background: selected ? `${typeColor}08` : isArchive ? '#fafafa' : 'white',
-        borderRadius: 10,
+        background: selected ? `${typeColor}06` : isArchive ? '#fafafa' : 'white',
+        borderRadius: 12,
         border: `1px solid ${selected ? typeColor : '#e5e7eb'}`,
         borderLeft: `4px solid ${typeColor}`,
-        padding: '14px 16px',
-        display: 'flex', alignItems: 'center', gap: 16,
         cursor: 'pointer', transition: 'all 0.15s',
         opacity: isArchive ? 0.65 : 1,
+        overflow: 'hidden',
       }}
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = isArchive ? '#fafafa' : 'white'; }}
     >
-      {/* Icône */}
-      <div style={{ fontSize: 28, flexShrink: 0 }}>
-        {v.type === 'eau' ? <EauIcon /> : v.type === 'client' ? '🔧' : '🏷️'}
-      </div>
-
-      {/* Contenu principal */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: typeColor }}>#{v.numero}</span>
-          <StatutBadgeSection section={section} />
-          {item?.slotId && (
-            <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
-              Slot {item.slotId}
-            </span>
-          )}
-          {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
-            <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />
-          )}
-          {v.type === 'eau' && (
-            v.aUnReservoir
-              ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Réservoir</span>
-              : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>⚠️ Sans réservoir</span>
+      {/* ── Ligne du haut : info camion ── */}
+      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ fontSize: 26, flexShrink: 0 }}>
+          {v.type === 'eau' ? <EauIcon /> : v.type === 'client' ? '🔧' : '🏷️'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 16, color: typeColor }}>#{v.numero}</span>
+            <StatutBadgeSection section={section} />
+            {item?.slotId && (
+              <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
+                Slot {item.slotId}
+              </span>
+            )}
+            {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
+              <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />
+            )}
+            {v.type === 'eau' && (
+              v.aUnReservoir
+                ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Réservoir</span>
+                : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>⚠️ Sans réservoir</span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{getLabelVehicule(v)}</div>
+          {(v.variante || v.dateLivraisonPlanifiee || (v.type === 'client' && v.descriptionTravail)) && (
+            <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#9ca3af', marginTop: 2, flexWrap: 'wrap' }}>
+              {v.type === 'client' && v.descriptionTravail && <span style={{ color: '#6b7280' }}>{v.descriptionTravail}</span>}
+              {v.variante && <span>{v.variante}</span>}
+              {v.dateLivraisonPlanifiee && <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</span>}
+            </div>
           )}
         </div>
-        <div style={{ fontSize: 14, color: '#374151', fontWeight: 500, marginBottom: 4 }}>{getLabelVehicule(v)}</div>
-        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#9ca3af', alignItems: 'center', flexWrap: 'wrap' }}>
-          {v.marque && v.annee && v.type !== 'client' && <span>🚛 {v.marque} {v.annee}</span>}
-          {v.type === 'client' && v.descriptionTravail && <span style={{ color: '#6b7280' }}>{v.descriptionTravail}</span>}
-          {v.variante && <span>{v.variante}</span>}
-          {v.dateLivraisonPlanifiee && <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 Livraison : {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</span>}
-        </div>
       </div>
 
-      {/* Road map indicateurs visuels */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        {ROAD_MAP_STATIONS.map(s => {
-          const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
-          if (steps.length === 0) return (
-            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 36 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f1f5f9', opacity: 0.4 }} />
-              <span style={{ fontSize: 7, color: '#d1d5db', textAlign: 'center', lineHeight: 1.1 }}>{s.label}</span>
+      {/* ── Timeline road map pleine largeur ── */}
+      {hasRoadMap && (
+        <div style={{ padding: '0 16px 10px', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+            {/* Ligne de fond connectant toutes les stations */}
+            <div style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 3, background: '#f1f5f9', borderRadius: 2, transform: 'translateY(-50%)' }} />
+            {/* Ligne de progression (colorée) */}
+            {(() => {
+              const lastDone = stationsData.reduce((acc, s, i) => (s.allTermine || s.anyEnCours) ? i : acc, -1);
+              const pct = lastDone >= 0 ? ((lastDone + (stationsData[lastDone]?.allTermine ? 1 : 0.5)) / stationsData.length) * 100 : 0;
+              return pct > 0 ? (
+                <div style={{ position: 'absolute', top: '50%', left: 16, width: `calc(${Math.min(pct, 100)}% - 32px)`, height: 3, background: `linear-gradient(90deg, #22c55e, ${pct >= 100 ? '#22c55e' : '#3b82f6'})`, borderRadius: 2, transform: 'translateY(-50%)', transition: 'width 0.3s' }} />
+              ) : null;
+            })()}
+            {/* Stations */}
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+              {stationsData.map(s => (
+                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+                  {/* Cercle/icône */}
+                  <div style={{ position: 'relative' }}>
+                    {!s.present ? (
+                      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#e5e7eb', border: '2px solid #f1f5f9' }} />
+                    ) : s.allTermine ? (
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 13, fontWeight: 700, boxShadow: '0 0 0 3px #dcfce7' }}>✓</div>
+                    ) : s.anyEnCours ? (
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, boxShadow: '0 0 0 3px #dbeafe', animation: 'pulse 2s infinite' }}>🚛</div>
+                    ) : s.anyEnAttente ? (
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', boxShadow: '0 0 0 3px #fef3c7' }}>⏳</div>
+                    ) : (
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'white', border: '2px solid #d1d5db' }} />
+                    )}
+                    {s.count > 1 && (
+                      <span style={{ position: 'absolute', top: -6, right: -6, fontSize: 8, background: s.allTermine ? '#22c55e' : s.anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 10, padding: '1px 4px', fontWeight: 800, lineHeight: 1.2 }}>{s.count}</span>
+                    )}
+                  </div>
+                  {/* Label */}
+                  <span style={{
+                    fontSize: 8, fontWeight: 600, textAlign: 'center', lineHeight: 1.2, maxWidth: 64,
+                    color: s.allTermine ? '#22c55e' : s.anyEnCours ? '#3b82f6' : s.anyEnAttente ? '#f59e0b' : s.present ? '#6b7280' : '#d1d5db',
+                  }}>{s.label}</span>
+                </div>
+              ))}
             </div>
-          );
-          const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
-          const anyEnCours = steps.some(r => r.statut === 'en-cours');
-          const anyEnAttente = steps.some(r => r.statut === 'en-attente');
-          const count = steps.length;
-          return (
-            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 36, position: 'relative' }}>
-              {allTermine ? (
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#dcfce7', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: 12, fontWeight: 700 }}>✓</div>
-              ) : anyEnCours ? (
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: '#dbeafe', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🚛</div>
-              ) : anyEnAttente ? (
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fef3c7', border: '2px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>⏳</div>
-              ) : (
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#d1d5db', border: '1px solid #9ca3af' }} />
-              )}
-              {count > 1 && <span style={{ position: 'absolute', top: -4, right: 0, fontSize: 8, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 8, padding: '0px 3px', fontWeight: 700 }}>{count}</span>}
-              <span style={{ fontSize: 7, color: s.color, textAlign: 'center', lineHeight: 1.1, fontWeight: 600 }}>{s.label}</span>
-            </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
