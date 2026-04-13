@@ -209,7 +209,7 @@ export function PlancherView() {
         width: '100vw', height: '100dvh',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
-        gridTemplateRows: 'auto 1fr',
+        gridTemplateRows: '1fr 1fr',
         gap: '12px', padding: '12px',
         background: '#0f0e0b',
         boxSizing: 'border-box',
@@ -1059,7 +1059,7 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
               {item.type === 'client' ? 'CLIENT' : 'DÉTAIL'}
             </div>
           )}
-          <span style={{ fontFamily: 'monospace', fontSize: 'clamp(13px, 1.5vw, 18px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 'clamp(20px, 2.5vw, 32px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
             {item.numero}
           </span>
           <span style={{ fontSize: 'clamp(9px, 0.9vw, 12px)', color: 'rgba(255,255,255,0.55)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

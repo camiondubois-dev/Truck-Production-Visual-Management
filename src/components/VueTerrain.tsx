@@ -267,7 +267,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         {/* Header */}
         <div style={{ padding: '4px 20px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 24, fontWeight: 700, color: v.type === 'eau' ? '#f97316' : '#22c55e' }}>#{v.numero}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: v.type === 'eau' ? '#f97316' : '#22c55e' }}>#{v.numero}</span>
             {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>✅ Prêt</span>}
             {!v.estPret && v.statut === 'en-production' && (
               <span style={{ fontSize: 12, background: '#fff7ed', color: '#c2410c', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>
@@ -721,7 +721,7 @@ function VueTerrainMain() {
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 17, color: camion.type === 'eau' ? '#f97316' : '#22c55e' }}>#{camion.numero}</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 22, color: camion.type === 'eau' ? '#f97316' : '#22c55e' }}>#{camion.numero}</span>
                   {pret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '1px 7px', borderRadius: 6, fontWeight: 700 }}>✅</span>}
                   {camion.type === 'eau' && !camion.aUnReservoir && !pret && (
                     <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '1px 7px', borderRadius: 6, fontWeight: 600 }}>⚠️ Sans réservoir</span>
