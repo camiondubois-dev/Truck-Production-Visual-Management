@@ -14,6 +14,7 @@ interface InventaireContextType {
   mettreAJourType: (id: string, type: 'eau' | 'detail') => Promise<void>;
   mettreAJourEtapes: (id: string, etapes: EtapeFaite[]) => Promise<void>;
   mettreAJourRoadMap: (id: string, roadMap: RoadMapEtape[]) => Promise<void>;
+  mettreAJourPriorites: (updates: { id: string; roadMap: RoadMapEtape[] }[]) => Promise<void>;
   mettreAJourReservoir: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
   marquerPret: (id: string, estPret: boolean) => Promise<void>;
   mettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
@@ -160,6 +161,23 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  // Mise à jour atomique des priorités de file d'attente — UN seul setVehicules,
+  // SANS lifecycle checks (changer l'ordre ne crée/ferme pas de job)
+  const mettreAJourPriorites = async (updates: { id: string; roadMap: RoadMapEtape[] }[]) => {
+    // Optimistic : un seul appel qui applique tous les changements d'un coup
+    setVehicules(prev => {
+      let next = prev;
+      for (const { id, roadMap } of updates) {
+        next = next.map(v => v.id === id ? { ...v, roadMap } : v);
+      }
+      return next;
+    });
+    // Sauvegarde en parallèle, sans lifecycle
+    await Promise.all(updates.map(({ id, roadMap }) =>
+      inventaireService.mettreAJourRoadMap(id, roadMap)
+    ));
+  };
+
   const mettreAJourReservoir = async (id: string, aUnReservoir: boolean, reservoirId: string | null) => {
     await inventaireService.mettreAJourReservoir(id, aUnReservoir, reservoirId);
     setVehicules(prev => prev.map(v =>
@@ -197,7 +215,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       importerVehicules, ajouterVehicule,
       marquerEnProduction, marquerDisponible,
       mettreAJourPhotoInventaire, mettreAJourType,
-      mettreAJourEtapes, mettreAJourRoadMap, mettreAJourReservoir,
+      mettreAJourEtapes, mettreAJourRoadMap, mettreAJourPriorites, mettreAJourReservoir,
       marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
     }}>
       {children}
