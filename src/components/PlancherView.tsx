@@ -206,14 +206,14 @@ export function PlancherView() {
     <div
       onClick={() => setModalState(null)}
       style={{
-        width: '100vw', height: '100dvh',
+        width: '100vw', minHeight: '100dvh',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
-        gridTemplateRows: '1fr 1fr',
+        gridTemplateRows: 'auto auto',
         gap: '12px', padding: '12px',
         background: '#0f0e0b',
         boxSizing: 'border-box',
-        overflow: 'visible',
+        overflow: 'auto',
         position: 'relative',
       }}
     >
