@@ -177,16 +177,38 @@ export function VueAsana({ type, config }: VueAsanaProps) {
           })}
         </div>
 
-        {/* ── Liste cartes ─────────────────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-          {mesVehicules.filter(v => v.statut !== 'archive').length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9ca3af' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon === 'EAU_LOGO' ? <EauIcon /> : config.icon}</div>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun véhicule pour l'instant</div>
-              <div style={{ fontSize: 14 }}>Clique sur "+ Nouveau" pour commencer</div>
+        {/* ── En-têtes stations fixes + liste ─────────────────── */}
+        {mesVehicules.filter(v => v.statut !== 'archive').length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9ca3af' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon === 'EAU_LOGO' ? <EauIcon /> : config.icon}</div>
+            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun véhicule pour l'instant</div>
+            <div style={{ fontSize: 14 }}>Clique sur "+ Nouveau" pour commencer</div>
+          </div>
+        ) : (
+          <>
+            {/* En-têtes stations — sticky */}
+            <div style={{
+              display: 'flex', alignItems: 'stretch', flexShrink: 0,
+              borderBottom: '2px solid #e5e7eb', background: '#f8fafc',
+            }}>
+              <div style={{ width: 340, minWidth: 340, flexShrink: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center' }}>
+                Véhicule
+              </div>
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${ROAD_MAP_STATIONS.length}, 1fr)`, gap: 0 }}>
+                {ROAD_MAP_STATIONS.map(s => (
+                  <div key={s.id} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    padding: '8px 4px', borderLeft: '1px solid #e5e7eb',
+                  }}>
+                    <span style={{ fontSize: 16, marginBottom: 2 }}>{s.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: s.color, textAlign: 'center', lineHeight: 1.2 }}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+            {/* Liste scrollable */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
               {aPlanifier.length > 0 && (
                 <>
                   <SectionHeaderCard label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
@@ -246,8 +268,8 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                 </>
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* ── Panneau détail ──────────────────────────────────── */}
@@ -306,13 +328,14 @@ function SectionHeaderCard({ label, color, count, onClick, clickable }: {
 }) {
   return (
     <div onClick={onClick} style={{
-      padding: '8px 4px', cursor: clickable ? 'pointer' : 'default',
-      fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em',
-      marginTop: 8,
+      padding: '10px 16px', cursor: clickable ? 'pointer' : 'default',
+      fontSize: 13, fontWeight: 700, color, letterSpacing: '0.04em',
+      background: `${color}08`, borderBottom: `1px solid ${color}30`,
+      borderTop: '1px solid #e5e7eb',
     }}>
       {label}
       {!clickable && (
-        <span style={{ marginLeft: 8, background: color, color: 'white', fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>
+        <span style={{ marginLeft: 8, background: color, color: 'white', fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>
           {count}
         </span>
       )}
@@ -341,41 +364,30 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
   const section = getSectionVehicule(v, item);
   const isArchive = v.statut === 'archive';
 
-  // Préparer les données road map pour la timeline
-  const stationsData = ROAD_MAP_STATIONS.map(s => {
-    const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
-    const allTermine = steps.length > 0 && steps.every(r => r.statut === 'termine' || r.statut === 'saute');
-    const anyEnCours = steps.some(r => r.statut === 'en-cours');
-    const anyEnAttente = steps.some(r => r.statut === 'en-attente');
-    return { ...s, steps, allTermine, anyEnCours, anyEnAttente, count: steps.length, present: steps.length > 0 };
-  });
-  const hasRoadMap = stationsData.some(s => s.present);
-
   return (
     <div onClick={onClick}
       style={{
+        display: 'flex', alignItems: 'stretch',
         background: selected ? `${typeColor}06` : isArchive ? '#fafafa' : 'white',
-        borderRadius: 12,
-        border: `1px solid ${selected ? typeColor : '#e5e7eb'}`,
+        borderBottom: '1px solid #f1f5f9',
         borderLeft: `4px solid ${typeColor}`,
         cursor: 'pointer', transition: 'all 0.15s',
         opacity: isArchive ? 0.65 : 1,
-        overflow: 'hidden',
       }}
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = isArchive ? '#fafafa' : 'white'; }}
     >
-      {/* ── Ligne du haut : info camion ── */}
-      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ fontSize: 26, flexShrink: 0 }}>
+      {/* ── Info camion (gauche) ── */}
+      <div style={{ width: 336, minWidth: 336, flexShrink: 0, padding: '12px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ fontSize: 24, flexShrink: 0 }}>
           {v.type === 'eau' ? <EauIcon /> : v.type === 'client' ? '🔧' : '🏷️'}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 16, color: typeColor }}>#{v.numero}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 15, color: typeColor }}>#{v.numero}</span>
             <StatutBadgeSection section={section} />
             {item?.slotId && (
-              <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
+              <span style={{ fontFamily: 'monospace', fontSize: 10, background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>
                 Slot {item.slotId}
               </span>
             )}
@@ -384,67 +396,48 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
             )}
             {v.type === 'eau' && (
               v.aUnReservoir
-                ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Réservoir</span>
-                : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>⚠️ Sans réservoir</span>
+                ? <span style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>✅ Rés.</span>
+                : <span style={{ fontSize: 9, background: '#fff7ed', color: '#c2410c', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>⚠️ Sans rés.</span>
             )}
           </div>
-          <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{getLabelVehicule(v)}</div>
-          {(v.variante || v.dateLivraisonPlanifiee || (v.type === 'client' && v.descriptionTravail)) && (
-            <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#9ca3af', marginTop: 2, flexWrap: 'wrap' }}>
-              {v.type === 'client' && v.descriptionTravail && <span style={{ color: '#6b7280' }}>{v.descriptionTravail}</span>}
-              {v.variante && <span>{v.variante}</span>}
-              {v.dateLivraisonPlanifiee && <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</span>}
-            </div>
-          )}
+          <div style={{ fontSize: 12, color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getLabelVehicule(v)}</div>
+          {v.variante && <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 1 }}>{v.variante}</div>}
         </div>
       </div>
 
-      {/* ── Timeline road map pleine largeur ── */}
-      {hasRoadMap && (
-        <div style={{ padding: '0 16px 10px', position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-            {/* Ligne de fond connectant toutes les stations */}
-            <div style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 3, background: '#f1f5f9', borderRadius: 2, transform: 'translateY(-50%)' }} />
-            {/* Ligne de progression (colorée) */}
-            {(() => {
-              const lastDone = stationsData.reduce((acc, s, i) => (s.allTermine || s.anyEnCours) ? i : acc, -1);
-              const pct = lastDone >= 0 ? ((lastDone + (stationsData[lastDone]?.allTermine ? 1 : 0.5)) / stationsData.length) * 100 : 0;
-              return pct > 0 ? (
-                <div style={{ position: 'absolute', top: '50%', left: 16, width: `calc(${Math.min(pct, 100)}% - 32px)`, height: 3, background: `linear-gradient(90deg, #22c55e, ${pct >= 100 ? '#22c55e' : '#3b82f6'})`, borderRadius: 2, transform: 'translateY(-50%)', transition: 'width 0.3s' }} />
-              ) : null;
-            })()}
-            {/* Stations */}
-            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-              {stationsData.map(s => (
-                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                  {/* Cercle/icône */}
-                  <div style={{ position: 'relative' }}>
-                    {!s.present ? (
-                      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#e5e7eb', border: '2px solid #f1f5f9' }} />
-                    ) : s.allTermine ? (
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 13, fontWeight: 700, boxShadow: '0 0 0 3px #dcfce7' }}>✓</div>
-                    ) : s.anyEnCours ? (
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, boxShadow: '0 0 0 3px #dbeafe', animation: 'pulse 2s infinite' }}>🚛</div>
-                    ) : s.anyEnAttente ? (
-                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', boxShadow: '0 0 0 3px #fef3c7' }}>⏳</div>
-                    ) : (
-                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'white', border: '2px solid #d1d5db' }} />
-                    )}
-                    {s.count > 1 && (
-                      <span style={{ position: 'absolute', top: -6, right: -6, fontSize: 8, background: s.allTermine ? '#22c55e' : s.anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 10, padding: '1px 4px', fontWeight: 800, lineHeight: 1.2 }}>{s.count}</span>
-                    )}
-                  </div>
-                  {/* Label */}
-                  <span style={{
-                    fontSize: 8, fontWeight: 600, textAlign: 'center', lineHeight: 1.2, maxWidth: 64,
-                    color: s.allTermine ? '#22c55e' : s.anyEnCours ? '#3b82f6' : s.anyEnAttente ? '#f59e0b' : s.present ? '#6b7280' : '#d1d5db',
-                  }}>{s.label}</span>
-                </div>
-              ))}
+      {/* ── Cellules progression (droite, alignées avec les en-têtes) ── */}
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${ROAD_MAP_STATIONS.length}, 1fr)`, gap: 0, alignItems: 'center' }}>
+        {ROAD_MAP_STATIONS.map(s => {
+          const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
+          if (steps.length === 0) {
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #f8f8f8', padding: '8px 0' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f1f5f9', opacity: 0.5 }} />
+              </div>
+            );
+          }
+          const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
+          const anyEnCours = steps.some(r => r.statut === 'en-cours');
+          const anyEnAttente = steps.some(r => r.statut === 'en-attente');
+          const count = steps.length;
+          return (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #f8f8f8', padding: '8px 0', position: 'relative' }}>
+              {allTermine ? (
+                <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15, fontWeight: 700, boxShadow: '0 2px 6px rgba(34,197,94,0.3)' }}>✓</div>
+              ) : anyEnCours ? (
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, boxShadow: '0 2px 8px rgba(59,130,246,0.35)', animation: 'pulse 2s infinite' }}>🚛</div>
+              ) : anyEnAttente ? (
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'white', boxShadow: '0 2px 6px rgba(245,158,11,0.3)' }}>⏳</div>
+              ) : (
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', border: '2px solid #d1d5db' }} />
+              )}
+              {count > 1 && (
+                <span style={{ position: 'absolute', top: 4, right: '50%', marginRight: -22, fontSize: 9, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 10, padding: '1px 5px', fontWeight: 800, lineHeight: 1.3 }}>{count}</span>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
