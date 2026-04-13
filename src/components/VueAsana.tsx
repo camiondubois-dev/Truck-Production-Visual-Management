@@ -387,25 +387,38 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
           {v.variante && <span>{v.variante}</span>}
           {v.dateLivraisonPlanifiee && <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 Livraison : {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</span>}
         </div>
-        {/* Road map mini indicateurs */}
-        {v.roadMap && v.roadMap.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-            {ROAD_MAP_STATIONS.map(s => {
-              const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
-              if (steps.length === 0) return null;
-              const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
-              const anyEnCours = steps.some(r => r.statut === 'en-cours');
-              const bg = allTermine ? '#dcfce7' : anyEnCours ? '#dbeafe' : '#fef3c7';
-              const color = allTermine ? '#166534' : anyEnCours ? '#1d4ed8' : '#92400e';
-              const icon = allTermine ? '✓' : anyEnCours ? '▶' : '⏳';
-              return (
-                <span key={s.id} style={{ fontSize: 9, background: bg, color, padding: '2px 6px', borderRadius: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {icon} {s.label}
-                </span>
-              );
-            })}
-          </div>
-        )}
+      </div>
+
+      {/* Road map indicateurs visuels */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        {ROAD_MAP_STATIONS.map(s => {
+          const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
+          if (steps.length === 0) return (
+            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 36 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f1f5f9', opacity: 0.4 }} />
+              <span style={{ fontSize: 7, color: '#d1d5db', textAlign: 'center', lineHeight: 1.1 }}>{s.label}</span>
+            </div>
+          );
+          const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
+          const anyEnCours = steps.some(r => r.statut === 'en-cours');
+          const anyEnAttente = steps.some(r => r.statut === 'en-attente');
+          const count = steps.length;
+          return (
+            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 36, position: 'relative' }}>
+              {allTermine ? (
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#dcfce7', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: 12, fontWeight: 700 }}>✓</div>
+              ) : anyEnCours ? (
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: '#dbeafe', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🚛</div>
+              ) : anyEnAttente ? (
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fef3c7', border: '2px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>⏳</div>
+              ) : (
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#d1d5db', border: '1px solid #9ca3af' }} />
+              )}
+              {count > 1 && <span style={{ position: 'absolute', top: -4, right: 0, fontSize: 8, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : '#f59e0b', color: 'white', borderRadius: 8, padding: '0px 3px', fontWeight: 700 }}>{count}</span>}
+              <span style={{ fontSize: 7, color: s.color, textAlign: 'center', lineHeight: 1.1, fontWeight: 600 }}>{s.label}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
