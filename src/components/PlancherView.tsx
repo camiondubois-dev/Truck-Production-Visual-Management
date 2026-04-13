@@ -210,6 +210,7 @@ export function PlancherView() {
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
         gridTemplateRows: 'auto auto',
+        alignContent: 'start',
         gap: '12px', padding: '12px',
         background: '#0f0e0b',
         boxSizing: 'border-box',
