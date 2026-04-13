@@ -43,7 +43,7 @@ type ModalState =
   | { type: 'job-occupe'; job: JobTemporaire; slot: Slot; position: { x: number; y: number } }
   | { type: 'inventaire-picker'; slot: Slot; position: { x: number; y: number } }
   | { type: 'inventaire-roadmap'; slot: Slot; vehicule: VehiculeInventaire; position: { x: number; y: number } }
-  | { type: 'detail'; vehiculeId: string }
+  | { type: 'detail'; vehiculeId: string; itemId?: string }
   | null;
 
 export function PlancherView() {
@@ -124,13 +124,8 @@ export function PlancherView() {
     if (tempJob) {
       setModalState({ type: 'job-occupe', job: tempJob, slot, position });
     } else if (item) {
-      // Si le camion a un inventaireId → ouvrir le panneau détail (comme VueAsana)
-      if (item.inventaireId) {
-        setModalState({ type: 'detail', vehiculeId: item.inventaireId });
-      } else {
-        // Fallback pour items legacy sans inventaire
-        setModalState({ type: 'occupe', item, slot, position });
-      }
+      // Toujours ouvrir le panneau détail unifié
+      setModalState({ type: 'detail', vehiculeId: item.inventaireId ?? item.id, itemId: item.id });
     } else if (!slot.futur) {
       setModalState({ type: 'assign', slot, position });
     }
@@ -354,8 +349,36 @@ export function PlancherView() {
 
       {/* Panneau détail véhicule (comme VueAsana) */}
       {modalState?.type === 'detail' && (() => {
-        const detailVehicule = vehicules.find(v => v.id === modalState.vehiculeId);
-        const detailItem = items.find(i => i.inventaireId === modalState.vehiculeId && i.etat !== 'termine');
+        let detailVehicule = vehicules.find(v => v.id === modalState.vehiculeId);
+        const detailItem = modalState.itemId
+          ? items.find(i => i.id === modalState.itemId)
+          : items.find(i => i.inventaireId === modalState.vehiculeId && i.etat !== 'termine');
+
+        // Si pas de véhicule inventaire, construire un objet virtuel depuis le prod_item
+        if (!detailVehicule && detailItem) {
+          detailVehicule = {
+            id: detailItem.inventaireId ?? detailItem.id,
+            numero: detailItem.numero,
+            type: detailItem.type as 'eau' | 'detail',
+            statut: detailItem.etat === 'termine' ? 'disponible' : 'en-production',
+            dateImport: detailItem.dateCreation ?? new Date().toISOString(),
+            marque: (detailItem as any).marque,
+            modele: (detailItem as any).modele,
+            annee: (detailItem as any).annee,
+            variante: (detailItem as any).variante,
+            nomClient: detailItem.nomClient,
+            telephone: detailItem.telephone,
+            descriptionTravail: detailItem.descriptionTravail,
+            photoUrl: detailItem.photoUrl,
+            aUnReservoir: (detailItem as any).aUnReservoir,
+            reservoirId: (detailItem as any).reservoirId,
+            etatCommercial: (detailItem as any).etatCommercial,
+            clientAcheteur: (detailItem as any).clientAcheteur,
+            jobId: detailItem.id,
+            roadMap: [],
+          } as any;
+        }
+
         if (!detailVehicule) return null;
         return (
           <PanneauDetailPlancher
