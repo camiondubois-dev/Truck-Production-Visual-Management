@@ -412,9 +412,10 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
         {ROAD_MAP_STATIONS.map(s => {
           const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
           if (steps.length === 0) {
+            // Pas dans le road map → tiret rouge
             return (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #f1f5f9', padding: '10px 0' }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f1f5f9', opacity: 0.5 }} />
+                <div style={{ width: 20, height: 3, borderRadius: 2, background: '#fca5a5' }} />
               </div>
             );
           }
@@ -432,12 +433,12 @@ function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
               ) : anyEnAttente ? (
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'white', boxShadow: '0 2px 6px rgba(245,158,11,0.3)' }}>⏳</div>
               ) : anySaute ? (
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', fontSize: 11, fontWeight: 800 }}>✕</div>
+                <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 800, whiteSpace: 'nowrap', border: '1px solid #fde68a' }}>⚠️ SAUTÉ</span>
               ) : (
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', border: '2px solid #d1d5db' }} />
               )}
               {count > 1 && (
-                <span style={{ position: 'absolute', top: 4, right: '50%', marginRight: -22, fontSize: 9, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : anyEnAttente ? '#f59e0b' : anySaute ? '#dc2626' : '#9ca3af', color: 'white', borderRadius: 10, padding: '1px 5px', fontWeight: 800, lineHeight: 1.3 }}>{count}</span>
+                <span style={{ position: 'absolute', top: 4, right: '50%', marginRight: -22, fontSize: 9, background: allTermine ? '#22c55e' : anyEnCours ? '#3b82f6' : anyEnAttente ? '#f59e0b' : anySaute ? '#92400e' : '#9ca3af', color: 'white', borderRadius: 10, padding: '1px 5px', fontWeight: 800, lineHeight: 1.3 }}>{count}</span>
               )}
             </div>
           );
