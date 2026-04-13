@@ -119,6 +119,32 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     setVehicules(prev => prev.map(v => v.id === id ? { ...v, roadMap } : v));
 
     await inventaireService.mettreAJourRoadMap(id, roadMap);
+
+    // ── Sync prod_items.progression avec road_map ─────────────────
+    // Si un prod_items actif existe pour ce véhicule, synchroniser sa progression
+    const { data: activeItems } = await supabase
+      .from('prod_items')
+      .select('id')
+      .eq('inventaire_id', id)
+      .neq('etat', 'termine');
+    if (activeItems && activeItems.length > 0) {
+      const progression = roadMap
+        .filter(s => s.statut !== 'planifie')
+        .map(s => ({ stationId: s.stationId, status: s.statut }));
+      const stationsActives = roadMap
+        .filter(s => s.statut !== 'planifie' && s.statut !== 'saute')
+        .map(s => s.stationId);
+      for (const ai of activeItems) {
+        await supabase.from('prod_items')
+          .update({
+            progression,
+            stations_actives: stationsActives,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', ai.id);
+      }
+    }
+
     // ── Lifecycle automatique ──────────────────────────────────────
     // Lire le statut/jobId FRAIS depuis Supabase (évite la stale closure)
     const { data: freshRow } = await supabase
