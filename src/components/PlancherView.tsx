@@ -13,6 +13,7 @@ import { CreateWizardModal } from './CreateWizardModal';
 import { RoadMapEditor } from './RoadMapEditor';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
+import { reservoirService } from '../services/reservoirService';
 import type { Slot, Item } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
@@ -247,15 +248,15 @@ export function PlancherView() {
         <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
 
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
@@ -924,8 +925,14 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                   <div
                     title={label}
                     onClick={(e) => {
-                      if (item && !inSlot) onWaitingItemClick(e, item, station.id);
-                      else if (!item) onCreateAndAssign(e, vehicule, station.id);
+                      if (item && !inSlot && onOpenDetail && item.inventaireId) {
+                        e.stopPropagation();
+                        onOpenDetail(item.inventaireId);
+                      } else if (item && !inSlot) {
+                        onWaitingItemClick(e, item, station.id);
+                      } else if (!item) {
+                        onCreateAndAssign(e, vehicule, station.id);
+                      }
                     }}
                     style={{
                       flex: 1, display: 'flex', alignItems: 'center', gap: 4,
@@ -1596,10 +1603,54 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
   onTerminerEtAvancer?: (itemId: string) => void;
   onTerminerItem?: (itemId: string) => void;
 }) {
-  const { mettreAJourRoadMap, marquerPret, mettreAJourCommercial } = useInventaire();
+  const { mettreAJourRoadMap, marquerPret, mettreAJourCommercial, mettreAJourReservoir } = useInventaire();
   const { marquerPret: marquerPretGarage } = useGarage();
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeIcon = v.type === 'eau' ? '💧' : v.type === 'client' ? '🔧' : '🏷️';
+
+  // ── Réservoir state ──
+  const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
+  const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
+  const [reservoirSelectionne, setReservoirSelectionne] = useState('');
+  const [savingReservoir, setSavingReservoir] = useState(false);
+
+  useEffect(() => {
+    if (v.type !== 'eau') return;
+    if (v.aUnReservoir && v.reservoirId) {
+      supabase.from('prod_reservoirs').select('numero,type').eq('id', v.reservoirId).maybeSingle()
+        .then(({ data }) => setReservoirInstalle(data ? { numero: data.numero, type: data.type } : null));
+    } else if (!v.aUnReservoir) {
+      supabase.from('prod_reservoirs').select('id,numero,type').eq('etat', 'disponible')
+        .then(({ data }) => setReservoirsDisponibles((data ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type }))));
+    }
+  }, [v.id, v.type, v.aUnReservoir, v.reservoirId]);
+
+  const handleAssignerReservoir = async () => {
+    if (!reservoirSelectionne) return;
+    setSavingReservoir(true);
+    try {
+      await reservoirService.installerSurInventaire(reservoirSelectionne, v.id);
+      await mettreAJourReservoir(v.id, true, reservoirSelectionne);
+    } finally { setSavingReservoir(false); }
+  };
+
+  const handleMarquerAvecReservoir = async () => {
+    setSavingReservoir(true);
+    try {
+      await mettreAJourReservoir(v.id, true, null);
+      if (v.jobId) {
+        await supabase.from('prod_items').update({ a_un_reservoir: true, reservoir_id: null }).eq('inventaire_id', v.id);
+      }
+    } finally { setSavingReservoir(false); }
+  };
+
+  const handleRetirerReservoir = async () => {
+    setSavingReservoir(true);
+    try {
+      if (v.reservoirId) await reservoirService.desinstallerDeInventaire(v.reservoirId, v.id);
+      await mettreAJourReservoir(v.id, false, null);
+    } finally { setSavingReservoir(false); }
+  };
 
   const formatDateRelative = (dateStr: string) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -1637,7 +1688,7 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
               {item?.slotId && `Slot ${item.slotId}`}
               {item?.slotId && item?.dateEntreeSlot && ` · depuis ${formatDateRelative(item.dateEntreeSlot)}`}
-              {!item?.slotId && v.statut === 'en-production' && 'En production'}
+              {!item?.slotId && v.statut === 'en-production' && 'En attente'}
               {!item?.slotId && v.statut === 'disponible' && 'Disponible'}
             </div>
           </div>
@@ -1656,8 +1707,11 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
 
         {/* Badges */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-          {v.statut === 'en-production' && (
+          {v.statut === 'en-production' && item?.slotId && (
             <span style={{ fontSize: 11, background: '#f9731620', color: '#f97316', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>🔨 En garage</span>
+          )}
+          {v.statut === 'en-production' && !item?.slotId && (
+            <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⏳ En attente</span>
           )}
           {v.estPret && (
             <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>✅ Prêt</span>
@@ -1673,10 +1727,10 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
                 : `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}`}
             </span>
           )}
-          {(item as any)?.aUnReservoir && (
+          {v.aUnReservoir && (
             <span style={{ fontSize: 11, background: '#22c55e20', color: '#4ade80', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>💧 TANK</span>
           )}
-          {item && !(item as any)?.aUnReservoir && v.type === 'eau' && (
+          {!v.aUnReservoir && v.type === 'eau' && (
             <span style={{ fontSize: 11, background: '#f59e0b20', color: '#fbbf24', padding: '3px 8px', borderRadius: 5, fontWeight: 700 }}>⚠️ SANS TANK</span>
           )}
         </div>
@@ -1726,6 +1780,72 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
           </div>
         </div>
 
+        {/* Réservoir (camions eau seulement) */}
+        {v.type === 'eau' && (
+          <div style={{ marginBottom: 20, padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              💧 Réservoir
+            </div>
+            {v.aUnReservoir ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, background: '#22c55e25', color: '#4ade80', padding: '4px 12px', borderRadius: 8, fontWeight: 700 }}>✅ Réservoir installé</span>
+                  {reservoirInstalle && (
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+                      #{reservoirInstalle.numero} — {reservoirInstalle.type}
+                    </span>
+                  )}
+                </div>
+                <button onClick={handleRetirerReservoir} disabled={savingReservoir}
+                  style={{ padding: '7px 14px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
+                    border: '1px solid #ef444460', background: 'transparent', color: '#ef4444',
+                    fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
+                  {savingReservoir ? 'En cours...' : 'Retirer le réservoir'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                    Assigner un réservoir de l'inventaire
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select value={reservoirSelectionne} onChange={e => setReservoirSelectionne(e.target.value)}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.2)',
+                        background: '#1a1814', color: reservoirSelectionne ? 'white' : 'rgba(255,255,255,0.4)',
+                        fontSize: 12, outline: 'none' }}>
+                      <option value="">— Choisir un réservoir —</option>
+                      {reservoirsDisponibles.map(r => (
+                        <option key={r.id} value={r.id}>#{r.numero} ({r.type})</option>
+                      ))}
+                    </select>
+                    <button onClick={handleAssignerReservoir} disabled={!reservoirSelectionne || savingReservoir}
+                      style={{ padding: '7px 14px', borderRadius: 7, border: 'none',
+                        cursor: !reservoirSelectionne || savingReservoir ? 'not-allowed' : 'pointer',
+                        background: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.1)' : '#f97316',
+                        color: !reservoirSelectionne || savingReservoir ? 'rgba(255,255,255,0.3)' : 'white',
+                        fontWeight: 700, fontSize: 12 }}>
+                      {savingReservoir ? '...' : 'Assigner'}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>ou</span>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+                </div>
+                <button onClick={handleMarquerAvecReservoir} disabled={savingReservoir}
+                  style={{ padding: '8px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer',
+                    border: '1px solid rgba(255,255,255,0.15)', background: 'transparent',
+                    color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600,
+                    opacity: savingReservoir ? 0.5 : 1 }}>
+                  {savingReservoir ? 'En cours...' : '✅ Marquer comme ayant un réservoir'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Road Map Editor */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
@@ -1749,6 +1869,9 @@ function PanneauDetailPlancher({ vehicule: v, item, onClose, onRetirerAttente, o
             {v.marque && <div><strong>Marque:</strong> {v.marque}</div>}
             {v.modele && <div><strong>Modèle:</strong> {v.modele}</div>}
             {v.annee && <div><strong>Année:</strong> {v.annee}</div>}
+            {v.nomClient && <div><strong>Client:</strong> {v.nomClient}</div>}
+            {v.telephone && <div><strong>Téléphone:</strong> {v.telephone}</div>}
+            {v.descriptionTravail && <div><strong>Travaux:</strong> {v.descriptionTravail}</div>}
           </div>
         </div>
       </div>
