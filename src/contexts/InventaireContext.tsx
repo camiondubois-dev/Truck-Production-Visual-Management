@@ -120,31 +120,49 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
 
     await inventaireService.mettreAJourRoadMap(id, roadMap);
     // ── Lifecycle automatique ──────────────────────────────────────
-    const vehicule = vehicules.find(v => v.id === id); // lecture du snapshot PRÉ-update (closure)
-    if (vehicule) {
+    // Lire le statut/jobId FRAIS depuis Supabase (évite la stale closure)
+    const { data: freshRow } = await supabase
+      .from('prod_inventaire')
+      .select('statut, job_id')
+      .eq('id', id)
+      .single();
+
+    if (freshRow) {
+      const currentStatut = freshRow.statut as string;
+      const currentJobId = freshRow.job_id as string | null;
+
       const activeSteps = roadMap.filter(s => s.statut === 'en-attente' || s.statut === 'en-cours');
       const allDone = roadMap.length > 0 && roadMap.every(s => s.statut === 'termine' || s.statut === 'saute');
 
-      if (activeSteps.length > 0 && vehicule.statut === 'disponible') {
+      if (activeSteps.length > 0 && currentStatut === 'disponible') {
         // Au moins une étape active → créer job si pas encore en production
         try {
-          const jobId = await inventaireService.creerProdItemDepuisVehicule({ ...vehicule, roadMap });
-          setVehicules(prev => prev.map(v =>
-            v.id === id ? { ...v, roadMap, statut: 'en-production', jobId: jobId ?? v.jobId, dateEnProduction: v.dateEnProduction ?? new Date().toISOString() } : v
-          ));
-          return;
+          // Lire les données complètes du véhicule pour créer le job
+          const { data: fullRow } = await supabase
+            .from('prod_inventaire')
+            .select('*')
+            .eq('id', id)
+            .single();
+          if (fullRow) {
+            const freshVehicule = fromDB(fullRow);
+            const jobId = await inventaireService.creerProdItemDepuisVehicule({ ...freshVehicule, roadMap });
+            setVehicules(prev => prev.map(v =>
+              v.id === id ? { ...v, roadMap, statut: 'en-production', jobId: jobId ?? v.jobId, dateEnProduction: v.dateEnProduction ?? new Date().toISOString() } : v
+            ));
+            return;
+          }
         } catch (err) {
           console.error('[InventaireContext] creerProdItemDepuisVehicule error:', err);
         }
       }
 
-      if (allDone && vehicule.statut === 'en-production') {
+      if (allDone && currentStatut === 'en-production') {
         // Toutes les étapes terminées/sautées → fermer le job
         try {
-          if (vehicule.jobId) {
+          if (currentJobId) {
             await supabase.from('prod_items')
               .update({ etat: 'termine', date_archive: new Date().toISOString(), updated_at: new Date().toISOString() })
-              .eq('id', vehicule.jobId);
+              .eq('id', currentJobId);
           }
           await inventaireService.marquerDisponible(id);
           setVehicules(prev => prev.map(v =>
@@ -186,10 +204,36 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const marquerPret = async (id: string, estPret: boolean) => {
-    await inventaireService.marquerPret(id, estPret);
-    setVehicules(prev => prev.map(v =>
-      v.id === id ? { ...v, estPret } : v
-    ));
+    if (estPret) {
+      // Marquer prêt = toutes les étapes terminées, camion prêt pour livraison
+      // 1) Fermer le job prod_items actif
+      await supabase.from('prod_items')
+        .update({ etat: 'termine', date_archive: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('inventaire_id', id)
+        .neq('etat', 'termine');
+      // 2) Marquer toutes les étapes road_map comme terminées
+      const { data: inv } = await supabase.from('prod_inventaire').select('road_map').eq('id', id).single();
+      const roadMapFini = (inv?.road_map ?? []).map((s: any) =>
+        s.statut === 'saute' ? s : { ...s, statut: 'termine' as const }
+      );
+      // 3) Mettre à jour prod_inventaire: disponible + est_pret=true + job_id=null
+      await supabase.from('prod_inventaire').update({
+        est_pret: true,
+        statut: 'disponible',
+        job_id: null,
+        date_en_production: null,
+        road_map: roadMapFini,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+      setVehicules(prev => prev.map(v =>
+        v.id === id ? { ...v, estPret: true, statut: 'disponible', jobId: undefined, dateEnProduction: undefined, roadMap: roadMapFini } : v
+      ));
+    } else {
+      await inventaireService.marquerPret(id, false);
+      setVehicules(prev => prev.map(v =>
+        v.id === id ? { ...v, estPret: false } : v
+      ));
+    }
   };
 
   const mettreAJourCommercial = async (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => {
