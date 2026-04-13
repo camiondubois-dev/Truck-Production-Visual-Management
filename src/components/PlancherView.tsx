@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
 import { supabase } from '../lib/supabase';
@@ -651,10 +651,24 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
 
+  // ── localQueue : source d'affichage locale ──────────────────────────────
+  // Mis à jour IMMÉDIATEMENT lors d'un reorder (pas d'attente réseau).
+  // Remis à null seulement si des items sont ajoutés/retirés de la file.
+  const [localQueue, setLocalQueue] = useState<QueueEntry[] | null>(null);
+  const queueSignature = finalQueue.map(e => e.vehicule.id).join('|');
+  const prevSigRef = useRef(queueSignature);
+  useEffect(() => {
+    if (prevSigRef.current !== queueSignature) {
+      prevSigRef.current = queueSignature;
+      setLocalQueue(null); // nouvel item ou item retiré → réinitialiser
+    }
+  }, [queueSignature]);
+  const displayQueue = localQueue ?? finalQueue;
+
   // Drag-and-drop state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  // Badge picker state : index de l'item dont le picker est ouvert
+  // Badge picker
   const [pickerIdx, setPickerIdx] = useState<number | null>(null);
 
   // Fermer le picker si on clique ailleurs
@@ -665,42 +679,48 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
     return () => window.removeEventListener('click', close);
   }, [pickerIdx]);
 
+  // Applique un nouvel ordre : mise à jour locale immédiate + save DB en arrière-plan
+  const applyReorder = (newOrder: QueueEntry[]) => {
+    setLocalQueue(newOrder);
+    onReorder(newOrder); // fire-and-forget, pas d'await → pas de blocage UI
+  };
+
   // Monter d'un rang
-  const handleMoveUp = async (idx: number) => {
+  const handleMoveUp = (idx: number) => {
     if (idx === 0) return;
-    const newOrder = [...finalQueue];
+    const newOrder = [...displayQueue];
     [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
-    await onReorder(newOrder);
+    applyReorder(newOrder);
   };
 
   // Descendre d'un rang
-  const handleMoveDown = async (idx: number) => {
-    if (idx === finalQueue.length - 1) return;
-    const newOrder = [...finalQueue];
+  const handleMoveDown = (idx: number) => {
+    if (idx === displayQueue.length - 1) return;
+    const newOrder = [...displayQueue];
     [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
-    await onReorder(newOrder);
+    applyReorder(newOrder);
   };
 
-  // Drag-and-drop reorder
-  const handleDrop = async (dropIdx: number) => {
+  // Drag-and-drop
+  const handleDrop = (dropIdx: number) => {
     if (dragIdx === null || dragIdx === dropIdx) {
       setDragIdx(null); setDragOverIdx(null); return;
     }
-    const newOrder = [...finalQueue];
+    const newOrder = [...displayQueue];
     const [moved] = newOrder.splice(dragIdx, 1);
     newOrder.splice(dropIdx, 0, moved);
     setDragIdx(null); setDragOverIdx(null);
-    await onReorder(newOrder);
+    applyReorder(newOrder);
   };
 
-  // Picker : déplacer l'item idx vers la position targetIdx
-  const handlePickerMove = async (fromIdx: number, toIdx: number) => {
+  // Picker : sauter directement à une position
+  const handlePickerMove = (fromIdx: number, toIdx: number) => {
     setPickerIdx(null);
     if (fromIdx === toIdx) return;
-    const newOrder = [...finalQueue];
+    const newOrder = [...displayQueue];
     const [moved] = newOrder.splice(fromIdx, 1);
     newOrder.splice(toIdx, 0, moved);
-    await onReorder(newOrder);
+    applyReorder(newOrder);
   };
 
   return (
@@ -727,7 +747,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span>{station.label}</span>
-        {finalQueue.length > 0 && (
+        {displayQueue.length > 0 && (
           <span style={{
             background: `${station.color}18`,
             color: station.color,
@@ -735,7 +755,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             borderRadius: 4, padding: '1px 8px',
             fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 700,
           }}>
-            {finalQueue.length} en attente
+            {displayQueue.length} en attente
           </span>
         )}
       </div>
@@ -762,7 +782,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
       </div>
 
       {/* File d'attente numérotée */}
-      {finalQueue.length > 0 && (
+      {displayQueue.length > 0 && (
         <div style={{
           borderTop: `1px solid ${station.color}33`,
           padding: '5px 8px 6px',
@@ -783,7 +803,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {finalQueue.map((entry, idx) => {
+            {displayQueue.map((entry, idx) => {
               const { vehicule, item } = entry;
               const rank = idx + 1;
               const couleur = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -796,7 +816,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
               const entryKey = entry.stepId ?? `${vehicule.id}-${entry.stationId ?? idx}`;
               const isDragging = dragIdx === idx;
               const isOver = dragOverIdx === idx && dragIdx !== null && dragIdx !== idx;
-              const canDrag = !!entry.stationId;
+              const canDrag = true; // tous les items sont draggables
               return (
                 <div
                   key={entryKey}
@@ -818,7 +838,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                   {/* Badge de position — clic pour choisir la position directement */}
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <span
-                      onClick={entry.stationId ? (e) => { e.stopPropagation(); setPickerIdx(pickerIdx === idx ? null : idx); } : undefined}
+                      onClick={(e) => { e.stopPropagation(); setPickerIdx(pickerIdx === idx ? null : idx); }}
                       style={{
                         width: 'clamp(16px, 1.6vw, 20px)', height: 'clamp(16px, 1.6vw, 20px)',
                         borderRadius: 4,
@@ -826,7 +846,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                         color: 'white', fontSize: 'clamp(8px, 0.85vw, 11px)', fontWeight: 900,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontFamily: 'monospace',
-                        cursor: entry.stationId ? 'pointer' : 'default',
+                        cursor: 'pointer',
                         outline: pickerIdx === idx ? `2px solid ${rankColor}` : 'none',
                         outlineOffset: 1,
                       }}
@@ -834,7 +854,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                       {rank}
                     </span>
                     {/* Mini picker de position */}
-                    {pickerIdx === idx && entry.stationId && (
+                    {pickerIdx === idx && (
                       <div
                         onClick={e => e.stopPropagation()}
                         style={{
@@ -845,7 +865,7 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                           minWidth: 28, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                         }}
                       >
-                        {finalQueue.map((_, pos) => (
+                        {displayQueue.map((_, pos) => (
                           <button
                             key={pos}
                             onClick={() => handlePickerMove(idx, pos)}
@@ -905,37 +925,33 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                     )}
                   </div>
 
-                  {/* Boutons ▲▼ — toujours visibles et actifs si entry a un stationId */}
-                  {entry.stationId && (
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
-                        title="Remonter"
-                        style={{
-                          background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: 'pointer',
-                          color: 'rgba(255,255,255,0.45)',
-                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
-                          transition: 'color 0.1s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
-                      >▲</button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
-                        title="Descendre"
-                        style={{
-                          background: 'none', border: 'none', padding: '1px 3px',
-                          cursor: 'pointer',
-                          color: 'rgba(255,255,255,0.45)',
-                          fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
-                          transition: 'color 0.1s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
-                      >▼</button>
-                    </>
-                  )}
+                  {/* Boutons ▲▼ — sur TOUS les items */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveUp(idx); }}
+                    title="Remonter"
+                    style={{
+                      background: 'none', border: 'none', padding: '1px 3px',
+                      cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                      transition: 'color 0.1s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
+                  >▲</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveDown(idx); }}
+                    title="Descendre"
+                    style={{
+                      background: 'none', border: 'none', padding: '1px 3px',
+                      cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 'clamp(10px, 1vw, 13px)', lineHeight: 1, flexShrink: 0,
+                      transition: 'color 0.1s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
+                  >▼</button>
                 </div>
               );
             })}
