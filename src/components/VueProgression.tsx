@@ -184,7 +184,7 @@ export function VueProgression() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc' }}>
+    <div style={{ display: 'flex', height: '100%', background: '#f8fafc' }}>
       <div
         style={{
           flex: 1,

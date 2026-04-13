@@ -82,7 +82,7 @@ export function VueClients() {
     items.filter(i => i.clientId === clientId);
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         marginRight: selected ? 420 : 0, transition: 'margin-right 0.3s ease',
