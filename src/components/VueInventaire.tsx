@@ -18,6 +18,7 @@ import { RoadMapEditor } from './RoadMapEditor';
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
 type FiltreDept = 'tous' | string; // station ID
+type FiltrePretCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location' | 'reserve';
 
 const generateVehId = () => `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 
@@ -250,6 +251,7 @@ export function VueInventaire() {
   const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
   const [filtreDept, setFiltreDept] = useState<FiltreDept>('tous');
+  const [filtrePretCommercial, setFiltrePretCommercial] = useState<FiltrePretCommercial>('tous');
   const [recherche, setRecherche] = useState('');
   const [searchResults, setSearchResults] = useState<VehiculeInventaire[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -282,6 +284,13 @@ export function VueInventaire() {
       if (filtreStatut === 'pret' && !v.estPret) return false;
       if (filtreStatut === 'vendu' && v.etatCommercial !== 'vendu' && v.etatCommercial !== 'reserve' && v.etatCommercial !== 'location') return false;
       if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && filtreStatut !== 'vendu' && v.statut !== filtreStatut) return false;
+      // Sub-filtre prêt par statut commercial
+      if (filtreStatut === 'pret' && filtrePretCommercial !== 'tous') {
+        if (filtrePretCommercial === 'a-vendre'  && v.etatCommercial !== 'non-vendu')  return false;
+        if (filtrePretCommercial === 'a-livrer'  && v.etatCommercial !== 'vendu')      return false;
+        if (filtrePretCommercial === 'location'  && v.etatCommercial !== 'location')   return false;
+        if (filtrePretCommercial === 'reserve'   && v.etatCommercial !== 'reserve')    return false;
+      }
       if (filtreType !== 'tous' && v.type !== filtreType) return false;
       if (filtreDept !== 'tous' && !(v.roadMap ?? []).some(e => e.stationId === filtreDept && (e.statut === 'en-attente' || e.statut === 'en-cours'))) return false;
       return true;
@@ -295,6 +304,12 @@ export function VueInventaire() {
   const selected = vehicules.find(v => v.id === selectedId) ?? null;
   const pretsCount = vehicules.filter(v => v.estPret).length;
   const vendusCount = vehicules.filter(v => v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location').length;
+  const pretsParCommercial = {
+    aVendre:  vehicules.filter(v => v.estPret && v.etatCommercial === 'non-vendu').length,
+    aLivrer:  vehicules.filter(v => v.estPret && v.etatCommercial === 'vendu').length,
+    location: vehicules.filter(v => v.estPret && v.etatCommercial === 'location').length,
+    reserve:  vehicules.filter(v => v.estPret && v.etatCommercial === 'reserve').length,
+  };
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -368,7 +383,7 @@ export function VueInventaire() {
             { id: 'pret'          as FiltreStatut, label: `✅ Prêts${pretsCount > 0 ? ` (${pretsCount})` : ''}` },
             { id: 'vendu'         as FiltreStatut, label: `🏷️ Vendus/Loués${vendusCount > 0 ? ` (${vendusCount})` : ''}` },
           ]).map(s => (
-            <button key={s.id} onClick={() => setFiltreStatut(s.id)}
+            <button key={s.id} onClick={() => { setFiltreStatut(s.id); if (s.id !== 'pret') setFiltrePretCommercial('tous'); }}
               style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreStatut === s.id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === s.id ? (s.id === 'pret' ? '#22c55e' : s.id === 'vendu' ? '#7c3aed' : '#374151') : 'white', color: filtreStatut === s.id ? 'white' : '#6b7280', fontWeight: filtreStatut === s.id ? 700 : 400 }}>
               {s.label}
             </button>
@@ -381,6 +396,30 @@ export function VueInventaire() {
             </button>
           ))}
         </div>
+
+        {/* Sub-filtre prêts par statut commercial */}
+        {filtreStatut === 'pret' && (
+          <div style={{ display: 'flex', gap: 8, padding: '8px 24px 10px', background: '#f0fdf4', flexWrap: 'wrap', borderBottom: '1px solid #d1fae5' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', alignSelf: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filtrer :</span>
+            {([
+              { id: 'tous'     as FiltrePretCommercial, label: `Tous (${pretsCount})`,                                     bg: '#16a34a' },
+              { id: 'a-vendre' as FiltrePretCommercial, label: `🏷️ À vendre (${pretsParCommercial.aVendre})`,              bg: '#f97316' },
+              { id: 'a-livrer' as FiltrePretCommercial, label: `🚚 À livrer (${pretsParCommercial.aLivrer})`,              bg: '#3b82f6' },
+              { id: 'location' as FiltrePretCommercial, label: `🔑 Location (${pretsParCommercial.location})`,             bg: '#7c3aed' },
+              { id: 'reserve'  as FiltrePretCommercial, label: `🔒 Réservé (${pretsParCommercial.reserve})`,              bg: '#92400e' },
+            ].filter(f => f.id === 'tous' || (
+              f.id === 'a-vendre'  ? pretsParCommercial.aVendre  > 0 :
+              f.id === 'a-livrer'  ? pretsParCommercial.aLivrer  > 0 :
+              f.id === 'location'  ? pretsParCommercial.location > 0 :
+              f.id === 'reserve'   ? pretsParCommercial.reserve  > 0 : true
+            ))).map(f => (
+              <button key={f.id} onClick={() => setFiltrePretCommercial(f.id)}
+                style={{ padding: '4px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtrePretCommercial === f.id ? 'none' : `1px solid ${f.bg}40`, background: filtrePretCommercial === f.id ? f.bg : 'white', color: filtrePretCommercial === f.id ? 'white' : f.bg, fontWeight: filtrePretCommercial === f.id ? 700 : 500 }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Filtre département */}
         {ROAD_MAP_STATIONS.some(s => deptCounts[s.id] > 0) && (
@@ -758,8 +797,8 @@ function PanneauDetailInventaire({ vehicule: v, onClose, onRetourInventaire, onS
         {/* Actions */}
         <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* Marquer comme prêt / Annuler prêt */}
-          {v.statut === 'en-production' && (
+          {/* Marquer comme prêt / Annuler prêt — disponible pour tout véhicule non archivé */}
+          {v.statut !== 'archive' && (
             !v.estPret ? (
               <button onClick={async () => { setSavingPret(true); try { await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
                 disabled={savingPret}
