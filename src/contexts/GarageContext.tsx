@@ -42,13 +42,13 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
-  // Real-time: auto-created prod_items (from road_map lifecycle) appear instantly
+  // Real-time: prod_items INSERT, UPDATE, DELETE → refresh tout
   useEffect(() => {
     const channel = supabase
       .channel('garage-items-realtime')
       .on(
         'postgres_changes' as any,
-        { event: 'INSERT', schema: 'public', table: 'prod_items' },
+        { event: '*', schema: 'public', table: 'prod_items' },
         async () => { await chargerItems(); }
       )
       .subscribe();
