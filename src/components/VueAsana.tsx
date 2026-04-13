@@ -177,8 +177,8 @@ export function VueAsana({ type, config }: VueAsanaProps) {
           })}
         </div>
 
-        {/* ── Tableau ─────────────────────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+        {/* ── Liste cartes ─────────────────────────────────────── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
           {mesVehicules.filter(v => v.statut !== 'archive').length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 20px', color: '#9ca3af' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>{config.icon === 'EAU_LOGO' ? <EauIcon /> : config.icon}</div>
@@ -186,91 +186,66 @@ export function VueAsana({ type, config }: VueAsanaProps) {
               <div style={{ fontSize: 14 }}>Clique sur "+ Nouveau" pour commencer</div>
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 950 }}>
-              <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={thStyle(110)}>Numéro</th>
-                  {type === 'client'
-                    ? <><th style={thStyle(150)}>Client</th><th style={thStyle(160)}>Description</th></>
-                    : <><th style={thStyle(120)}>Marque</th><th style={thStyle(110)}>Modèle</th></>
-                  }
-                  <th style={thStyle(90)}>Slot</th>
-                  <th style={thStyle(120)}>Statut</th>
-                  {ROAD_MAP_STATIONS.map(s => (
-                    <th key={s.id} style={{
-                      width: 100, textAlign: 'center', padding: '10px 4px',
-                      fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
-                      textTransform: 'uppercase', color: s.color,
-                      borderBottom: `3px solid ${s.color}`,
-                      whiteSpace: 'normal', lineHeight: 1.4,
-                      verticalAlign: 'bottom', minWidth: 90,
-                    }}>{s.icon} {s.label}</th>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {aPlanifier.length > 0 && (
+                <>
+                  <SectionHeaderCard label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
+                  {aPlanifier.map(v => (
+                    <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      selected={selectedId === v.id}
+                      onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {aPlanifier.length > 0 && (
-                  <>
-                    <SectionHeader label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
-                    {aPlanifier.map(v => (
-                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
-                        selected={selectedId === v.id}
-                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
-                    ))}
-                  </>
-                )}
-                {enAttente.length > 0 && (
-                  <>
-                    <SectionHeader label="⏳ En attente" color="#f59e0b" count={enAttente.length} />
-                    {enAttente.map(v => (
-                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
-                        selected={selectedId === v.id}
-                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
-                    ))}
-                  </>
-                )}
-                {dansLeGarage.length > 0 && (
-                  <>
-                    <SectionHeader label="🔧 Dans le garage" color="#3b82f6" count={dansLeGarage.length} />
-                    {dansLeGarage.map(v => (
-                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
-                        selected={selectedId === v.id}
-                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
-                    ))}
-                  </>
-                )}
-                {prets.length > 0 && (
-                  <>
-                    <SectionHeader label="✅ Prêts" color="#22c55e" count={prets.length} />
-                    {prets.map(v => (
-                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
-                        selected={selectedId === v.id}
-                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
-                    ))}
-                  </>
-                )}
-                {vehiculesFiltres.filter(v => v.statut !== 'archive').length === 0 && filtreActif !== 'tous' && (
-                  <tr>
-                    <td colSpan={999} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', fontSize: 14 }}>
-                      Aucun résultat pour ce filtre
-                    </td>
-                  </tr>
-                )}
-                {archives.length > 0 && (
-                  <>
-                    <SectionHeader
-                      label={showArchives ? 'Archivés (masquer)' : `Archivés (${archives.length})`}
-                      color="#d1d5db" count={archives.length}
-                      onClick={() => setShowArchives(s => !s)} clickable />
-                    {showArchives && archives.map(v => (
-                      <LigneVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
-                        selected={selectedId === v.id}
-                        onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
-                    ))}
-                  </>
-                )}
-              </tbody>
-            </table>
+                </>
+              )}
+              {enAttente.length > 0 && (
+                <>
+                  <SectionHeaderCard label="⏳ En attente" color="#f59e0b" count={enAttente.length} />
+                  {enAttente.map(v => (
+                    <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      selected={selectedId === v.id}
+                      onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                  ))}
+                </>
+              )}
+              {dansLeGarage.length > 0 && (
+                <>
+                  <SectionHeaderCard label="🔧 Dans le garage" color="#3b82f6" count={dansLeGarage.length} />
+                  {dansLeGarage.map(v => (
+                    <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      selected={selectedId === v.id}
+                      onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                  ))}
+                </>
+              )}
+              {prets.length > 0 && (
+                <>
+                  <SectionHeaderCard label="✅ Prêts" color="#22c55e" count={prets.length} />
+                  {prets.map(v => (
+                    <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      selected={selectedId === v.id}
+                      onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                  ))}
+                </>
+              )}
+              {vehiculesFiltres.filter(v => v.statut !== 'archive').length === 0 && filtreActif !== 'tous' && (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', fontSize: 14 }}>
+                  Aucun résultat pour ce filtre
+                </div>
+              )}
+              {archives.length > 0 && (
+                <>
+                  <SectionHeaderCard
+                    label={showArchives ? 'Archivés (masquer)' : `Archivés (${archives.length})`}
+                    color="#d1d5db" count={archives.length}
+                    onClick={() => setShowArchives(s => !s)} clickable />
+                  {showArchives && archives.map(v => (
+                    <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      selected={selectedId === v.id}
+                      onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                  ))}
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -326,36 +301,36 @@ function FiltreBtn({ active, onClick, label, color }: { active: boolean; onClick
   );
 }
 
-function SectionHeader({ label, color, count, onClick, clickable }: {
+function SectionHeaderCard({ label, color, count, onClick, clickable }: {
   label: string; color: string; count: number; onClick?: () => void; clickable?: boolean;
 }) {
   return (
-    <tr onClick={onClick} style={{ cursor: clickable ? 'pointer' : 'default' }}>
-      <td colSpan={999} style={{
-        padding: '8px 16px', background: '#f8fafc',
-        borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb',
-        fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em',
-      }}>
-        {label}
-        {!clickable && (
-          <span style={{ marginLeft: 8, background: color, color: 'white', fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>
-            {count}
-          </span>
-        )}
-      </td>
-    </tr>
+    <div onClick={onClick} style={{
+      padding: '8px 4px', cursor: clickable ? 'pointer' : 'default',
+      fontSize: 12, fontWeight: 700, color, letterSpacing: '0.04em',
+      marginTop: 8,
+    }}>
+      {label}
+      {!clickable && (
+        <span style={{ marginLeft: 8, background: color, color: 'white', fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>
+          {count}
+        </span>
+      )}
+    </div>
   );
 }
 
-const thStyle = (width: number): React.CSSProperties => ({
-  width, textAlign: 'left', padding: '12px 14px',
-  fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-  textTransform: 'uppercase', color: '#6b7280',
-});
+function getLabelVehicule(v: VehiculeInventaire): string {
+  if (v.type === 'client') {
+    return [v.nomClient, v.vehicule].filter(Boolean).join(' — ') || 'Job client';
+  }
+  return [v.marque, v.modele, v.annee].filter(Boolean).join(' ') ||
+    (v.type === 'detail' ? 'Camion détail' : 'Camion à eau');
+}
 
-// ── LigneVehicule ────────────────────────────────────────────────
+// ── CarteVehicule ────────────────────────────────────────────────
 
-function LigneVehicule({ vehicule: v, item, type, selected, onClick }: {
+function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
   vehicule: VehiculeInventaire;
   item?: Item;
   type: TypeItem;
@@ -367,71 +342,72 @@ function LigneVehicule({ vehicule: v, item, type, selected, onClick }: {
   const isArchive = v.statut === 'archive';
 
   return (
-    <tr onClick={onClick}
+    <div onClick={onClick}
       style={{
-        borderBottom: '1px solid #f1f5f9',
-        background: selected ? `${typeColor}18` : isArchive ? '#fafafa' : 'white',
-        borderLeft: selected ? `3px solid ${typeColor}` : '3px solid transparent',
-        cursor: 'pointer', transition: 'background 0.1s',
+        background: selected ? `${typeColor}08` : isArchive ? '#fafafa' : 'white',
+        borderRadius: 10,
+        border: `1px solid ${selected ? typeColor : '#e5e7eb'}`,
+        borderLeft: `4px solid ${typeColor}`,
+        padding: '14px 16px',
+        display: 'flex', alignItems: 'center', gap: 16,
+        cursor: 'pointer', transition: 'all 0.15s',
         opacity: isArchive ? 0.65 : 1,
       }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f8fafc'; }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = isArchive ? '#fafafa' : 'white'; }}
+      onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = '#f8fafc'; }}
+      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = isArchive ? '#fafafa' : 'white'; }}
     >
-      {/* Numéro */}
-      <td style={{ padding: '12px 14px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: typeColor }}>#{v.numero}</span>
-          {v.estPret && <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Prêt</span>}
-          {v.variante && <span style={{ fontSize: 10, color: '#9ca3af' }}>{v.variante}</span>}
+      {/* Icône */}
+      <div style={{ fontSize: 28, flexShrink: 0 }}>
+        {v.type === 'eau' ? <EauIcon /> : v.type === 'client' ? '🔧' : '🏷️'}
+      </div>
+
+      {/* Contenu principal */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: typeColor }}>#{v.numero}</span>
+          <StatutBadgeSection section={section} />
+          {item?.slotId && (
+            <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
+              Slot {item.slotId}
+            </span>
+          )}
           {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (
             <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />
           )}
+          {v.type === 'eau' && (
+            v.aUnReservoir
+              ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Réservoir</span>
+              : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>⚠️ Sans réservoir</span>
+          )}
         </div>
-      </td>
-
-      {/* Colonnes variables selon type */}
-      {type === 'client' ? (
-        <>
-          <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{v.nomClient ?? '—'}</td>
-          <td style={{ padding: '12px 14px', fontSize: 12, color: '#6b7280', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {v.descriptionTravail ?? v.vehicule ?? '—'}
-          </td>
-        </>
-      ) : (
-        <>
-          <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{v.marque ?? '—'}</td>
-          <td style={{ padding: '12px 14px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <span style={{ fontSize: 13, color: '#374151' }}>{v.modele ?? '—'}</span>
-              {v.annee && <span style={{ fontSize: 11, color: '#9ca3af' }}>{v.annee}</span>}
-            </div>
-          </td>
-        </>
-      )}
-
-      {/* Slot */}
-      <td style={{ padding: '12px 14px' }}>
-        {item?.slotId
-          ? <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>
-              Slot {item.slotId}
-            </span>
-          : <span style={{ fontSize: 12, color: '#d1d5db' }}>—</span>
-        }
-      </td>
-
-      {/* Statut */}
-      <td style={{ padding: '12px 14px' }}>
-        <StatutBadgeSection section={section} />
-      </td>
-
-      {/* Colonnes road_map */}
-      {ROAD_MAP_STATIONS.map(s => (
-        <td key={s.id} style={{ textAlign: 'center', padding: '8px 4px' }}>
-          <CelluleRoadMap vehicule={v} stationId={s.id} />
-        </td>
-      ))}
-    </tr>
+        <div style={{ fontSize: 14, color: '#374151', fontWeight: 500, marginBottom: 4 }}>{getLabelVehicule(v)}</div>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#9ca3af', alignItems: 'center', flexWrap: 'wrap' }}>
+          {v.marque && v.annee && v.type !== 'client' && <span>🚛 {v.marque} {v.annee}</span>}
+          {v.type === 'client' && v.descriptionTravail && <span style={{ color: '#6b7280' }}>{v.descriptionTravail}</span>}
+          {v.variante && <span>{v.variante}</span>}
+          {v.dateLivraisonPlanifiee && <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 Livraison : {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</span>}
+        </div>
+        {/* Road map mini indicateurs */}
+        {v.roadMap && v.roadMap.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+            {ROAD_MAP_STATIONS.map(s => {
+              const steps = v.roadMap?.filter(r => r.stationId === s.id) ?? [];
+              if (steps.length === 0) return null;
+              const allTermine = steps.every(r => r.statut === 'termine' || r.statut === 'saute');
+              const anyEnCours = steps.some(r => r.statut === 'en-cours');
+              const bg = allTermine ? '#dcfce7' : anyEnCours ? '#dbeafe' : '#fef3c7';
+              const color = allTermine ? '#166534' : anyEnCours ? '#1d4ed8' : '#92400e';
+              const icon = allTermine ? '✓' : anyEnCours ? '▶' : '⏳';
+              return (
+                <span key={s.id} style={{ fontSize: 9, background: bg, color, padding: '2px 6px', borderRadius: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {icon} {s.label}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -448,53 +424,6 @@ function StatutBadgeSection({ section }: { section: Section }) {
     <span style={{ fontSize: 11, background: c.bg, color: c.color, padding: '4px 8px', borderRadius: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
       {c.label}
     </span>
-  );
-}
-
-// ── CelluleRoadMap ───────────────────────────────────────────────
-
-function CelluleRoadMap({ vehicule, stationId }: { vehicule: VehiculeInventaire; stationId: string }) {
-  const steps = vehicule.roadMap?.filter(s => s.stationId === stationId) ?? [];
-
-  if (steps.length === 0) {
-    return <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f1f5f9', margin: '0 auto', opacity: 0.4 }} />;
-  }
-
-  const allTermine = steps.every(s => s.statut === 'termine' || s.statut === 'saute');
-  const anyEnCours  = steps.some(s => s.statut === 'en-cours');
-  const anyEnAttente = steps.some(s => s.statut === 'en-attente');
-  const count = steps.length;
-
-  if (allTermine) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#dcfce7', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: 13, fontWeight: 700 }}>✓</div>
-        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 6, fontSize: 9, background: '#22c55e', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
-      </div>
-    );
-  }
-  if (anyEnCours) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <div style={{ width: 30, height: 30, borderRadius: 6, background: '#dbeafe', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🚛</div>
-        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 2, fontSize: 9, background: '#3b82f6', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
-      </div>
-    );
-  }
-  if (anyEnAttente) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#fef3c7', border: '2px solid #f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>⏳</div>
-        {count > 1 && <span style={{ position: 'absolute', top: -4, right: 4, fontSize: 9, background: '#f59e0b', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
-      </div>
-    );
-  }
-  // planifié mais présent dans le road_map
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#d1d5db', border: '1px solid #9ca3af' }} />
-      {count > 1 && <span style={{ position: 'absolute', top: -4, right: 4, fontSize: 9, background: '#9ca3af', color: 'white', borderRadius: 8, padding: '1px 4px', fontWeight: 700 }}>{count}</span>}
-    </div>
   );
 }
 
