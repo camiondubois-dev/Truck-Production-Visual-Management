@@ -1,11 +1,12 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../contexts/GarageContext';
+import { useInventaire } from '../contexts/InventaireContext';
 import { EauIcon } from './EauIcon';
-import { useEffect, useState } from 'react';
-import { SlotOccupeModal } from './SlotOccupeModal';
+import { useEffect, useMemo, useState } from 'react';
 import { SlotAssignModal } from './SlotAssignModal';
-import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
+import { PanneauDetailVehicule } from './PanneauDetailVehicule';
 import type { Item } from '../types/item.types';
+import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 interface DepartementConfig {
   label: string;
@@ -25,7 +26,7 @@ const DEPARTEMENTS_CONFIG: Record<string, DepartementConfig> = {
 };
 
 type ModalState =
-  | { type: 'occupe'; item: Item; slot: { id: string }; position: { x: number; y: number } }
+  | { type: 'detail'; vehiculeId: string; itemId?: string }
   | { type: 'assign'; slot: { id: string }; position: { x: number; y: number } }
   | null;
 
@@ -61,12 +62,8 @@ function BadgeCommercialSlot({ item }: { item: Item }) {
 
 export const VueDepartement = () => {
   const { profile, deconnexion } = useAuth();
-  const {
-    items, slotMap, enAttente,
-    updateStationStatus, assignerSlot,
-    retirerVersAttente, terminerItem,
-    terminerEtAvancer,
-  } = useGarage();
+  const { items, slotMap, enAttente, assignerSlot } = useGarage();
+  const { vehicules } = useInventaire();
 
   const [modeTV, setModeTV] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -74,6 +71,38 @@ export const VueDepartement = () => {
   const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
 
   const dept = DEPARTEMENTS_CONFIG[profile?.departement ?? ''];
+
+  // vehiculesComplets : mêmes données que PlancherView et VueAsana
+  const vehiculesComplets = useMemo(() => {
+    const invIds = new Set(vehicules.map(v => v.id));
+    const orphelins: VehiculeInventaire[] = items
+      .filter(i => i.etat !== 'termine' && (!i.inventaireId || !invIds.has(i.inventaireId)))
+      .map(i => ({
+        id: i.inventaireId || i.id,
+        statut: 'en-production' as const,
+        dateImport: i.dateCreation ?? new Date().toISOString(),
+        dateEnProduction: i.dateCreation,
+        jobId: i.id,
+        numero: i.numero ?? '',
+        type: i.type as 'eau' | 'client' | 'detail',
+        nomClient: i.nomClient,
+        telephone: i.telephone,
+        vehicule: i.vehicule,
+        descriptionTravail: i.descriptionTravail,
+        descriptionTravaux: i.descriptionTravaux,
+        notes: i.notes,
+        roadMap: (i.stationsActives ?? []).map((sid: string, idx: number) => {
+          const prog = i.progression?.find((p: any) => p.stationId === sid);
+          const statut = prog?.status === 'termine' ? 'termine' as const
+            : prog?.status === 'en-cours' ? 'en-cours' as const
+            : 'en-attente' as const;
+          return { id: `synth-${i.id}-${idx}`, stationId: sid, statut, priorite: idx + 1, ordre: idx + 1 };
+        }),
+        estPret: false,
+        etatCommercial: i.etatCommercial as any ?? 'non-vendu',
+      }));
+    return [...vehicules, ...orphelins];
+  }, [vehicules, items]);
 
   useEffect(() => {
     if (!modeTV) return;
@@ -122,16 +151,16 @@ export const VueDepartement = () => {
     if (modeTV) return;
     e.stopPropagation();
 
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    let x = rect.right + 10;
-    let y = rect.top;
-    if (x + 360 > window.innerWidth) x = rect.left - 370;
-    if (y + 500 > window.innerHeight) y = window.innerHeight - 510;
-
     const item = slotMap[slotId];
     if (item) {
-      setModalState({ type: 'occupe', item, slot: { id: slotId }, position: { x, y } });
+      // Slot occupé → ouvrir le panneau détail unifié (même que PlancherView/VueAsana)
+      setModalState({ type: 'detail', vehiculeId: item.inventaireId || item.id, itemId: item.id });
     } else {
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      let x = rect.right + 10;
+      let y = rect.top;
+      if (x + 360 > window.innerWidth) x = rect.left - 370;
+      if (y + 500 > window.innerHeight) y = window.innerHeight - 510;
       setModalState({ type: 'assign', slot: { id: slotId }, position: { x, y } });
     }
   };
@@ -436,15 +465,8 @@ export const VueDepartement = () => {
                 key={item.id}
                 onClick={(e) => {
                   e.stopPropagation();
-                  const slotVide = dept.slots.find(s => !slotMap[s]);
-                  if (slotVide) {
-                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                    setModalState({
-                      type: 'assign',
-                      slot: { id: slotVide },
-                      position: { x: rect.right + 10, y: rect.top },
-                    });
-                  }
+                  // Ouvrir le panneau détail pour ce camion en attente
+                  setModalState({ type: 'detail', vehiculeId: item.inventaireId || item.id, itemId: item.id });
                 }}
                 style={{
                   background: 'rgba(245,158,11,0.1)',
@@ -470,24 +492,26 @@ export const VueDepartement = () => {
         </div>
       )}
 
-      {/* ── MODALS ── */}
-      {modalState?.type === 'occupe' && (
-        <SlotOccupeModal
-          item={slotMap[modalState.slot.id] ?? modalState.item}
-          slot={modalState.slot}
-          onRetirerAttente={retirerVersAttente}
-          onTerminerEtAvancer={terminerEtAvancer}
-          onTerminer={terminerItem}
-          onClose={() => setModalState(null)}
-          position={modalState.position}
-          stations={TOUTES_STATIONS_COMMUNES}
-          onUpdateStationStatus={updateStationStatus}
-          onAssignerSlot={assignerSlot}
-          slotMap={slotMap}
-          departementId={profile?.departement}
-        />
-      )}
+      {/* ── PANNEAU DÉTAIL UNIFIÉ (même que PlancherView/VueAsana) ── */}
+      {modalState?.type === 'detail' && (() => {
+        const detailVehicule = vehiculesComplets.find(v => v.id === modalState.vehiculeId);
+        const detailItem = modalState.itemId
+          ? items.find(i => i.id === modalState.itemId)
+          : items.find(i =>
+              (i.inventaireId === modalState.vehiculeId || i.id === modalState.vehiculeId) &&
+              i.etat !== 'termine'
+            );
+        if (!detailVehicule) return null;
+        return (
+          <PanneauDetailVehicule
+            vehicule={detailVehicule}
+            item={detailItem}
+            onClose={() => setModalState(null)}
+          />
+        );
+      })()}
 
+      {/* ── MODAL ASSIGNATION SLOT ── */}
       {modalState?.type === 'assign' && (
         <SlotAssignModal
           slot={modalState.slot}
