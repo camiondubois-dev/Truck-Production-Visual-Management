@@ -77,12 +77,49 @@ export function PlancherView() {
 
   const allEnAttente = [...enAttente.eau, ...enAttente.client, ...enAttente.detail];
 
-  // Index inventaireId → Item pour croiser road_map et prod_items
+  // Index vehiculeId → Item pour croiser road_map et prod_items
+  // Mappe par inventaireId ET par item.id (pour les orphelins sans inventaireId)
   const itemByInvId = useMemo(() => {
     const map: Record<string, Item> = {};
-    items.forEach(item => { if (item.inventaireId) map[item.inventaireId] = item; });
+    items.forEach(item => {
+      if (item.inventaireId) map[item.inventaireId] = item;
+      else map[item.id] = item; // Orphelin: le véhicule synthétique a id = item.id
+    });
     return map;
   }, [items]);
+
+  // Véhicules COMPLETS : prod_inventaire + items orphelins (prod_items sans prod_inventaire)
+  // Identique à la logique de VueAsana — même source de données partout
+  const vehiculesComplets = useMemo(() => {
+    const invIds = new Set(vehicules.map(v => v.id));
+    const orphelins: VehiculeInventaire[] = items
+      .filter(i => i.etat !== 'termine' && (!i.inventaireId || !invIds.has(i.inventaireId)))
+      .map(i => ({
+        id: i.inventaireId || i.id,
+        statut: 'en-production' as const,
+        dateImport: i.dateCreation ?? new Date().toISOString(),
+        dateEnProduction: i.dateCreation,
+        jobId: i.id,
+        numero: i.numero ?? '',
+        type: i.type as 'eau' | 'client' | 'detail',
+        nomClient: i.nomClient,
+        telephone: i.telephone,
+        vehicule: i.vehicule,
+        descriptionTravail: i.descriptionTravail,
+        descriptionTravaux: i.descriptionTravaux,
+        notes: i.notes,
+        roadMap: (i.stationsActives ?? []).map((sid: string, idx: number) => {
+          const prog = i.progression?.find((p: any) => p.stationId === sid);
+          const statut = prog?.status === 'termine' ? 'termine' as const
+            : prog?.status === 'en-cours' ? 'en-cours' as const
+            : 'en-attente' as const;
+          return { id: `synth-${i.id}-${idx}`, stationId: sid, statut, priorite: idx + 1 };
+        }),
+        estPret: false,
+        etatCommercial: i.etatCommercial as any ?? 'non-vendu',
+      }));
+    return [...vehicules, ...orphelins];
+  }, [vehicules, items]);
 
   // Reorder atomique : reçoit la nouvelle liste ordonnée depuis StationBlock,
   // calcule les priorités 1..N pour chaque véhicule et sauvegarde en un seul appel
@@ -126,8 +163,8 @@ export function PlancherView() {
     if (tempJob) {
       setModalState({ type: 'job-occupe', job: tempJob, slot, position });
     } else if (item) {
-      // Toujours ouvrir le panneau détail unifié
-      setModalState({ type: 'detail', vehiculeId: item.inventaireId ?? item.id, itemId: item.id });
+      // Toujours ouvrir le panneau détail unifié — cherche dans vehiculesComplets (incl. orphelins)
+      setModalState({ type: 'detail', vehiculeId: item.inventaireId || item.id, itemId: item.id });
     } else if (!slot.futur) {
       setModalState({ type: 'assign', slot, position });
     }
@@ -241,22 +278,22 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
 
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehicules} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
         <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
 
@@ -351,10 +388,13 @@ export function PlancherView() {
 
       {/* Panneau détail véhicule — composant UNIQUE partagé avec VueAsana */}
       {modalState?.type === 'detail' && (() => {
-        const detailVehicule = vehicules.find(v => v.id === modalState.vehiculeId);
+        const detailVehicule = vehiculesComplets.find(v => v.id === modalState.vehiculeId);
         const detailItem = modalState.itemId
           ? items.find(i => i.id === modalState.itemId)
-          : items.find(i => i.inventaireId === modalState.vehiculeId && i.etat !== 'termine');
+          : items.find(i =>
+              (i.inventaireId === modalState.vehiculeId || i.id === modalState.vehiculeId) &&
+              i.etat !== 'termine'
+            );
 
         if (!detailVehicule) return null;
         return (
@@ -922,13 +962,12 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
                   <div
                     title={label}
                     onClick={(e) => {
-                      if (item && !inSlot && onOpenDetail && item.inventaireId) {
+                      if (item && !inSlot && onOpenDetail) {
                         e.stopPropagation();
-                        onOpenDetail(item.inventaireId);
-                      } else if (item && !inSlot) {
-                        onWaitingItemClick(e, item, station.id);
-                      } else if (!item) {
-                        onCreateAndAssign(e, vehicule, station.id);
+                        onOpenDetail(item.inventaireId || item.id);
+                      } else if (!item && onOpenDetail) {
+                        e.stopPropagation();
+                        onOpenDetail(vehicule.id);
                       }
                     }}
                     style={{
