@@ -356,6 +356,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   const [documents, setDocuments]               = useState<Document[]>([]);
   const [loadingDocs, setLoadingDocs]           = useState(false);
   const [uploadingPdf, setUploadingPdf]         = useState(false);
+  const [docOuvert, setDocOuvert]               = useState<Document | null>(null);
 
   useEffect(() => {
     if (v.type === 'eau' && !v.aUnReservoir) {
@@ -411,22 +412,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     }
   };
 
-  // Ouvrir un PDF dans un nouvel onglet
+  // Ouvrir un PDF dans un viewer plein écran
   const ouvrirPdf = (doc: Document) => {
-    if (doc.base64.startsWith('data:application/pdf')) {
-      const w = window.open('');
-      if (w) {
-        w.document.write(`<html><head><title>${doc.nom}</title></head><body style="margin:0"><iframe src="${doc.base64}" style="width:100%;height:100vh;border:none"></iframe></body></html>`);
-        w.document.close();
-      }
-    } else {
-      // Image ou autre
-      const w = window.open('');
-      if (w) {
-        w.document.write(`<html><head><title>${doc.nom}</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#111"><img src="${doc.base64}" style="max-width:100%;max-height:100vh;object-fit:contain" /></body></html>`);
-        w.document.close();
-      }
-    }
+    setDocOuvert(doc);
   };
 
   // Photo
@@ -863,6 +851,36 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         </div>
 
       </div>
+
+      {/* ── Viewer document plein écran ── */}
+      {docOuvert && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#111', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          {/* Barre du haut avec bouton fermer */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#1a1a2e', flexShrink: 0 }}>
+            <button onClick={() => setDocOuvert(null)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              ← Retour
+            </button>
+            <div style={{ flex: 1, textAlign: 'center', color: 'white', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 12px' }}>
+              {docOuvert.nom}
+            </div>
+            <button onClick={() => setDocOuvert(null)}
+              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ✕
+            </button>
+          </div>
+          {/* Contenu */}
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            {docOuvert.base64.startsWith('data:application/pdf') ? (
+              <iframe src={docOuvert.base64} style={{ width: '100%', height: '100%', border: 'none' }} title={docOuvert.nom} />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 16 }}>
+                <img src={docOuvert.base64} alt={docOuvert.nom} style={{ maxWidth: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
