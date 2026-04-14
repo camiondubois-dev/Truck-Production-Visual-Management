@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useInventaire } from '../contexts/InventaireContext';
 import { supabase } from '../lib/supabase';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
@@ -22,19 +22,43 @@ interface TimeLog {
   dureeMinutes: number | null;
 }
 
+// ── Filtres interactifs ──────────────────────────────────────
+interface Filters {
+  commercial?: 'vendu' | 'reserve' | 'location' | 'non-vendu';
+  phase?: 'pret' | 'en-production' | 'disponible';
+  variante?: 'Neuf' | 'Usagé';
+  station?: string;
+  reservoir?: 'avec' | 'sans';
+  aging?: string;         // bin label
+  alerte?: 'vendu-pas-pret' | 'ecart-reservoir';
+}
+
+const FILTER_LABELS: Record<string, string> = {
+  commercial: 'Statut commercial',
+  phase: 'Phase',
+  variante: 'Variante',
+  station: 'Station',
+  reservoir: 'Réservoir',
+  aging: 'Ancienneté',
+  alerte: 'Alerte',
+};
+
 // ── Couleurs ───────────────────────────────────────────────────
-const COLORS = {
+const COLORS: Record<string, string> = {
   vendu: '#22c55e',
   reserve: '#f59e0b',
   location: '#8b5cf6',
+  'non-vendu': '#64748b',
   nonVendu: '#64748b',
   pret: '#22c55e',
-  enProduction: '#3b82f6',
+  'en-production': '#3b82f6',
   disponible: '#94a3b8',
   avecReservoir: '#0ea5e9',
   sansReservoir: '#334155',
-  neuf: '#6366f1',
-  usage: '#f97316',
+  Neuf: '#6366f1',
+  'Usagé': '#f97316',
+  avec: '#0ea5e9',
+  sans: '#334155',
 };
 
 const STATION_COLORS: Record<string, string> = {};
@@ -50,12 +74,43 @@ function formatDuree(minutes: number): string {
 }
 
 function formatJours(minutes: number): string {
-  const jours = minutes / (60 * 8); // 8h workday
+  const jours = minutes / (60 * 8);
   if (jours < 1) return formatDuree(minutes);
   return `${jours.toFixed(1)}j`;
 }
 
-// Custom tooltip for charts
+function getPhase(v: VehiculeInventaire): 'pret' | 'en-production' | 'disponible' {
+  if (v.estPret) return 'pret';
+  if (v.statut === 'en-production') return 'en-production';
+  return 'disponible';
+}
+
+function getCommercial(v: VehiculeInventaire): 'vendu' | 'reserve' | 'location' | 'non-vendu' {
+  return (v.etatCommercial as any) ?? 'non-vendu';
+}
+
+function getStationEnCours(v: VehiculeInventaire): string | null {
+  return v.roadMap?.find((s: RoadMapEtape) => s.statut === 'en-cours')?.stationId ?? null;
+}
+
+function getProgression(v: VehiculeInventaire): number {
+  if (!v.roadMap || v.roadMap.length === 0) return 0;
+  return Math.round(v.roadMap.filter((s: RoadMapEtape) => s.statut === 'termine' || s.statut === 'saute').length / v.roadMap.length * 100);
+}
+
+function getAgingBin(v: VehiculeInventaire): string {
+  const days = (Date.now() - new Date(v.dateEnProduction ?? v.dateImport).getTime()) / 86400000;
+  if (days < 7) return '< 7j';
+  if (days < 14) return '7-14j';
+  if (days < 30) return '14-30j';
+  if (days < 60) return '30-60j';
+  if (days < 90) return '60-90j';
+  return '90j+';
+}
+
+const AGING_BINS = ['< 7j', '7-14j', '14-30j', '30-60j', '60-90j', '90j+'];
+
+// ── Custom Tooltip ─────────────────────────────────────────────
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
@@ -63,10 +118,10 @@ function ChartTooltip({ active, payload, label }: any) {
       background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)',
       borderRadius: 8, padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
     }}>
-      <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 6 }}>{label}</div>
+      {label && <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 6 }}>{label}</div>}
       {payload.map((p: any, i: number) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'white' }}>
-          <div style={{ width: 10, height: 10, borderRadius: 2, background: p.color }} />
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: p.color || p.fill }} />
           <span style={{ color: 'rgba(255,255,255,0.7)' }}>{p.name}:</span>
           <span style={{ fontWeight: 700 }}>{p.value}</span>
         </div>
@@ -75,23 +130,24 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
-// Pie label
-function renderPieLabel({ name, value, percent }: any) {
-  if (percent < 0.05) return null;
-  return `${name} (${value})`;
-}
-
 // ── KPI Card ──────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color, icon }: {
+function KpiCard({ label, value, sub, color, icon, active, onClick }: {
   label: string; value: string | number; sub?: string; color: string; icon: string;
+  active?: boolean; onClick?: () => void;
 }) {
   return (
-    <div style={{
-      background: `${color}12`, border: `1px solid ${color}30`,
-      borderRadius: 12, padding: '18px 20px',
-      display: 'flex', flexDirection: 'column', gap: 6,
-      minWidth: 0,
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        background: active ? `${color}25` : `${color}12`,
+        border: active ? `2px solid ${color}` : `1px solid ${color}30`,
+        borderRadius: 12, padding: '18px 20px',
+        display: 'flex', flexDirection: 'column', gap: 6,
+        minWidth: 0, cursor: onClick ? 'pointer' : 'default',
+        transition: 'all 0.2s',
+        transform: active ? 'scale(1.02)' : 'scale(1)',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 20 }}>{icon}</span>
         <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.04em' }}>
@@ -101,16 +157,14 @@ function KpiCard({ label, value, sub, color, icon }: {
       <div style={{ fontSize: 32, fontWeight: 800, color, fontFamily: 'monospace', lineHeight: 1 }}>
         {value}
       </div>
-      {sub && (
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{sub}</div>
-      )}
+      {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{sub}</div>}
     </div>
   );
 }
 
 // ── Section wrapper ────────────────────────────────────────────
-function Section({ title, icon, children, span }: {
-  title: string; icon: string; children: React.ReactNode; span?: number;
+function Section({ title, icon, children, span, badge }: {
+  title: string; icon: string; children: React.ReactNode; span?: number; badge?: React.ReactNode;
 }) {
   return (
     <div style={{
@@ -123,20 +177,21 @@ function Section({ title, icon, children, span }: {
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
         <span style={{ fontSize: 18 }}>{icon}</span>
-        {title}
+        <span style={{ flex: 1 }}>{title}</span>
+        {badge}
       </div>
       {children}
     </div>
   );
 }
 
-// ── Truck list mini table ─────────────────────────────────────
+// ── Mini Table ─────────────────────────────────────────────────
 function MiniTable({ rows, columns }: {
   rows: { id: string; cells: (string | React.ReactNode)[] }[];
   columns: string[];
 }) {
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 320 }}>
+    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 360 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr>
@@ -153,7 +208,10 @@ function MiniTable({ rows, columns }: {
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={r.id}>
+            <tr key={r.id} style={{ transition: 'background 0.1s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
               {r.cells.map((cell, i) => (
                 <td key={i} style={{
                   padding: '7px 10px', color: 'rgba(255,255,255,0.75)',
@@ -175,6 +233,35 @@ function MiniTable({ rows, columns }: {
   );
 }
 
+// ── Badge commercial réutilisable ──────────────────────────────
+function CommercialBadge({ etat }: { etat: string }) {
+  const cfg: Record<string, { bg: string; color: string; label: string }> = {
+    'vendu': { bg: '#22c55e20', color: '#22c55e', label: 'Vendu' },
+    'reserve': { bg: '#f59e0b20', color: '#f59e0b', label: 'Réservé' },
+    'location': { bg: '#8b5cf620', color: '#8b5cf6', label: 'Location' },
+    'non-vendu': { bg: '#64748b20', color: '#64748b', label: 'Non vendu' },
+  };
+  const c = cfg[etat] ?? cfg['non-vendu'];
+  return (
+    <span style={{
+      background: c.bg, color: c.color, padding: '2px 8px',
+      borderRadius: 4, fontWeight: 700, fontSize: 11,
+    }}>{c.label}</span>
+  );
+}
+
+// ── Progress Bar ───────────────────────────────────────────────
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div style={{ width: `${value}%`, height: '100%', borderRadius: 3, background: value === 100 ? '#22c55e' : '#3b82f6', transition: 'width 0.3s' }} />
+      </div>
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 32 }}>{value}%</span>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 // ── COMPOSANT PRINCIPAL ──────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
@@ -185,8 +272,9 @@ export function VueAnalyse() {
   const [reservoirs, setReservoirs] = useState<Reservoir[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [loadingExtra, setLoadingExtra] = useState(true);
+  const [filters, setFilters] = useState<Filters>({});
 
-  // Charger réservoirs + time logs depuis Supabase
+  // Charger réservoirs + time logs
   useEffect(() => {
     Promise.all([
       supabase.from('prod_reservoirs').select('*').then(r => r.data ?? []),
@@ -202,97 +290,127 @@ export function VueAnalyse() {
     }).catch(console.error).finally(() => setLoadingExtra(false));
   }, []);
 
-  // ── Filtrer camions à eau ─────────────────────────────────
+  // ── Toggle un filtre (cliquer 2x = retirer) ───────────────
+  const toggleFilter = useCallback((key: keyof Filters, value: any) => {
+    setFilters(prev => {
+      if (prev[key] === value) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: value };
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => setFilters({}), []);
+  const hasFilters = Object.keys(filters).length > 0;
+
+  // ── Camions à eau (non archivés) ──────────────────────────
   const camionsEau = useMemo(() =>
     vehicules.filter(v => v.type === 'eau' && v.statut !== 'archive'),
     [vehicules]
   );
 
+  // ── Appliquer les filtres ─────────────────────────────────
+  const camionsFiltres = useMemo(() => {
+    let result = camionsEau;
+    if (filters.commercial) {
+      result = result.filter(v => getCommercial(v) === filters.commercial);
+    }
+    if (filters.phase) {
+      result = result.filter(v => getPhase(v) === filters.phase);
+    }
+    if (filters.variante) {
+      result = result.filter(v => v.variante === filters.variante);
+    }
+    if (filters.station) {
+      result = result.filter(v => getStationEnCours(v) === filters.station);
+    }
+    if (filters.reservoir) {
+      result = result.filter(v => filters.reservoir === 'avec' ? v.aUnReservoir : !v.aUnReservoir);
+    }
+    if (filters.aging) {
+      result = result.filter(v => getPhase(v) === 'en-production' && getAgingBin(v) === filters.aging);
+    }
+    if (filters.alerte === 'vendu-pas-pret') {
+      result = result.filter(v => getCommercial(v) === 'vendu' && !v.estPret);
+    }
+    if (filters.alerte === 'ecart-reservoir') {
+      result = result.filter(v => !v.aUnReservoir && v.statut !== 'archive');
+    }
+    return result;
+  }, [camionsEau, filters]);
+
   // ── Catégories principales ────────────────────────────────
-  const prets = useMemo(() => camionsEau.filter(v => v.estPret), [camionsEau]);
-  const enProduction = useMemo(() => camionsEau.filter(v => v.statut === 'en-production'), [camionsEau]);
-  const disponibles = useMemo(() => camionsEau.filter(v => v.statut === 'disponible' && !v.estPret), [camionsEau]);
+  const prets = useMemo(() => camionsFiltres.filter(v => v.estPret), [camionsFiltres]);
+  const enProduction = useMemo(() => camionsFiltres.filter(v => v.statut === 'en-production'), [camionsFiltres]);
+  const disponibles = useMemo(() => camionsFiltres.filter(v => v.statut === 'disponible' && !v.estPret), [camionsFiltres]);
 
-  // ── Statut commercial ─────────────────────────────────────
-  const commercialCount = useMemo(() => {
-    const count = { vendu: 0, reserve: 0, location: 0, nonVendu: 0 };
-    camionsEau.forEach(v => {
-      const ec = v.etatCommercial ?? 'non-vendu';
-      if (ec === 'vendu') count.vendu++;
-      else if (ec === 'reserve') count.reserve++;
-      else if (ec === 'location') count.location++;
-      else count.nonVendu++;
-    });
-    return count;
-  }, [camionsEau]);
+  // ── ALERTES (calculées sur données NON filtrées) ──────────
+  const vendusNonPrets = useMemo(() =>
+    camionsEau.filter(v => getCommercial(v) === 'vendu' && !v.estPret),
+    [camionsEau]
+  );
+  const camionsSansReservoir = useMemo(() =>
+    camionsEau.filter(v => !v.aUnReservoir),
+    [camionsEau]
+  );
+  const reservoirsDisponibles = useMemo(() =>
+    reservoirs.filter(r => r.etat === 'disponible'),
+    [reservoirs]
+  );
+  const ecartReservoir = camionsSansReservoir.length - reservoirsDisponibles.length;
 
-  // ── Données PIE : Prêts vendu vs non-vendu ────────────────
-  const pretsCommercial = useMemo(() => {
-    const vendus = prets.filter(v => v.etatCommercial === 'vendu').length;
-    const reserves = prets.filter(v => v.etatCommercial === 'reserve').length;
-    const locations = prets.filter(v => v.etatCommercial === 'location').length;
-    const nonVendus = prets.length - vendus - reserves - locations;
+  // ── Données graphiques ────────────────────────────────────
+
+  // PIE : Phase (prêt / en-production / disponible)
+  const phaseData = useMemo(() => [
+    { name: 'Prêts', value: prets.length, key: 'pret' as const, color: COLORS.pret },
+    { name: 'En production', value: enProduction.length, key: 'en-production' as const, color: COLORS['en-production'] },
+    { name: 'Disponibles', value: disponibles.length, key: 'disponible' as const, color: COLORS.disponible },
+  ].filter(d => d.value > 0), [prets, enProduction, disponibles]);
+
+  // PIE : Commercial
+  const commercialData = useMemo(() => {
+    const counts: Record<string, number> = { vendu: 0, reserve: 0, location: 0, 'non-vendu': 0 };
+    camionsFiltres.forEach(v => { counts[getCommercial(v)]++; });
     return [
-      { name: 'Vendus', value: vendus, color: COLORS.vendu },
-      { name: 'Réservés', value: reserves, color: COLORS.reserve },
-      { name: 'Location', value: locations, color: COLORS.location },
-      { name: 'Non vendus', value: nonVendus, color: COLORS.nonVendu },
+      { name: 'Vendus', value: counts.vendu, key: 'vendu' as const, color: COLORS.vendu },
+      { name: 'Réservés', value: counts.reserve, key: 'reserve' as const, color: COLORS.reserve },
+      { name: 'Location', value: counts.location, key: 'location' as const, color: COLORS.location },
+      { name: 'Non vendus', value: counts['non-vendu'], key: 'non-vendu' as const, color: COLORS['non-vendu'] },
     ].filter(d => d.value > 0);
-  }, [prets]);
+  }, [camionsFiltres]);
 
-  // ── Données PIE : En production vendu vs non-vendu ────────
-  const prodCommercial = useMemo(() => {
-    const vendus = enProduction.filter(v => v.etatCommercial === 'vendu').length;
-    const reserves = enProduction.filter(v => v.etatCommercial === 'reserve').length;
-    const locations = enProduction.filter(v => v.etatCommercial === 'location').length;
-    const nonVendus = enProduction.length - vendus - reserves - locations;
-    return [
-      { name: 'Vendus', value: vendus, color: COLORS.vendu },
-      { name: 'Réservés', value: reserves, color: COLORS.reserve },
-      { name: 'Location', value: locations, color: COLORS.location },
-      { name: 'Non vendus', value: nonVendus, color: COLORS.nonVendu },
-    ].filter(d => d.value > 0);
-  }, [enProduction]);
-
-  // ── Réservoirs ────────────────────────────────────────────
-  const reservoirStats = useMemo(() => {
-    const disponiblesR = reservoirs.filter(r => r.etat === 'disponible');
-    const installes = reservoirs.filter(r => r.etat === 'installe');
-    const enPeinture = reservoirs.filter(r => r.etat === 'en-peinture');
-    const parType: Record<string, number> = {};
-    reservoirs.forEach(r => { parType[r.type] = (parType[r.type] || 0) + 1; });
-    const camionsAvecReservoir = camionsEau.filter(v => v.aUnReservoir).length;
-    const camionsSansReservoir = camionsEau.filter(v => !v.aUnReservoir && v.statut !== 'archive').length;
-    return {
-      total: reservoirs.length,
-      disponibles: disponiblesR.length,
-      installes: installes.length,
-      enPeinture: enPeinture.length,
-      parType,
-      camionsAvecReservoir,
-      camionsSansReservoir,
-    };
-  }, [reservoirs, camionsEau]);
-
-  // ── Variante neuf/usagé ───────────────────────────────────
+  // PIE : Variante
   const varianteData = useMemo(() => {
-    const neufs = camionsEau.filter(v => v.variante === 'Neuf').length;
-    const usages = camionsEau.filter(v => v.variante === 'Usagé').length;
-    const autres = camionsEau.length - neufs - usages;
+    const neufs = camionsFiltres.filter(v => v.variante === 'Neuf').length;
+    const usages = camionsFiltres.filter(v => v.variante === 'Usagé').length;
+    const autres = camionsFiltres.length - neufs - usages;
     return [
-      { name: 'Neuf', value: neufs, color: COLORS.neuf },
-      { name: 'Usagé', value: usages, color: COLORS.usage },
-      ...(autres > 0 ? [{ name: 'Autre', value: autres, color: '#475569' }] : []),
+      { name: 'Neuf', value: neufs, key: 'Neuf' as const, color: COLORS.Neuf },
+      { name: 'Usagé', value: usages, key: 'Usagé' as const, color: COLORS['Usagé'] },
+      ...(autres > 0 ? [{ name: 'Autre', value: autres, key: '' as const, color: '#475569' }] : []),
     ].filter(d => d.value > 0);
-  }, [camionsEau]);
+  }, [camionsFiltres]);
 
-  // ── Progression par station (combien en-cours/en-attente) ─
+  // PIE : Réservoirs
+  const reservoirPieData = useMemo(() => {
+    const avec = camionsFiltres.filter(v => v.aUnReservoir).length;
+    const sans = camionsFiltres.filter(v => !v.aUnReservoir).length;
+    return [
+      { name: 'Avec réservoir', value: avec, key: 'avec' as const, color: COLORS.avec },
+      { name: 'Sans réservoir', value: sans, key: 'sans' as const, color: COLORS.sans },
+    ].filter(d => d.value > 0);
+  }, [camionsFiltres]);
+
+  // BAR : Charge par station
   const stationLoad = useMemo(() => {
     return ROAD_MAP_STATIONS.map(station => {
       let enCours = 0;
       let enAttente = 0;
       let termine = 0;
-      camionsEau.forEach(v => {
+      camionsFiltres.forEach(v => {
         const step = v.roadMap?.find((s: RoadMapEtape) => s.stationId === station.id);
         if (!step) return;
         if (step.statut === 'en-cours') enCours++;
@@ -305,11 +423,21 @@ export function VueAnalyse() {
         'En cours': enCours,
         'En attente': enAttente,
         'Terminé': termine,
+        total: enCours + enAttente + termine,
       };
     });
-  }, [camionsEau]);
+  }, [camionsFiltres]);
 
-  // ── Temps moyen par garage (time_logs) ────────────────────
+  // BAR : Aging
+  const agingData = useMemo(() => {
+    const bins: Record<string, number> = {};
+    AGING_BINS.forEach(b => { bins[b] = 0; });
+    const productionCamions = camionsFiltres.filter(v => v.statut === 'en-production');
+    productionCamions.forEach(v => { bins[getAgingBin(v)]++; });
+    return AGING_BINS.map(b => ({ name: b, Camions: bins[b] }));
+  }, [camionsFiltres]);
+
+  // BAR : Temps moyen par garage
   const tempsParGarage = useMemo(() => {
     const grouped: Record<string, number[]> = {};
     timeLogs.forEach(l => {
@@ -320,120 +448,94 @@ export function VueAnalyse() {
     return ROAD_MAP_STATIONS.map(station => {
       const durees = grouped[station.id] ?? [];
       const moy = durees.length > 0 ? durees.reduce((a, b) => a + b, 0) / durees.length : 0;
-      const total = durees.reduce((a, b) => a + b, 0);
       return {
         station: station.label.replace('Mécanique ', 'Méc. ').replace('Soudure ', 'Soud. '),
         stationId: station.id,
         'Temps moyen (min)': Math.round(moy),
         'Passages': durees.length,
-        totalMinutes: total,
+        totalMinutes: durees.reduce((a, b) => a + b, 0),
         color: station.color,
       };
     }).filter(d => d['Temps moyen (min)'] > 0 || d.Passages > 0);
   }, [timeLogs]);
 
-  // ── Aging : jours depuis import ───────────────────────────
-  const agingData = useMemo(() => {
-    const now = Date.now();
-    const bins = [
-      { label: '< 7j', min: 0, max: 7, count: 0 },
-      { label: '7-14j', min: 7, max: 14, count: 0 },
-      { label: '14-30j', min: 14, max: 30, count: 0 },
-      { label: '30-60j', min: 30, max: 60, count: 0 },
-      { label: '60-90j', min: 60, max: 90, count: 0 },
-      { label: '90j+', min: 90, max: Infinity, count: 0 },
-    ];
-    enProduction.forEach(v => {
-      const days = (now - new Date(v.dateEnProduction ?? v.dateImport).getTime()) / 86400000;
-      const bin = bins.find(b => days >= b.min && days < b.max);
-      if (bin) bin.count++;
+  // ── Réservoirs stats ──────────────────────────────────────
+  const reservoirStats = useMemo(() => {
+    const parType: Record<string, { total: number; dispo: number; installe: number; peinture: number }> = {};
+    reservoirs.forEach(r => {
+      if (!parType[r.type]) parType[r.type] = { total: 0, dispo: 0, installe: 0, peinture: 0 };
+      parType[r.type].total++;
+      if (r.etat === 'disponible') parType[r.type].dispo++;
+      else if (r.etat === 'installe') parType[r.type].installe++;
+      else if (r.etat === 'en-peinture') parType[r.type].peinture++;
     });
-    return bins.map(b => ({ name: b.label, Camions: b.count }));
-  }, [enProduction]);
+    return {
+      total: reservoirs.length,
+      disponibles: reservoirsDisponibles.length,
+      installes: reservoirs.filter(r => r.etat === 'installe').length,
+      enPeinture: reservoirs.filter(r => r.etat === 'en-peinture').length,
+      parType,
+    };
+  }, [reservoirs, reservoirsDisponibles]);
 
-  // ── Liste des camions prêts ───────────────────────────────
-  const pretsRows = useMemo(() =>
-    prets.map(v => ({
-      id: v.id,
-      cells: [
-        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f97316' }}>#{v.numero}</span>,
-        `${v.marque ?? ''} ${v.modele ?? ''}`.trim() || '—',
-        v.variante ?? '—',
-        v.aUnReservoir
-          ? <span style={{ color: COLORS.avecReservoir, fontWeight: 700 }}>✓ Oui</span>
-          : <span style={{ color: 'rgba(255,255,255,0.3)' }}>Non</span>,
-        (() => {
-          const ec = v.etatCommercial ?? 'non-vendu';
-          const cfg: Record<string, { bg: string; color: string; label: string }> = {
-            'vendu': { bg: '#22c55e20', color: '#22c55e', label: 'Vendu' },
-            'reserve': { bg: '#f59e0b20', color: '#f59e0b', label: 'Réservé' },
-            'location': { bg: '#8b5cf620', color: '#8b5cf6', label: 'Location' },
-            'non-vendu': { bg: '#64748b20', color: '#64748b', label: 'Non vendu' },
-          };
-          const c = cfg[ec] ?? cfg['non-vendu'];
-          return (
+  // ── Tableaux ──────────────────────────────────────────────
+
+  const camionsRows = useMemo(() =>
+    camionsFiltres
+      .sort((a, b) => {
+        // Vendus non prêts en premier
+        const aVnp = getCommercial(a) === 'vendu' && !a.estPret ? 0 : 1;
+        const bVnp = getCommercial(b) === 'vendu' && !b.estPret ? 0 : 1;
+        if (aVnp !== bVnp) return aVnp - bVnp;
+        return getProgression(b) - getProgression(a);
+      })
+      .map(v => {
+        const phase = getPhase(v);
+        const stationId = getStationEnCours(v);
+        const stationLabel = stationId
+          ? ROAD_MAP_STATIONS.find(s => s.id === stationId)?.label ?? stationId
+          : '—';
+        const progression = getProgression(v);
+        const isVenduNonPret = getCommercial(v) === 'vendu' && !v.estPret;
+        return {
+          id: v.id,
+          cells: [
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isVenduNonPret && <span title="Vendu mais pas prêt!" style={{ fontSize: 14 }}>🚨</span>}
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f97316' }}>#{v.numero}</span>
+            </div>,
+            `${v.marque ?? ''} ${v.modele ?? ''}`.trim() || '—',
+            v.variante ?? '—',
             <span style={{
-              background: c.bg, color: c.color, padding: '2px 8px',
-              borderRadius: 4, fontWeight: 700, fontSize: 11,
-            }}>{c.label}</span>
-          );
-        })(),
-        v.clientAcheteur || '—',
-      ],
-    })),
-    [prets]
+              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+              background: phase === 'pret' ? '#22c55e20' : phase === 'en-production' ? '#3b82f620' : '#94a3b820',
+              color: phase === 'pret' ? '#22c55e' : phase === 'en-production' ? '#3b82f6' : '#94a3b8',
+            }}>
+              {phase === 'pret' ? '✅ Prêt' : phase === 'en-production' ? '🔧 Production' : '📋 Dispo.'}
+            </span>,
+            phase === 'en-production'
+              ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }}>{stationLabel}</span>
+              : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
+            phase === 'en-production' ? <ProgressBar value={progression} /> : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
+            v.aUnReservoir
+              ? <span style={{ color: '#0ea5e9', fontWeight: 700 }}>✓ Oui</span>
+              : <span style={{ color: 'rgba(255,255,255,0.2)' }}>Non</span>,
+            <CommercialBadge etat={getCommercial(v)} />,
+            v.clientAcheteur || '—',
+            v.dateLivraisonPlanifiee || '—',
+          ],
+        };
+      }),
+    [camionsFiltres]
   );
 
-  // ── Liste camions en production ───────────────────────────
-  const prodRows = useMemo(() =>
-    enProduction.map(v => {
-      const etapeEnCours = v.roadMap?.find((s: RoadMapEtape) => s.statut === 'en-cours');
-      const stationLabel = etapeEnCours
-        ? ROAD_MAP_STATIONS.find(s => s.id === etapeEnCours.stationId)?.label ?? etapeEnCours.stationId
-        : '—';
-      const progression = v.roadMap && v.roadMap.length > 0
-        ? Math.round(v.roadMap.filter((s: RoadMapEtape) => s.statut === 'termine' || s.statut === 'saute').length / v.roadMap.length * 100)
-        : 0;
-      return {
-        id: v.id,
-        cells: [
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f97316' }}>#{v.numero}</span>,
-          `${v.marque ?? ''} ${v.modele ?? ''}`.trim() || '—',
-          <span style={{ color: etapeEnCours ? '#3b82f6' : 'rgba(255,255,255,0.3)', fontWeight: 600 }}>{stationLabel}</span>,
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-              <div style={{ width: `${progression}%`, height: '100%', borderRadius: 3, background: progression === 100 ? '#22c55e' : '#3b82f6', transition: 'width 0.3s' }} />
-            </div>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 32 }}>{progression}%</span>
-          </div>,
-          v.aUnReservoir
-            ? <span style={{ color: COLORS.avecReservoir, fontWeight: 700 }}>✓</span>
-            : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
-          (() => {
-            const ec = v.etatCommercial ?? 'non-vendu';
-            const cfg: Record<string, { color: string; label: string }> = {
-              'vendu': { color: '#22c55e', label: '✓ Vendu' },
-              'reserve': { color: '#f59e0b', label: '🔒 Rés.' },
-              'location': { color: '#8b5cf6', label: '🔑 Loc.' },
-              'non-vendu': { color: '#64748b', label: '—' },
-            };
-            const c = cfg[ec] ?? cfg['non-vendu'];
-            return <span style={{ color: c.color, fontWeight: 700, fontSize: 11 }}>{c.label}</span>;
-          })(),
-        ],
-      };
-    }),
-    [enProduction]
-  );
-
-  // ── Liste réservoirs ──────────────────────────────────────
   const reservoirRows = useMemo(() =>
     reservoirs.map(r => {
       const camion = r.camionId ? camionsEau.find(v => v.id === r.camionId || v.reservoirId === r.id) : null;
       const etatCfg: Record<string, { color: string; label: string }> = {
         'disponible': { color: '#22c55e', label: '✓ Disponible' },
         'installe': { color: '#0ea5e9', label: '🔧 Installé' },
-        'en-peinture': { color: '#f59e0b', label: '🎨 En peinture' },
+        'en-peinture': { color: '#f59e0b', label: '🎨 Peinture' },
       };
       const ec = etatCfg[r.etat] ?? { color: '#64748b', label: r.etat };
       return {
@@ -450,6 +552,58 @@ export function VueAnalyse() {
     }),
     [reservoirs, camionsEau]
   );
+
+  // ── Clickable Pie helper ──────────────────────────────────
+  const renderClickablePie = (
+    data: { name: string; value: number; key: string; color: string }[],
+    filterKey: keyof Filters,
+    size: number = 220,
+  ) => {
+    if (data.length === 0) {
+      return (
+        <div style={{ height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)' }}>
+          Aucune donnée
+        </div>
+      );
+    }
+    const activeKey = filters[filterKey];
+    return (
+      <ResponsiveContainer width="100%" height={size}>
+        <PieChart>
+          <Pie
+            data={data} dataKey="value" nameKey="name"
+            cx="50%" cy="50%" innerRadius={45} outerRadius={75}
+            strokeWidth={0}
+            label={({ name, value, percent }: any) => percent >= 0.05 ? `${name} (${value})` : null}
+            labelLine={false}
+            style={{ cursor: 'pointer' }}
+            onClick={(_: any, idx: number) => {
+              const d = data[idx];
+              if (d?.key) toggleFilter(filterKey, d.key);
+            }}
+          >
+            {data.map((d, i) => (
+              <Cell
+                key={i}
+                fill={d.color}
+                opacity={activeKey && activeKey !== d.key ? 0.25 : 1}
+                stroke={activeKey === d.key ? 'white' : 'none'}
+                strokeWidth={activeKey === d.key ? 2 : 0}
+              />
+            ))}
+          </Pie>
+          <Tooltip content={<ChartTooltip />} />
+          <Legend
+            wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}
+            onClick={(e: any) => {
+              const d = data.find(x => x.name === e.value);
+              if (d?.key) toggleFilter(filterKey, d.key);
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  };
 
   // ── Loading ───────────────────────────────────────────────
   if (loadingExtra) {
@@ -474,112 +628,197 @@ export function VueAnalyse() {
       overflowY: 'auto', overflowX: 'hidden',
       padding: 24, boxSizing: 'border-box',
     }}>
-      {/* ── TITRE ── */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{
-          fontSize: 24, fontWeight: 800, color: 'white',
-          fontFamily: 'system-ui, sans-serif', letterSpacing: '-0.02em',
-        }}>
-          📊 Analyse — Camions à eau
+      {/* ── TITRE + FILTRES ACTIFS ── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+          <div style={{
+            fontSize: 24, fontWeight: 800, color: 'white',
+            fontFamily: 'system-ui, sans-serif', letterSpacing: '-0.02em',
+          }}>
+            📊 Analyse — Camions à eau
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+            {camionsFiltres.length}/{camionsEau.length} camions
+            {hasFilters ? ' (filtré)' : ''}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
-          {camionsEau.length} camions actifs · Données en temps réel
-        </div>
+
+        {/* Barre de filtres actifs */}
+        {hasFilters && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            padding: '10px 14px', borderRadius: 10,
+            background: 'rgba(139, 92, 246, 0.08)',
+            border: '1px solid rgba(139, 92, 246, 0.2)',
+          }}>
+            <span style={{ fontSize: 11, color: '#8b5cf6', fontWeight: 700, marginRight: 4 }}>
+              FILTRES ACTIFS :
+            </span>
+            {Object.entries(filters).map(([key, value]) => (
+              <button
+                key={key}
+                onClick={() => toggleFilter(key as keyof Filters, value)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 10px', borderRadius: 6,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  color: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600,
+                }}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.4)' }}>{FILTER_LABELS[key] ?? key}:</span>
+                <span>{String(value)}</span>
+                <span style={{ color: '#ef4444', fontWeight: 700 }}>✕</span>
+              </button>
+            ))}
+            <button
+              onClick={clearFilters}
+              style={{
+                padding: '4px 12px', borderRadius: 6,
+                background: '#ef444420', border: '1px solid #ef444440',
+                color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                marginLeft: 'auto',
+              }}
+            >
+              Tout effacer
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* ── ALERTES ── */}
+      {(vendusNonPrets.length > 0 || ecartReservoir > 0) && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: vendusNonPrets.length > 0 && ecartReservoir > 0 ? '1fr 1fr' : '1fr',
+          gap: 14, marginBottom: 20,
+        }}>
+          {vendusNonPrets.length > 0 && (
+            <div
+              onClick={() => toggleFilter('alerte', 'vendu-pas-pret')}
+              style={{
+                background: filters.alerte === 'vendu-pas-pret' ? '#ef444425' : '#ef444415',
+                border: filters.alerte === 'vendu-pas-pret' ? '2px solid #ef4444' : '1px solid #ef444440',
+                borderRadius: 12, padding: '16px 20px',
+                cursor: 'pointer', transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', gap: 16,
+              }}
+            >
+              <div style={{ fontSize: 36 }}>🚨</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#ef4444', marginBottom: 4 }}>
+                  {vendusNonPrets.length} camion{vendusNonPrets.length > 1 ? 's' : ''} vendu{vendusNonPrets.length > 1 ? 's' : ''} PAS PRÊT{vendusNonPrets.length > 1 ? 'S' : ''}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                  {vendusNonPrets.slice(0, 5).map(v => `#${v.numero}`).join(', ')}
+                  {vendusNonPrets.length > 5 ? ` +${vendusNonPrets.length - 5} autres` : ''}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                  Cliquer pour filtrer
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ecartReservoir > 0 && (
+            <div
+              onClick={() => toggleFilter('alerte', 'ecart-reservoir')}
+              style={{
+                background: filters.alerte === 'ecart-reservoir' ? '#f59e0b25' : '#f59e0b15',
+                border: filters.alerte === 'ecart-reservoir' ? '2px solid #f59e0b' : '1px solid #f59e0b40',
+                borderRadius: 12, padding: '16px 20px',
+                cursor: 'pointer', transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', gap: 16,
+              }}
+            >
+              <div style={{ fontSize: 36 }}>⚠️</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', marginBottom: 4 }}>
+                  Écart réservoirs : {ecartReservoir} manquant{ecartReservoir > 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                  {camionsSansReservoir.length} camions sans réservoir · {reservoirsDisponibles.length} réservoirs disponibles
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                  <div style={{
+                    flex: 1, height: 8, borderRadius: 4,
+                    background: 'rgba(255,255,255,0.08)', overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${Math.min(100, (reservoirsDisponibles.length / Math.max(1, camionsSansReservoir.length)) * 100)}%`,
+                      height: '100%', borderRadius: 4,
+                      background: ecartReservoir > 10 ? '#ef4444' : '#f59e0b',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>
+                    {reservoirsDisponibles.length}/{camionsSansReservoir.length}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                  Cliquer pour voir les camions sans réservoir
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── KPI ROW ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: 14, marginBottom: 24,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: 14, marginBottom: 20,
       }}>
         <KpiCard icon="✅" label="PRÊTS" value={prets.length}
-          sub={`${prets.filter(v => v.etatCommercial === 'vendu').length} vendus`}
-          color={COLORS.pret} />
+          sub={`${prets.filter(v => getCommercial(v) === 'vendu').length} vendus · ${prets.filter(v => getCommercial(v) !== 'vendu').length} non vendus`}
+          color={COLORS.pret}
+          active={filters.phase === 'pret'}
+          onClick={() => toggleFilter('phase', 'pret')} />
         <KpiCard icon="🔧" label="EN PRODUCTION" value={enProduction.length}
-          sub={`${enProduction.filter(v => v.etatCommercial === 'vendu').length} vendus`}
-          color={COLORS.enProduction} />
+          sub={`${enProduction.filter(v => getCommercial(v) === 'vendu').length} vendus · ${enProduction.filter(v => getCommercial(v) !== 'vendu').length} non vendus`}
+          color={COLORS['en-production']}
+          active={filters.phase === 'en-production'}
+          onClick={() => toggleFilter('phase', 'en-production')} />
         <KpiCard icon="📋" label="DISPONIBLES" value={disponibles.length}
           sub="À planifier"
-          color={COLORS.disponible} />
-        <KpiCard icon="🛢" label="RÉSERVOIRS DISPO." value={reservoirStats.disponibles}
-          sub={`${reservoirStats.total} total · ${reservoirStats.installes} installés`}
-          color={COLORS.avecReservoir} />
-        <KpiCard icon="💰" label="VENDUS (total)" value={commercialCount.vendu}
-          sub={`${commercialCount.reserve} réservés · ${commercialCount.location} location`}
-          color={COLORS.vendu} />
+          color={COLORS.disponible}
+          active={filters.phase === 'disponible'}
+          onClick={() => toggleFilter('phase', 'disponible')} />
+        <KpiCard icon="🛢" label="RÉSERVOIRS DISPO." value={reservoirsDisponibles.length}
+          sub={`${reservoirStats.total} total · ${reservoirStats.installes} installés · ${reservoirStats.enPeinture} peinture`}
+          color={COLORS.avec} />
+        <KpiCard icon="💰" label="VENDUS" value={camionsFiltres.filter(v => getCommercial(v) === 'vendu').length}
+          sub={`${camionsFiltres.filter(v => getCommercial(v) === 'reserve').length} rés. · ${camionsFiltres.filter(v => getCommercial(v) === 'location').length} loc.`}
+          color={COLORS.vendu}
+          active={filters.commercial === 'vendu'}
+          onClick={() => toggleFilter('commercial', 'vendu')} />
       </div>
 
-      {/* ── GRAPHIQUES ROW 1 ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18, marginBottom: 18 }}>
-
-        {/* PIE : Prêts — Commercial */}
-        <Section title="Camions prêts — Statut commercial" icon="✅">
-          {pretsCommercial.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={pretsCommercial} dataKey="value" nameKey="name"
-                  cx="50%" cy="50%" innerRadius={50} outerRadius={80}
-                  label={renderPieLabel} labelLine={false}
-                  strokeWidth={0}
-                >
-                  {pretsCommercial.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)' }}>
-              Aucun camion prêt
-            </div>
-          )}
+      {/* ── GRAPHIQUES ROW 1 : 4 PIEs ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 18 }}>
+        <Section title="Par phase" icon="📦"
+          badge={filters.phase ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE</span> : undefined}
+        >
+          {renderClickablePie(phaseData, 'phase', 200)}
         </Section>
 
-        {/* PIE : En production — Commercial */}
-        <Section title="En production — Statut commercial" icon="🔧">
-          {prodCommercial.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={prodCommercial} dataKey="value" nameKey="name"
-                  cx="50%" cy="50%" innerRadius={50} outerRadius={80}
-                  label={renderPieLabel} labelLine={false}
-                  strokeWidth={0}
-                >
-                  {prodCommercial.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)' }}>
-              Aucun camion en production
-            </div>
-          )}
+        <Section title="Statut commercial" icon="💰"
+          badge={filters.commercial ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE</span> : undefined}
+        >
+          {renderClickablePie(commercialData, 'commercial', 200)}
         </Section>
 
-        {/* PIE : Neuf vs Usagé */}
-        <Section title="Répartition Neuf / Usagé" icon="🏷️">
-          {varianteData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={varianteData} dataKey="value" nameKey="name"
-                  cx="50%" cy="50%" innerRadius={50} outerRadius={80}
-                  label={renderPieLabel} labelLine={false}
-                  strokeWidth={0}
-                >
-                  {varianteData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)' }}>
-              Aucune donnée
-            </div>
-          )}
+        <Section title="Neuf / Usagé" icon="🏷️"
+          badge={filters.variante ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE</span> : undefined}
+        >
+          {renderClickablePie(varianteData, 'variante', 200)}
+        </Section>
+
+        <Section title="Réservoirs" icon="🛢"
+          badge={filters.reservoir ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE</span> : undefined}
+        >
+          {renderClickablePie(reservoirPieData, 'reservoir', 200)}
         </Section>
       </div>
 
@@ -587,31 +826,56 @@ export function VueAnalyse() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
 
         {/* BAR : Charge par station */}
-        <Section title="Charge par station (camions à eau)" icon="📊">
+        <Section title="Charge par station" icon="📊"
+          badge={filters.station ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE: {filters.station}</span> : undefined}
+        >
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stationLoad} layout="vertical" margin={{ left: 10, right: 20 }}>
+            <BarChart data={stationLoad} layout="vertical" margin={{ left: 10, right: 20 }}
+              onClick={(state: any) => {
+                if (state?.activeLabel) {
+                  const station = stationLoad.find(s => s.station === state.activeLabel);
+                  if (station?.stationId) toggleFilter('station', station.stationId);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} />
               <YAxis type="category" dataKey="station" width={100}
                 tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
               <Tooltip content={<ChartTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} />
-              <Bar dataKey="En cours" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="En cours" stackId="a" fill="#3b82f6" />
               <Bar dataKey="En attente" stackId="a" fill="#f59e0b" />
               <Bar dataKey="Terminé" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Section>
 
-        {/* BAR : Ancienneté en production */}
-        <Section title="Ancienneté en production" icon="⏱️">
+        {/* BAR : Aging */}
+        <Section title="Ancienneté en production" icon="⏱️"
+          badge={filters.aging ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE: {filters.aging}</span> : undefined}
+        >
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={agingData} margin={{ left: 0, right: 20 }}>
+            <BarChart data={agingData} margin={{ left: 0, right: 20 }}
+              onClick={(state: any) => {
+                if (state?.activeLabel) toggleFilter('aging', state.activeLabel);
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} />
               <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} allowDecimals={false} />
               <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="Camions" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Camions" radius={[4, 4, 0, 0]}>
+                {agingData.map((d, i) => (
+                  <Cell
+                    key={i}
+                    fill={filters.aging === d.name ? '#8b5cf6' : '#6366f1'}
+                    opacity={filters.aging && filters.aging !== d.name ? 0.3 : 1}
+                  />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -620,7 +884,7 @@ export function VueAnalyse() {
       {/* ── TEMPS MOYEN PAR GARAGE ── */}
       {tempsParGarage.length > 0 && (
         <div style={{ marginBottom: 18 }}>
-          <Section title="Temps moyen par garage (historique)" icon="⏳" span={2}>
+          <Section title="Temps moyen par garage (historique)" icon="⏳">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={tempsParGarage} margin={{ left: 10, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
@@ -644,10 +908,11 @@ export function VueAnalyse() {
         </div>
       )}
 
-      {/* ── RÉSERVOIRS ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 18, marginBottom: 18 }}>
-        <Section title="Réservoirs — Vue d'ensemble" icon="🛢">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+      {/* ── RÉSERVOIRS DÉTAIL ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: 18, marginBottom: 18 }}>
+        <Section title="Réservoirs — Détail" icon="🛢">
+          {/* Compteurs */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: '#22c55e15', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
                 {reservoirStats.disponibles}
@@ -660,32 +925,72 @@ export function VueAnalyse() {
               </div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>Installés</div>
             </div>
-            {reservoirStats.enPeinture > 0 && (
-              <div style={{ background: '#f59e0b15', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
-                  {reservoirStats.enPeinture}
-                </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>En peinture</div>
-              </div>
-            )}
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1.8 }}>
-            <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Par type :</strong>
-            {Object.entries(reservoirStats.parType).map(([type, count]) => (
-              <div key={type} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>{type}</span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>{count}</span>
+          {reservoirStats.enPeinture > 0 && (
+            <div style={{ background: '#f59e0b15', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+              <span style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
+                {reservoirStats.enPeinture}
+              </span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 8 }}>en peinture</span>
+            </div>
+          )}
+
+          {/* Par type */}
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Par type :</div>
+            {Object.entries(reservoirStats.parType).map(([type, counts]) => (
+              <div key={type} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+              }}>
+                <span style={{ fontWeight: 600 }}>{type}</span>
+                <div style={{ display: 'flex', gap: 12, fontSize: 11, fontFamily: 'monospace' }}>
+                  <span style={{ color: '#22c55e' }}>{counts.dispo} dispo</span>
+                  <span style={{ color: '#0ea5e9' }}>{counts.installe} inst.</span>
+                  {counts.peinture > 0 && <span style={{ color: '#f59e0b' }}>{counts.peinture} peint.</span>}
+                  <span style={{ color: 'rgba(255,255,255,0.3)' }}>{counts.total} total</span>
+                </div>
               </div>
             ))}
           </div>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span>Camions <strong>avec</strong> réservoir</span>
-              <span style={{ color: COLORS.avecReservoir, fontWeight: 700 }}>{reservoirStats.camionsAvecReservoir}</span>
+
+          {/* Écart visuel */}
+          <div style={{
+            borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+              Couverture camions :
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Camions <strong>sans</strong> réservoir</span>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>{reservoirStats.camionsSansReservoir}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Camions avec réservoir</span>
+              <span style={{ color: '#0ea5e9', fontWeight: 700, fontFamily: 'monospace' }}>
+                {camionsEau.filter(v => v.aUnReservoir).length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Camions sans réservoir</span>
+              <span style={{ color: ecartReservoir > 0 ? '#f59e0b' : 'rgba(255,255,255,0.5)', fontWeight: 700, fontFamily: 'monospace' }}>
+                {camionsSansReservoir.length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Réservoirs disponibles</span>
+              <span style={{ color: '#22c55e', fontWeight: 700, fontFamily: 'monospace' }}>
+                {reservoirsDisponibles.length}
+              </span>
+            </div>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 14px', borderRadius: 8,
+              background: ecartReservoir > 0 ? '#ef444415' : '#22c55e15',
+              border: `1px solid ${ecartReservoir > 0 ? '#ef444440' : '#22c55e40'}`,
+            }}>
+              <span style={{
+                fontSize: 13, fontWeight: 800,
+                color: ecartReservoir > 0 ? '#ef4444' : '#22c55e',
+              }}>
+                {ecartReservoir > 0 ? `⚠️ Écart: ${ecartReservoir} manquant${ecartReservoir > 1 ? 's' : ''}` : '✅ Stock suffisant'}
+              </span>
             </div>
           </div>
         </Section>
@@ -698,22 +1003,22 @@ export function VueAnalyse() {
         </Section>
       </div>
 
-      {/* ── TABLEAUX DÉTAILLÉS ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18, marginBottom: 18 }}>
-        <Section title={`Camions prêts (${prets.length})`} icon="✅">
-          <MiniTable
-            columns={['#', 'Véhicule', 'Variante', 'Réservoir', 'Statut', 'Client']}
-            rows={pretsRows}
-          />
-        </Section>
+      {/* ── TABLEAU DÉTAILLÉ CAMIONS ── */}
+      <Section title={`Détail camions à eau (${camionsFiltres.length}${hasFilters ? ` / ${camionsEau.length}` : ''})`} icon="🚛"
+        badge={
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+            🚨 = vendu pas prêt
+          </span>
+        }
+      >
+        <MiniTable
+          columns={['#', 'Véhicule', 'Var.', 'Phase', 'Station', 'Progression', 'Rés.', 'Commercial', 'Client', 'Livraison']}
+          rows={camionsRows}
+        />
+      </Section>
 
-        <Section title={`En production (${enProduction.length})`} icon="🔧">
-          <MiniTable
-            columns={['#', 'Véhicule', 'Station actuelle', 'Progression', 'Rés.', 'Commercial']}
-            rows={prodRows}
-          />
-        </Section>
-      </div>
+      {/* Spacer bottom */}
+      <div style={{ height: 40 }} />
     </div>
   );
 }
