@@ -81,7 +81,36 @@ export const VueDepartement = () => {
     return () => clearInterval(interval);
   }, [modeTV]);
 
-  if (!dept) return null;
+  if (!dept) {
+    return (
+      <div style={{
+        width: '100vw', height: '100dvh', background: '#0d0c08',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontFamily: 'monospace', gap: 16, padding: 40,
+      }}>
+        <div style={{ fontSize: 48 }}>⚠️</div>
+        <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center' }}>
+          Département non configuré
+        </div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', maxWidth: 500, lineHeight: 1.6 }}>
+          Votre profil n'a pas de département assigné ou le département
+          «&nbsp;{profile?.departement ?? '(vide)'}&nbsp;» n'est pas reconnu.
+          <br /><br />
+          Départements valides : {Object.keys(DEPARTEMENTS_CONFIG).join(', ')}
+        </div>
+        <button
+          onClick={() => deconnexion()}
+          style={{
+            marginTop: 16, padding: '10px 24px', borderRadius: 8,
+            background: '#ef4444', color: 'white', border: 'none',
+            fontWeight: 700, fontSize: 14, cursor: 'pointer',
+          }}
+        >
+          ← Se déconnecter
+        </button>
+      </div>
+    );
+  }
 
   const itemsEnAttente = items.filter(item => {
     if (item.etat !== 'en-attente') return false;
