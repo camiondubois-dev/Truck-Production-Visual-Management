@@ -361,6 +361,46 @@ export function VueAnalyse() {
   );
   const ecartReservoir = camionsSansReservoir.length - reservoirsDisponibles.length;
 
+  // ── Écart par TYPE de réservoir ───────────────────────────
+  const TYPES_RES = ['2500g', '3750g', '4000g', '5000g'] as const;
+  const ecartParType = useMemo(() => {
+    // Camions sans réservoir avec un type requis spécifié
+    const besoinsParType: Record<string, { count: number; camions: VehiculeInventaire[] }> = {};
+    const sansTypeSpecifie: VehiculeInventaire[] = [];
+    TYPES_RES.forEach(t => { besoinsParType[t] = { count: 0, camions: [] }; });
+
+    camionsSansReservoir.forEach(v => {
+      if (v.typeReservoirRequis && besoinsParType[v.typeReservoirRequis]) {
+        besoinsParType[v.typeReservoirRequis].count++;
+        besoinsParType[v.typeReservoirRequis].camions.push(v);
+      } else {
+        sansTypeSpecifie.push(v);
+      }
+    });
+
+    // Réservoirs disponibles par type
+    const dispoParType: Record<string, number> = {};
+    TYPES_RES.forEach(t => { dispoParType[t] = 0; });
+    reservoirsDisponibles.forEach(r => {
+      if (dispoParType[r.type] !== undefined) dispoParType[r.type]++;
+    });
+
+    return TYPES_RES.map(type => ({
+      type,
+      besoin: besoinsParType[type].count,
+      disponible: dispoParType[type],
+      ecart: besoinsParType[type].count - dispoParType[type],
+      camions: besoinsParType[type].camions,
+    }));
+  }, [camionsSansReservoir, reservoirsDisponibles]);
+
+  const camionsSansTypeSpecifie = useMemo(() =>
+    camionsSansReservoir.filter(v => !v.typeReservoirRequis),
+    [camionsSansReservoir]
+  );
+
+  const hasEcartParType = ecartParType.some(e => e.ecart > 0);
+
   // ── Données graphiques ────────────────────────────────────
 
   // PIE : Phase (prêt / en-production / disponible)
@@ -520,6 +560,9 @@ export function VueAnalyse() {
             v.aUnReservoir
               ? <span style={{ color: '#0ea5e9', fontWeight: 700 }}>✓ Oui</span>
               : <span style={{ color: 'rgba(255,255,255,0.2)' }}>Non</span>,
+            v.typeReservoirRequis
+              ? <span style={{ fontWeight: 700, fontSize: 11, color: '#7dd3fc' }}>{v.typeReservoirRequis}</span>
+              : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 10 }}>—</span>,
             <CommercialBadge etat={getCommercial(v)} />,
             v.clientAcheteur || '—',
             v.dateLivraisonPlanifiee || '—',
@@ -721,7 +764,7 @@ export function VueAnalyse() {
             </div>
           )}
 
-          {ecartReservoir > 0 && (
+          {(ecartReservoir > 0 || hasEcartParType) && (
             <div
               onClick={() => toggleFilter('alerte', 'ecart-reservoir')}
               style={{
@@ -729,35 +772,63 @@ export function VueAnalyse() {
                 border: filters.alerte === 'ecart-reservoir' ? '2px solid #f59e0b' : '1px solid #f59e0b40',
                 borderRadius: 12, padding: '16px 20px',
                 cursor: 'pointer', transition: 'all 0.2s',
-                display: 'flex', alignItems: 'center', gap: 16,
               }}
             >
-              <div style={{ fontSize: 36 }}>⚠️</div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', marginBottom: 4 }}>
-                  Écart réservoirs : {ecartReservoir} manquant{ecartReservoir > 1 ? 's' : ''}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
-                  {camionsSansReservoir.length} camions sans réservoir · {reservoirsDisponibles.length} réservoirs disponibles
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                  <div style={{
-                    flex: 1, height: 8, borderRadius: 4,
-                    background: 'rgba(255,255,255,0.08)', overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      width: `${Math.min(100, (reservoirsDisponibles.length / Math.max(1, camionsSansReservoir.length)) * 100)}%`,
-                      height: '100%', borderRadius: 4,
-                      background: ecartReservoir > 10 ? '#ef4444' : '#f59e0b',
-                    }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 36 }}>⚠️</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', marginBottom: 2 }}>
+                    Écart réservoirs
                   </div>
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>
-                    {reservoirsDisponibles.length}/{camionsSansReservoir.length}
-                  </span>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                    {camionsSansReservoir.length} camions sans réservoir · {reservoirsDisponibles.length} dispo en stock
+                  </div>
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
-                  Cliquer pour voir les camions sans réservoir
+              </div>
+              {/* Détail par type */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                {ecartParType.map(e => {
+                  const hasGap = e.ecart > 0;
+                  const hasBesoin = e.besoin > 0 || e.disponible > 0;
+                  return (
+                    <div key={e.type} style={{
+                      padding: '8px 10px', borderRadius: 8, textAlign: 'center',
+                      background: hasGap ? '#ef444418' : hasBesoin ? '#22c55e15' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${hasGap ? '#ef444440' : hasBesoin ? '#22c55e30' : 'rgba(255,255,255,0.06)'}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+                        {e.type}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>
+                        Besoin: <span style={{ color: 'white', fontWeight: 700, fontFamily: 'monospace' }}>{e.besoin}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>
+                        Dispo: <span style={{ color: '#22c55e', fontWeight: 700, fontFamily: 'monospace' }}>{e.disponible}</span>
+                      </div>
+                      {hasGap ? (
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#ef4444' }}>
+                          -{e.ecart}
+                        </div>
+                      ) : e.disponible > e.besoin ? (
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#22c55e' }}>
+                          +{e.disponible - e.besoin}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.2)' }}>
+                          OK
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {camionsSansTypeSpecifie.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 10, color: '#f59e0b', fontStyle: 'italic' }}>
+                  ⚠ {camionsSansTypeSpecifie.length} camion{camionsSansTypeSpecifie.length > 1 ? 's' : ''} sans type de réservoir spécifié dans le road map
                 </div>
+              )}
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>
+                Cliquer pour filtrer les camions sans réservoir
               </div>
             </div>
           )}
@@ -954,44 +1025,76 @@ export function VueAnalyse() {
             ))}
           </div>
 
-          {/* Écart visuel */}
-          <div style={{
-            borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12,
-          }}>
+          {/* Couverture globale */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
               Couverture camions :
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Camions avec réservoir</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Avec réservoir</span>
               <span style={{ color: '#0ea5e9', fontWeight: 700, fontFamily: 'monospace' }}>
                 {camionsEau.filter(v => v.aUnReservoir).length}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Camions sans réservoir</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Sans réservoir</span>
               <span style={{ color: ecartReservoir > 0 ? '#f59e0b' : 'rgba(255,255,255,0.5)', fontWeight: 700, fontFamily: 'monospace' }}>
                 {camionsSansReservoir.length}
               </span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Réservoirs disponibles</span>
-              <span style={{ color: '#22c55e', fontWeight: 700, fontFamily: 'monospace' }}>
-                {reservoirsDisponibles.length}
-              </span>
+          </div>
+
+          {/* Écart PAR TYPE */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+              Écart par type de réservoir :
             </div>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 14px', borderRadius: 8,
-              background: ecartReservoir > 0 ? '#ef444415' : '#22c55e15',
-              border: `1px solid ${ecartReservoir > 0 ? '#ef444440' : '#22c55e40'}`,
-            }}>
-              <span style={{
-                fontSize: 13, fontWeight: 800,
-                color: ecartReservoir > 0 ? '#ef4444' : '#22c55e',
+            {ecartParType.map(e => {
+              const hasGap = e.ecart > 0;
+              const surplus = e.disponible - e.besoin;
+              return (
+                <div key={e.type} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 10px', marginBottom: 4, borderRadius: 8,
+                  background: hasGap ? '#ef444412' : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${hasGap ? '#ef444430' : 'rgba(255,255,255,0.04)'}`,
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', width: 50 }}>
+                    {e.type}
+                  </span>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${e.besoin > 0 ? Math.min(100, (e.disponible / e.besoin) * 100) : 100}%`,
+                        height: '100%', borderRadius: 3,
+                        background: hasGap ? '#ef4444' : '#22c55e',
+                      }} />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', minWidth: 60, textAlign: 'right' }}>
+                    {e.besoin}req / {e.disponible}dsp
+                  </span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 800, fontFamily: 'monospace', minWidth: 30, textAlign: 'right',
+                    color: hasGap ? '#ef4444' : surplus > 0 ? '#22c55e' : 'rgba(255,255,255,0.3)',
+                  }}>
+                    {hasGap ? `-${e.ecart}` : surplus > 0 ? `+${surplus}` : 'OK'}
+                  </span>
+                </div>
+              );
+            })}
+            {camionsSansTypeSpecifie.length > 0 && (
+              <div style={{
+                marginTop: 6, padding: '6px 10px', borderRadius: 6,
+                background: '#f59e0b10', border: '1px solid #f59e0b25',
+                fontSize: 11, color: '#f59e0b',
               }}>
-                {ecartReservoir > 0 ? `⚠️ Écart: ${ecartReservoir} manquant${ecartReservoir > 1 ? 's' : ''}` : '✅ Stock suffisant'}
-              </span>
-            </div>
+                ⚠ {camionsSansTypeSpecifie.length} camion{camionsSansTypeSpecifie.length > 1 ? 's' : ''} sans type de réservoir spécifié
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+                  Ajouter le type dans le Road Map du camion
+                </div>
+              </div>
+            )}
           </div>
         </Section>
 
@@ -1012,7 +1115,7 @@ export function VueAnalyse() {
         }
       >
         <MiniTable
-          columns={['#', 'Véhicule', 'Var.', 'Phase', 'Station', 'Progression', 'Rés.', 'Commercial', 'Client', 'Livraison']}
+          columns={['#', 'Véhicule', 'Var.', 'Phase', 'Station', 'Progression', 'Rés.', 'Rés. requis', 'Commercial', 'Client', 'Livraison']}
           rows={camionsRows}
         />
       </Section>

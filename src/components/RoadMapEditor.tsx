@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { useInventaire } from '../contexts/InventaireContext';
+import { supabase } from '../lib/supabase';
 import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
+
+const TYPES_RESERVOIR = ['2500g', '3750g', '4000g', '5000g'] as const;
 
 const generateStepId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -32,6 +35,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [newStation, setNewStation] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [typeReservoir, setTypeReservoir] = useState<string>(vehicule.typeReservoirRequis ?? '');
 
   // All stations always available (duplicate sous-traitants etc. allowed)
   const availableStations = [...ROAD_MAP_STATIONS];
@@ -41,7 +45,14 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
     try {
       // Passe par le contexte → met à jour le state global → PlancherView se rafraîchit
       await mettreAJourRoadMap(vehicule.id, newSteps);
-      onSaved({ ...vehicule, roadMap: newSteps });
+      // Sauvegarder le type de réservoir requis si c'est un camion à eau
+      if (vehicule.type === 'eau') {
+        const newType = typeReservoir || null;
+        await supabase.from('prod_inventaire')
+          .update({ type_reservoir_requis: newType, updated_at: new Date().toISOString() })
+          .eq('id', vehicule.id);
+      }
+      onSaved({ ...vehicule, roadMap: newSteps, typeReservoirRequis: (typeReservoir || undefined) as any });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally { setSaving(false); }
@@ -220,6 +231,34 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
           </div>
         )}
 
+        {/* ── Type de réservoir requis (compact, eau seulement) ── */}
+        {vehicule.type === 'eau' && (
+          <div style={{
+            marginBottom: 12, padding: '10px 12px', borderRadius: 10,
+            background: '#f0f9ff', border: '1px solid #bae6fd',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 16 }}>🛢</span>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#0c4a6e', whiteSpace: 'nowrap' }}>
+              Réservoir :
+            </label>
+            <select
+              value={typeReservoir}
+              onChange={e => setTypeReservoir(e.target.value)}
+              style={{
+                flex: 1, padding: '6px 10px', borderRadius: 6,
+                border: '1px solid #7dd3fc', fontSize: 12, fontWeight: 600,
+                outline: 'none', background: 'white', color: '#0c4a6e',
+              }}
+            >
+              <option value="">— Non spécifié —</option>
+              {TYPES_RESERVOIR.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <button
           onClick={() => handleSave(steps)}
           disabled={saving}
@@ -359,6 +398,34 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Type de réservoir requis (camions à eau seulement) ── */}
+      {vehicule.type === 'eau' && (
+        <div style={{
+          marginBottom: 12, padding: '10px 12px', borderRadius: 10,
+          background: '#f0f9ff', border: '1px solid #bae6fd',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 16 }}>🛢</span>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#0c4a6e', whiteSpace: 'nowrap' }}>
+            Réservoir requis :
+          </label>
+          <select
+            value={typeReservoir}
+            onChange={e => setTypeReservoir(e.target.value)}
+            style={{
+              flex: 1, padding: '6px 10px', borderRadius: 6,
+              border: '1px solid #7dd3fc', fontSize: 12, fontWeight: 600,
+              outline: 'none', background: 'white', color: '#0c4a6e',
+            }}
+          >
+            <option value="">— Non spécifié —</option>
+            {TYPES_RESERVOIR.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
       )}
 

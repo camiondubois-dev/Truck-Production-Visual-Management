@@ -41,6 +41,8 @@ export interface VehiculeInventaire {
   etapesFaites?: EtapeFaite[];
   aUnReservoir?: boolean;
   reservoirId?: string;
+  typeReservoirRequis?: '2500g' | '3750g' | '4000g' | '5000g';
+  typeReservoirRequis?: '2500g' | '3750g' | '4000g' | '5000g';
   estPret?: boolean;
   etatCommercial?: 'non-vendu' | 'reserve' | 'vendu' | 'location';
   dateLivraisonPlanifiee?: string;
