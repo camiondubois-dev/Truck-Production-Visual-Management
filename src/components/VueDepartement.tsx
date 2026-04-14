@@ -5,6 +5,7 @@ import { EauIcon } from './EauIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { SlotAssignModal } from './SlotAssignModal';
 import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import type { Item } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
@@ -271,8 +272,10 @@ export const VueDepartement = () => {
       }}>
         {dept.slots.map(slotId => {
           const item = slotMap[slotId];
+          const isTempJob = item && (item.type === 'export' || item.type === 'demantelement' || item.type === 'autres');
           const typeColor = item
-            ? item.type === 'eau'    ? '#f97316'
+            ? isTempJob             ? '#475569'
+            : item.type === 'eau'   ? '#f97316'
             : item.type === 'client' ? '#3b82f6'
             : '#22c55e'
             : null;
@@ -321,7 +324,11 @@ export const VueDepartement = () => {
                     fontSize: 11, fontWeight: 700,
                     color: typeColor!, letterSpacing: '0.08em', marginBottom: 8,
                   }}>
-                    {item.type === 'eau'
+                    {isTempJob
+                      ? item.type === 'export' ? '🚛 EXPORT'
+                      : item.type === 'demantelement' ? '🔧 DÉMANTÈLEMENT'
+                      : '📋 AUTRES'
+                    : item.type === 'eau'
                       ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><EauIcon /> CAMION À EAU</span>
                       : item.type === 'client' ? '🔧 CLIENT EXT.'
                       : '🏷️ DÉTAIL'}
@@ -494,13 +501,45 @@ export const VueDepartement = () => {
 
       {/* ── PANNEAU DÉTAIL UNIFIÉ (même que PlancherView/VueAsana) ── */}
       {modalState?.type === 'detail' && (() => {
-        const detailVehicule = vehiculesComplets.find(v => v.id === modalState.vehiculeId);
         const detailItem = modalState.itemId
           ? items.find(i => i.id === modalState.itemId)
           : items.find(i =>
               (i.inventaireId === modalState.vehiculeId || i.id === modalState.vehiculeId) &&
               i.etat !== 'termine'
             );
+        let detailVehicule = vehiculesComplets.find(v => v.id === modalState.vehiculeId);
+        // Fallback : si le véhicule n'est pas trouvé dans vehiculesComplets,
+        // créer un objet synthétique à partir du prod_item pour garantir l'ouverture du panneau
+        if (!detailVehicule && detailItem) {
+          detailVehicule = {
+            id: detailItem.inventaireId || detailItem.id,
+            statut: 'en-production' as const,
+            dateImport: detailItem.dateCreation ?? new Date().toISOString(),
+            dateEnProduction: detailItem.dateCreation,
+            jobId: detailItem.id,
+            numero: detailItem.numero ?? '',
+            type: (detailItem.type === 'eau' || detailItem.type === 'client' || detailItem.type === 'detail')
+              ? detailItem.type : 'detail' as const,
+            nomClient: detailItem.nomClient,
+            telephone: detailItem.telephone,
+            vehicule: detailItem.vehicule,
+            descriptionTravail: detailItem.descriptionTravail,
+            descriptionTravaux: detailItem.descriptionTravaux,
+            notes: detailItem.notes,
+            marque: detailItem.marque,
+            modele: detailItem.modele,
+            annee: detailItem.annee,
+            roadMap: (detailItem.stationsActives ?? []).map((sid: string, idx: number) => {
+              const prog = detailItem.progression?.find((p: any) => p.stationId === sid);
+              const statut = prog?.status === 'termine' ? 'termine' as const
+                : prog?.status === 'en-cours' ? 'en-cours' as const
+                : 'en-attente' as const;
+              return { id: `synth-${detailItem.id}-${idx}`, stationId: sid, statut, priorite: idx + 1, ordre: idx + 1 };
+            }),
+            estPret: false,
+            etatCommercial: detailItem.etatCommercial as any ?? 'non-vendu',
+          };
+        }
         if (!detailVehicule) return null;
         return (
           <PanneauDetailVehicule

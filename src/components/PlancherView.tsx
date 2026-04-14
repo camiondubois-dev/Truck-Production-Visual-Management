@@ -236,10 +236,12 @@ export function PlancherView() {
     };
     try {
       await ajouterItem(item);
-    } catch (err) {
+      setModalState(null);
+    } catch (err: any) {
       console.error('[PlancherView] Erreur création job temporaire:', err);
+      alert(`Erreur création job temporaire: ${err?.message ?? err}`);
+      setModalState(null);
     }
-    setModalState(null);
   };
 
   const handleViderSlot = async (itemId: string) => {
