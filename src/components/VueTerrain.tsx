@@ -189,6 +189,75 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Viewer Document (plein écran, zoomable) ───────────────────────────────
+
+function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }) {
+  const [zoom, setZoom] = useState(0.5);
+  const isPdf = doc.base64.startsWith('data:application/pdf');
+
+  const zoomIn  = () => setZoom(z => Math.min(z + 0.25, 3));
+  const zoomOut = () => setZoom(z => Math.max(z - 0.25, 0.25));
+  const zoomFit = () => setZoom(0.5);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#111', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+      {/* Barre du haut */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#1a1a2e', flexShrink: 0 }}>
+        <button onClick={onClose}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          ← Retour
+        </button>
+        <div style={{ flex: 1, textAlign: 'center', color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 8px' }}>
+          {doc.nom}
+        </div>
+        <button onClick={onClose}
+          style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          ✕
+        </button>
+      </div>
+
+      {/* Contrôles zoom */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '8px 16px', background: '#1a1a2e', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+        <button onClick={zoomOut} style={{ width: 40, height: 36, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>−</button>
+        <button onClick={zoomFit} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          {Math.round(zoom * 100)}%
+        </button>
+        <button onClick={zoomIn} style={{ width: 40, height: 36, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>+</button>
+      </div>
+
+      {/* Contenu zoomable */}
+      <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {isPdf ? (
+          <iframe
+            src={doc.base64}
+            title={doc.nom}
+            style={{
+              border: 'none',
+              width: `${zoom * 200}%`,
+              height: `${zoom * 200}%`,
+              minHeight: '100%',
+              transformOrigin: 'top left',
+            }}
+          />
+        ) : (
+          <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
+            <img
+              src={doc.base64}
+              alt={doc.nom}
+              style={{
+                width: `${zoom * 200}%`,
+                maxWidth: 'none',
+                objectFit: 'contain',
+                borderRadius: 8,
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── PIN ────────────────────────────────────────────────────────────────────
 
 function EcranPin({ onSuccess }: { onSuccess: () => void }) {
@@ -853,34 +922,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
       </div>
 
       {/* ── Viewer document plein écran ── */}
-      {docOuvert && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#111', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-          {/* Barre du haut avec bouton fermer */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#1a1a2e', flexShrink: 0 }}>
-            <button onClick={() => setDocOuvert(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-              ← Retour
-            </button>
-            <div style={{ flex: 1, textAlign: 'center', color: 'white', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 12px' }}>
-              {docOuvert.nom}
-            </div>
-            <button onClick={() => setDocOuvert(null)}
-              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              ✕
-            </button>
-          </div>
-          {/* Contenu */}
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            {docOuvert.base64.startsWith('data:application/pdf') ? (
-              <iframe src={docOuvert.base64} style={{ width: '100%', height: '100%', border: 'none' }} title={docOuvert.nom} />
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 16 }}>
-                <img src={docOuvert.base64} alt={docOuvert.nom} style={{ maxWidth: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {docOuvert && <ViewerDocument doc={docOuvert} onClose={() => setDocOuvert(null)} />}
     </div>
   );
 }
