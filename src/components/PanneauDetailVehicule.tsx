@@ -8,6 +8,8 @@ import { RoadMapEditor } from './RoadMapEditor';
 import { PopupAssignationSlot } from './PopupAssignationSlot';
 import { useClients } from '../contexts/ClientContext';
 import { supabase } from '../lib/supabase';
+import { STATIONS } from '../data/stations';
+import { SLOT_TO_GARAGE } from '../data/garageData';
 import type { Item, EtatCommercial, Document } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
@@ -90,7 +92,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
     marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir,
   } = useInventaire();
-  const { supprimerItem, ajouterDocument, supprimerDocument } = useGarage();
+  const { supprimerItem, ajouterDocument, supprimerDocument, retirerVersAttente, assignerSlot, slotMap } = useGarage();
   const { profile: session } = useAuth();
   const { clients } = useClients();
 
@@ -437,6 +439,42 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
               )}
             </div>
           )}
+
+          {/* ── Actions slot (si dans un slot) ─────── */}
+          {item?.slotId && (() => {
+            const garageId = SLOT_TO_GARAGE[item.slotId];
+            const station = STATIONS.find(s => s.id === garageId);
+            const autresSlots = station?.slots.filter(s => !s.futur && s.id !== item.slotId && !slotMap[s.id]) ?? [];
+            return (
+              <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🔧 Slot {item.slotId} — {station?.label ?? garageId}
+                </div>
+                {/* Mettre en attente */}
+                <button onClick={() => { retirerVersAttente(item.id); onClose(); }}
+                  style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  ⏸ Mettre en attente — libérer le slot
+                </button>
+                {/* Changer de slot */}
+                {autresSlots.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: '#92400e', marginBottom: 6, fontWeight: 600 }}>Changer de slot :</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {autresSlots.map(s => (
+                        <button key={s.id} onClick={() => { assignerSlot(item.id, s.id); }}
+                          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'monospace' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fef3c7'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'white'; }}
+                        >
+                          {s.id}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Marquer prêt ─────────────────────── */}
           {!v.estPret && v.statut !== 'archive' && (
