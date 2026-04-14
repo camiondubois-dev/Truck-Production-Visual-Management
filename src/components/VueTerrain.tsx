@@ -192,12 +192,17 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
 // ─── Viewer Document (plein écran, zoomable) ───────────────────────────────
 
 function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }) {
-  const [zoom, setZoom] = useState(0.5);
+  const [zoom, setZoom] = useState(0.45);
   const isPdf = doc.base64.startsWith('data:application/pdf');
 
-  const zoomIn  = () => setZoom(z => Math.min(z + 0.25, 3));
-  const zoomOut = () => setZoom(z => Math.max(z - 0.25, 0.25));
-  const zoomFit = () => setZoom(0.5);
+  const zoomIn  = () => setZoom(z => Math.min(z + 0.1, 2));
+  const zoomOut = () => setZoom(z => Math.max(z - 0.1, 0.15));
+  const zoomFit = () => setZoom(0.45);
+
+  // L'astuce : on crée un iframe/img très grand (100/zoom = ex: 222% à 45%)
+  // puis on le scale visuellement avec transform:scale(zoom)
+  // Le conteneur scrollable fait la taille réelle affichée (100%)
+  const innerSize = 100 / zoom; // ex: zoom=0.45 → iframe = 222% de la zone
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#111', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
@@ -218,35 +223,40 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
 
       {/* Contrôles zoom */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '8px 16px', background: '#1a1a2e', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <button onClick={zoomOut} style={{ width: 40, height: 36, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>−</button>
-        <button onClick={zoomFit} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={zoomOut} style={{ width: 44, height: 40, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>−</button>
+        <button onClick={zoomFit} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}>
           {Math.round(zoom * 100)}%
         </button>
-        <button onClick={zoomIn} style={{ width: 40, height: 36, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>+</button>
+        <button onClick={zoomIn} style={{ width: 44, height: 40, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
       </div>
 
-      {/* Contenu zoomable */}
-      <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      {/* Contenu zoomable avec transform:scale */}
+      <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
         {isPdf ? (
-          <iframe
-            src={doc.base64}
-            title={doc.nom}
-            style={{
-              border: 'none',
-              width: `${zoom * 200}%`,
-              height: `${zoom * 200}%`,
-              minHeight: '100%',
+          <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
+            <div style={{
+              width: `${innerSize}%`,
+              height: `${innerSize}%`,
+              transform: `scale(${zoom})`,
               transformOrigin: 'top left',
-            }}
-          />
+            }}>
+              <iframe
+                src={doc.base64}
+                title={doc.nom}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
         ) : (
           <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
             <img
               src={doc.base64}
               alt={doc.nom}
               style={{
-                width: `${zoom * 200}%`,
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top center',
                 maxWidth: 'none',
+                width: `${innerSize}%`,
                 objectFit: 'contain',
                 borderRadius: 8,
               }}
