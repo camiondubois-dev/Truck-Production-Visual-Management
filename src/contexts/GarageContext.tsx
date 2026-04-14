@@ -140,11 +140,13 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     // Auto-marquer la station de ce garage comme "en-cours"
     let progressionPatch: Partial<typeof item> = {};
     if (item && garageId) {
-      // Trouver la première station non-commencée qui appartient à ce garage
+      // Trouver la première station non-terminée qui appartient à ce garage
+      // Accepte non-commence, en-attente, planifie (tout sauf en-cours/termine/non-requis)
       const stationACommen = item.stationsActives.find(stationId => {
         if (STATION_TO_GARAGE[stationId] !== garageId) return false;
         const prog = item.progression.find(p => p.stationId === stationId);
-        return prog?.status === 'non-commence';
+        const s = prog?.status;
+        return s !== 'en-cours' && s !== 'termine' && s !== 'non-requis';
       });
       if (stationACommen) {
         const nouvelleProgression = item.progression.map(p =>
@@ -165,22 +167,29 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     await itemsService.mettreAJour(itemId, patch);
     if (garageId) await logEntreeGarage(itemId, garageId, slotId);
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
-    // Sync road_map: mark station as en-cours
-    if (item?.inventaireId && garageId) {
+    // Sync road_map: marquer UNE SEULE étape du garage comme en-cours (la première en-attente/planifié)
+    const invId = item?.inventaireId || item?.id;
+    if (invId && garageId) {
       const { data: inv } = await supabase
         .from('prod_inventaire')
         .select('road_map')
-        .eq('id', item.inventaireId)
+        .eq('id', invId)
         .single();
       if (inv?.road_map) {
         const stationsForGarage = GARAGE_TO_ROAD_MAP_STATIONS[garageId] ?? [garageId];
-        const updated = (inv.road_map as RoadMapEtape[]).map(e =>
-          stationsForGarage.includes(e.stationId) && (e.statut === 'en-attente' || e.statut === 'planifie')
-            ? { ...e, statut: 'en-cours' as const } : e
-        );
-        await supabase.from('prod_inventaire')
-          .update({ road_map: updated, updated_at: new Date().toISOString() })
-          .eq('id', item.inventaireId);
+        let marked = false;
+        const updated = (inv.road_map as RoadMapEtape[]).map(e => {
+          if (!marked && stationsForGarage.includes(e.stationId) && (e.statut === 'en-attente' || e.statut === 'planifie')) {
+            marked = true;
+            return { ...e, statut: 'en-cours' as const };
+          }
+          return e;
+        });
+        if (marked) {
+          await supabase.from('prod_inventaire')
+            .update({ road_map: updated, updated_at: new Date().toISOString() })
+            .eq('id', invId);
+        }
       }
     }
   };

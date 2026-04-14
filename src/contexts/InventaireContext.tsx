@@ -123,10 +123,11 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
 
     // ── Sync prod_items.progression avec road_map ─────────────────
     // Si un prod_items actif existe pour ce véhicule, synchroniser sa progression
+    // Cherche par inventaire_id OU par id (pour les orphelins sans inventaire_id)
     const { data: activeItems } = await supabase
       .from('prod_items')
       .select('id, slot_id, dernier_garage_id')
-      .eq('inventaire_id', id)
+      .or(`inventaire_id.eq.${id},id.eq.${id}`)
       .neq('etat', 'termine');
     if (activeItems && activeItems.length > 0) {
       const progression = roadMap
@@ -176,9 +177,23 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       const allDone = roadMap.length > 0 && roadMap.every(s => s.statut === 'termine' || s.statut === 'saute');
 
       if (activeSteps.length > 0 && currentStatut === 'disponible') {
-        // Au moins une étape active → créer job si pas encore en production
+        // Au moins une étape active → mettre en production
+        // Si un prod_items actif existe DÉJÀ, ne PAS en créer un deuxième (éviter les doublons)
+        if (activeItems && activeItems.length > 0) {
+          // Un job existe déjà → juste mettre le statut en-production
+          const existingJobId = activeItems[0].id;
+          await supabase.from('prod_inventaire').update({
+            statut: 'en-production',
+            job_id: existingJobId,
+            updated_at: new Date().toISOString(),
+          }).eq('id', id);
+          setVehicules(prev => prev.map(v =>
+            v.id === id ? { ...v, roadMap, statut: 'en-production', jobId: existingJobId, dateEnProduction: v.dateEnProduction ?? new Date().toISOString() } : v
+          ));
+          return;
+        }
         try {
-          // Lire les données complètes du véhicule pour créer le job
+          // Aucun job existant → en créer un nouveau
           const { data: fullRow } = await supabase
             .from('prod_inventaire')
             .select('*')
