@@ -19,13 +19,8 @@ import { photoService } from '../services/photoService';
 import type { Slot, Item, Document } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
-export interface JobTemporaire {
-  slotId: string;
-  garageId: string;
-  typeJob: 'export' | 'demantelement' | 'autres';
-  titre: string;
-  heureEntree: string;
-}
+// Types de jobs temporaires — persistés dans prod_items comme les autres jobs
+const TYPES_JOB_TEMP = ['export', 'demantelement', 'autres'] as const;
 
 const TYPE_JOB_CONFIG = {
   export:        { label: 'Camion export',        emoji: '🚛', color: '#475569' },
@@ -37,12 +32,14 @@ const TYPE_JOB_CONFIG = {
 const positionColor = (rank: number) =>
   rank === 1 ? '#ef4444' : rank === 2 ? '#f97316' : rank === 3 ? '#f59e0b' : '#6b7280';
 
+type TypeJobTemp = 'export' | 'demantelement' | 'autres';
+
 type ModalState =
   | { type: 'assign'; slot: Slot; position: { x: number; y: number }; preSelectedItem?: Item }
   | { type: 'occupe'; item: Item; slot: Slot; position: { x: number; y: number } }
   | { type: 'job-type'; slot: Slot; position: { x: number; y: number } }
-  | { type: 'job-titre'; slot: Slot; typeJob: JobTemporaire['typeJob']; position: { x: number; y: number } }
-  | { type: 'job-occupe'; job: JobTemporaire; slot: Slot; position: { x: number; y: number } }
+  | { type: 'job-titre'; slot: Slot; typeJob: TypeJobTemp; position: { x: number; y: number } }
+  | { type: 'job-occupe'; item: Item; slot: Slot; position: { x: number; y: number } }
   | { type: 'inventaire-picker'; slot: Slot; position: { x: number; y: number } }
   | { type: 'inventaire-roadmap'; slot: Slot; vehicule: VehiculeInventaire; position: { x: number; y: number } }
   | { type: 'detail'; vehiculeId: string; itemId?: string }
@@ -61,7 +58,6 @@ export function PlancherView() {
 
   const [modalState, setModalState] = useState<ModalState>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [tempJobs, setTempJobs] = useState<Record<string, JobTemporaire>>({});
 
   // Fermer tout modal en appuyant sur Escape
   useEffect(() => {
@@ -101,7 +97,7 @@ export function PlancherView() {
         dateEnProduction: i.dateCreation,
         jobId: i.id,
         numero: i.numero ?? '',
-        type: i.type as 'eau' | 'client' | 'detail',
+        type: i.type as any,
         nomClient: i.nomClient,
         telephone: i.telephone,
         vehicule: i.vehicule,
@@ -154,16 +150,18 @@ export function PlancherView() {
     return { x, y };
   };
 
+  const isTempJobType = (type: string) => type === 'export' || type === 'demantelement' || type === 'autres';
+
   const handleSlotClick = (e: React.MouseEvent, slot: Slot) => {
     e.stopPropagation();
     const item = slotMap[slot.id];
-    const tempJob = tempJobs[slot.id];
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
-    if (tempJob) {
-      setModalState({ type: 'job-occupe', job: tempJob, slot, position });
+    if (item && isTempJobType(item.type)) {
+      // Job temporaire → modal spécifique avec durée et bouton vider
+      setModalState({ type: 'job-occupe', item, slot, position });
     } else if (item) {
-      // Toujours ouvrir le panneau détail unifié — cherche dans vehiculesComplets (incl. orphelins)
+      // Job normal → panneau détail unifié
       setModalState({ type: 'detail', vehiculeId: item.inventaireId || item.id, itemId: item.id });
     } else if (!slot.futur) {
       setModalState({ type: 'assign', slot, position });
@@ -176,7 +174,7 @@ export function PlancherView() {
     const rect = e.currentTarget.getBoundingClientRect();
     const position = calculerPosition(rect);
     const station = STATIONS.find((s) => s.id === garageId);
-    const availableSlot = station?.slots.find((s) => !slotMap[s.id] && !tempJobs[s.id]);
+    const availableSlot = station?.slots.find((s) => !slotMap[s.id]);
     if (availableSlot) {
       setModalState({ type: 'assign', slot: availableSlot, position, preSelectedItem: item });
     } else if (station && station.slots.length > 0) {
@@ -196,7 +194,7 @@ export function PlancherView() {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const position = calculerPosition(rect);
       const station = STATIONS.find(s => s.id === garageId);
-      const availableSlot = station?.slots.find(s => !slotMap[s.id] && !tempJobs[s.id]);
+      const availableSlot = station?.slots.find(s => !slotMap[s.id]);
       if (availableSlot) {
         setModalState({ type: 'assign', slot: availableSlot, position, preSelectedItem: newItem });
       } else if (station && station.slots.length > 0) {
@@ -211,37 +209,53 @@ export function PlancherView() {
     setModalState({ type: 'job-type', slot, position });
   };
 
-  const handleJobTypeSelect = (typeJob: JobTemporaire['typeJob']) => {
+  const handleJobTypeSelect = (typeJob: TypeJobTemp) => {
     if (modalState?.type !== 'job-type') return;
     setModalState({ type: 'job-titre', slot: modalState.slot, typeJob, position: modalState.position });
   };
 
-  const handleJobTitreConfirm = (titre: string) => {
+  const handleJobTitreConfirm = async (titre: string) => {
     if (modalState?.type !== 'job-titre') return;
     const { slot, typeJob } = modalState;
     const garageId = SLOT_TO_GARAGE[slot.id] ?? '';
-    const job: JobTemporaire = {
-      slotId: slot.id, garageId, typeJob,
-      titre: titre.trim(),
-      heureEntree: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const cfg = TYPE_JOB_CONFIG[typeJob];
+    const item: Item = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: typeJob,
+      etat: 'en-slot',
+      numero: titre.trim() || cfg.label,
+      label: `${cfg.emoji} ${titre.trim() || cfg.label}`,
+      slotId: slot.id,
+      dateCreation: now,
+      dateEntreeSlot: now,
+      dernierGarageId: garageId,
+      dernierSlotId: slot.id,
+      stationsActives: [],
+      progression: [],
     };
-    setTempJobs(prev => ({ ...prev, [slot.id]: job }));
+    try {
+      await ajouterItem(item);
+    } catch (err) {
+      console.error('[PlancherView] Erreur création job temporaire:', err);
+    }
     setModalState(null);
   };
 
-  const handleViderSlot = async (job: JobTemporaire) => {
-    await logJobTemporaire({
-      typeJob: job.typeJob,
-      titre: job.titre,
-      garageId: job.garageId,
-      slotId: job.slotId,
-      heureEntree: job.heureEntree,
-    });
-    setTempJobs(prev => {
-      const next = { ...prev };
-      delete next[job.slotId];
-      return next;
-    });
+  const handleViderSlot = async (itemId: string) => {
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+      // Log le temps dans prod_time_logs
+      await logJobTemporaire({
+        typeJob: item.type,
+        titre: item.numero,
+        garageId: item.dernierGarageId ?? '',
+        slotId: item.slotId ?? '',
+        heureEntree: item.dateEntreeSlot ?? item.dateCreation,
+      });
+      // Terminer le job (libère le slot)
+      terminerItem(item.id);
+    }
     setModalState(null);
   };
 
@@ -278,22 +292,22 @@ export function PlancherView() {
       </button>
 
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
-        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-generale')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
 
       <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <HorlogeWidget />
       </div>
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
-        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} tempJobs={tempJobs} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
+        <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
         <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
 
@@ -378,10 +392,10 @@ export function PlancherView() {
 
       {modalState?.type === 'job-occupe' && (
         <ModalJobOccupe
-          job={modalState.job}
+          item={modalState.item}
           slot={modalState.slot}
           position={modalState.position}
-          onVider={() => handleViderSlot(modalState.job)}
+          onVider={() => handleViderSlot(modalState.item.id)}
           onClose={() => setModalState(null)}
         />
       )}
@@ -419,7 +433,7 @@ export function PlancherView() {
 function ModalJobType({ slot, position, onSelect, onClose }: {
   slot: Slot;
   position: { x: number; y: number };
-  onSelect: (type: JobTemporaire['typeJob']) => void;
+  onSelect: (type: TypeJobTemp) => void;
   onClose: () => void;
 }) {
   return (
@@ -439,7 +453,7 @@ function ModalJobType({ slot, position, onSelect, onClose }: {
         Quel type de travail?
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(Object.entries(TYPE_JOB_CONFIG) as [JobTemporaire['typeJob'], typeof TYPE_JOB_CONFIG[keyof typeof TYPE_JOB_CONFIG]][]).map(([key, cfg]) => (
+        {(Object.entries(TYPE_JOB_CONFIG) as [TypeJobTemp, typeof TYPE_JOB_CONFIG[keyof typeof TYPE_JOB_CONFIG]][]).map(([key, cfg]) => (
           <button
             key={key}
             onClick={() => onSelect(key)}
@@ -471,7 +485,7 @@ function ModalJobType({ slot, position, onSelect, onClose }: {
 
 function ModalJobTitre({ slot, typeJob, position, onConfirm, onClose }: {
   slot: Slot;
-  typeJob: JobTemporaire['typeJob'];
+  typeJob: TypeJobTemp;
   position: { x: number; y: number };
   onConfirm: (titre: string) => void;
   onClose: () => void;
@@ -533,15 +547,16 @@ function ModalJobTitre({ slot, typeJob, position, onConfirm, onClose }: {
   );
 }
 
-function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
-  job: JobTemporaire;
+function ModalJobOccupe({ item, slot, position, onVider, onClose }: {
+  item: Item;
   slot: Slot;
   position: { x: number; y: number };
   onVider: () => void;
   onClose: () => void;
 }) {
-  const cfg = TYPE_JOB_CONFIG[job.typeJob];
-  const dureeMin = Math.round((Date.now() - new Date(job.heureEntree).getTime()) / 60000);
+  const cfg = TYPE_JOB_CONFIG[item.type as keyof typeof TYPE_JOB_CONFIG] ?? { label: item.type, emoji: '📋', color: '#6b7280' };
+  const entree = item.dateEntreeSlot ?? item.dateCreation;
+  const dureeMin = Math.round((Date.now() - new Date(entree).getTime()) / 60000);
   const dureeLabel = dureeMin < 60
     ? `${dureeMin} min`
     : `${Math.floor(dureeMin / 60)}h${String(dureeMin % 60).padStart(2, '0')}`;
@@ -557,7 +572,7 @@ function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
       }}
     >
       <div style={{ fontFamily: 'monospace', color: '#ff6040', fontWeight: 700, marginBottom: 12, fontSize: 13 }}>
-        Slot {slot.id} — Job temporaire
+        Slot {slot.id} — {cfg.label}
       </div>
       <div style={{
         padding: '12px 14px', borderRadius: 8, marginBottom: 14,
@@ -565,13 +580,13 @@ function ModalJobOccupe({ job, slot, position, onVider, onClose }: {
         border: '1px solid rgba(255,255,255,0.1)',
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)', marginBottom: 4 }}>
-          {cfg.emoji} {job.titre}
+          {cfg.emoji} {item.numero}
         </div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
           {cfg.label}
         </div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
-          Depuis {new Date(job.heureEntree).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })} — {dureeLabel}
+          Depuis {new Date(entree).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })} — {dureeLabel}
         </div>
       </div>
       <button
@@ -656,7 +671,6 @@ interface QueueEntry {
 interface StationBlockProps {
   station: { id: string; label: string; color: string; slots: Slot[]; gridCols: number; optional?: boolean };
   slotMap: Record<string, Item>;
-  tempJobs: Record<string, JobTemporaire>;
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   allEnAttente: Item[];
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
@@ -668,7 +682,7 @@ interface StationBlockProps {
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, onOpenDetail, style }: StationBlockProps) {
+function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, onOpenDetail, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
@@ -842,7 +856,6 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
             key={slot.id}
             slot={slot}
             item={slotMap[slot.id]}
-            tempJob={tempJobs[slot.id]}
             accentColor={station.color}
             onSlotClick={onSlotClick}
             isOptional={station.optional}
@@ -1040,29 +1053,32 @@ function StationBlock({ station, slotMap, tempJobs, onSlotClick, allEnAttente, o
 interface SlotCardSimpleProps {
   slot: Slot;
   item?: Item;
-  tempJob?: JobTemporaire;
   accentColor: string;
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   isOptional?: boolean;
   onOpenDetail?: (vehiculeId: string) => void;
 }
 
-function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptional, onOpenDetail }: SlotCardSimpleProps) {
+function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional, onOpenDetail }: SlotCardSimpleProps) {
+  const isTempJob = item && (item.type === 'export' || item.type === 'demantelement' || item.type === 'autres');
+
   const typeColor = item
-    ? item.type === 'eau'    ? '#f97316'
+    ? isTempJob ? '#6b7280'
+    : item.type === 'eau'    ? '#f97316'
     : item.type === 'client' ? '#3b82f6'
     : '#22c55e'
     : null;
 
   const borderColor = item
-    ? item.etatCommercial === 'vendu'    ? '#ef4444'
+    ? isTempJob ? '#374151'
+    : item.etatCommercial === 'vendu'    ? '#ef4444'
     : item.etatCommercial === 'reserve'  ? '#f59e0b'
     : item.etatCommercial === 'location' ? '#7c3aed'
     : typeColor!
     : null;
 
-  if (tempJob) {
-    const cfg = TYPE_JOB_CONFIG[tempJob.typeJob];
+  if (isTempJob) {
+    const cfg = TYPE_JOB_CONFIG[item.type as keyof typeof TYPE_JOB_CONFIG];
     return (
       <div
         onClick={(e) => onSlotClick(e, slot)}
@@ -1082,13 +1098,13 @@ function SlotCardSimple({ slot, item, tempJob, accentColor, onSlotClick, isOptio
           #{slot.id}
         </span>
         <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          JOB TEMP
+          {cfg.label}
         </div>
         <span style={{ fontSize: 'clamp(14px, 1.6vw, 20px)', lineHeight: 1 }}>
           {cfg.emoji}
         </span>
         <span style={{ fontSize: 'clamp(9px, 0.9vw, 12px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tempJob.titre}
+          {item.numero}
         </span>
       </div>
     );

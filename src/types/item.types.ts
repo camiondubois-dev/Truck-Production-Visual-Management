@@ -1,4 +1,4 @@
-export type TypeItem = 'eau' | 'client' | 'detail';
+export type TypeItem = 'eau' | 'client' | 'detail' | 'export' | 'demantelement' | 'autres';
 export type EtatItem = 'en-attente' | 'en-slot' | 'termine';
 export type EtatCommercial = 'non-vendu' | 'reserve' | 'vendu' | 'location';
 export interface StationProgress {
