@@ -2,12 +2,292 @@ import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../contexts/GarageContext';
 import { useInventaire } from '../contexts/InventaireContext';
 import { EauIcon } from './EauIcon';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { SlotAssignModal } from './SlotAssignModal';
 import { PanneauDetailVehicule } from './PanneauDetailVehicule';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
+import { reservoirService } from '../services/reservoirService';
+import type { Reservoir, TypeReservoir } from '../types/reservoirTypes';
 import type { Item } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
+
+// ── Constantes réservoirs ──────────────────────────────────────
+const TYPES_RESERVOIR: TypeReservoir[] = ['2500g', '3750g', '4000g', '5000g'];
+const TYPE_COLORS: Record<TypeReservoir, string> = {
+  '2500g': '#22c55e', '3750g': '#4a9eff', '4000g': '#f97316', '5000g': '#ef4444',
+};
+const ETAT_CFG: Record<string, { color: string; label: string; icon: string }> = {
+  'disponible':  { color: '#22c55e', label: 'Disponible', icon: '✓' },
+  'installe':    { color: '#0ea5e9', label: 'Installé',   icon: '🔧' },
+  'en-peinture': { color: '#f59e0b', label: 'Peinture',   icon: '🎨' },
+};
+
+// ── Panneau Réservoirs ─────────────────────────────────────────
+function PanneauReservoirs({ onClose }: { onClose: () => void }) {
+  const [reservoirs, setReservoirs] = useState<Reservoir[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtre, setFiltre] = useState<'tous' | TypeReservoir>('tous');
+  const [filtreEtat, setFiltreEtat] = useState<'tous' | 'disponible' | 'installe' | 'en-peinture'>('tous');
+  const [ajoutMode, setAjoutMode] = useState(false);
+  const [ajoutNumero, setAjoutNumero] = useState('');
+  const [ajoutType, setAjoutType] = useState<TypeReservoir>('2500g');
+  const [ajoutNotes, setAjoutNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const charger = useCallback(async () => {
+    try {
+      const data = await reservoirService.getAll();
+      setReservoirs(data);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const resFiltres = reservoirs.filter(r => {
+    if (filtre !== 'tous' && r.type !== filtre) return false;
+    if (filtreEtat !== 'tous' && r.etat !== filtreEtat) return false;
+    return true;
+  });
+
+  const stats = {
+    total: reservoirs.length,
+    disponibles: reservoirs.filter(r => r.etat === 'disponible').length,
+    installes: reservoirs.filter(r => r.etat === 'installe').length,
+    peinture: reservoirs.filter(r => r.etat === 'en-peinture').length,
+  };
+
+  const handleAjouter = async () => {
+    if (!ajoutNumero.trim()) return;
+    setSaving(true);
+    try {
+      const nouveau: Reservoir = {
+        id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        numero: ajoutNumero.trim(),
+        type: ajoutType,
+        etat: 'disponible',
+        notes: ajoutNotes.trim() || undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await reservoirService.ajouter(nouveau);
+      setAjoutNumero(''); setAjoutNotes(''); setAjoutMode(false);
+      await charger();
+    } catch (err: any) {
+      alert(`Erreur: ${err?.message ?? err}`);
+    }
+    setSaving(false);
+  };
+
+  const changerEtat = async (r: Reservoir, nouvelEtat: 'disponible' | 'en-peinture') => {
+    try {
+      const { error } = await (await import('../lib/supabase')).supabase
+        .from('prod_reservoirs')
+        .update({ etat: nouvelEtat, updated_at: new Date().toISOString() })
+        .eq('id', r.id);
+      if (error) throw error;
+      await charger();
+    } catch (err: any) {
+      alert(`Erreur: ${err?.message ?? err}`);
+    }
+  };
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: 'fixed', top: 0, right: 0, bottom: 0,
+      width: Math.min(420, window.innerWidth - 20),
+      background: '#111009', borderLeft: '2px solid rgba(14,165,233,0.3)',
+      zIndex: 400, display: 'flex', flexDirection: 'column',
+      boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 24 }}>🛢</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>Réservoirs</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+              {stats.disponibles} dispo · {stats.installes} inst. · {stats.peinture} peint.
+            </div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
+          fontSize: 20, cursor: 'pointer', padding: 4,
+        }}>✕</button>
+      </div>
+
+      {/* Compteurs rapides */}
+      <div style={{ display: 'flex', gap: 8, padding: '12px 20px', flexShrink: 0 }}>
+        {[
+          { label: 'Dispo', count: stats.disponibles, color: '#22c55e' },
+          { label: 'Installé', count: stats.installes, color: '#0ea5e9' },
+          { label: 'Peinture', count: stats.peinture, color: '#f59e0b' },
+        ].map(s => (
+          <div key={s.label} style={{
+            flex: 1, textAlign: 'center', padding: '10px 6px',
+            borderRadius: 8, background: `${s.color}12`, border: `1px solid ${s.color}30`,
+          }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: s.color, fontFamily: 'monospace' }}>{s.count}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtres */}
+      <div style={{ padding: '0 20px 10px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+        {(['tous', ...TYPES_RESERVOIR] as const).map(t => (
+          <button key={t} onClick={() => setFiltre(t as any)} style={{
+            padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', border: 'none',
+            background: filtre === t ? (t === 'tous' ? '#ffffff20' : `${TYPE_COLORS[t as TypeReservoir]}30`) : 'rgba(255,255,255,0.05)',
+            color: filtre === t ? (t === 'tous' ? 'white' : TYPE_COLORS[t as TypeReservoir]) : 'rgba(255,255,255,0.4)',
+          }}>{t === 'tous' ? 'Tous' : t}</button>
+        ))}
+        <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+        {(['tous', 'disponible', 'installe', 'en-peinture'] as const).map(e => (
+          <button key={e} onClick={() => setFiltreEtat(e)} style={{
+            padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+            cursor: 'pointer', border: 'none',
+            background: filtreEtat === e ? `${ETAT_CFG[e]?.color ?? '#fff'}25` : 'rgba(255,255,255,0.05)',
+            color: filtreEtat === e ? (ETAT_CFG[e]?.color ?? 'white') : 'rgba(255,255,255,0.35)',
+          }}>{e === 'tous' ? 'Tous' : ETAT_CFG[e]?.label ?? e}</button>
+        ))}
+      </div>
+
+      {/* Liste */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)' }}>Chargement...</div>
+        ) : resFiltres.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)' }}>Aucun réservoir</div>
+        ) : (
+          resFiltres.map(r => {
+            const tc = TYPE_COLORS[r.type];
+            const ec = ETAT_CFG[r.etat] ?? { color: '#64748b', label: r.etat, icon: '?' };
+            return (
+              <div key={r.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', marginBottom: 6, borderRadius: 10,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                {/* Type badge */}
+                <div style={{
+                  padding: '4px 10px', borderRadius: 6,
+                  background: `${tc}20`, color: tc,
+                  fontWeight: 700, fontSize: 13, fontFamily: 'monospace',
+                  flexShrink: 0, minWidth: 55, textAlign: 'center',
+                }}>{r.type}</div>
+                {/* Numéro + notes */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'white', fontSize: 15 }}>
+                    {r.numero}
+                  </div>
+                  {r.notes && (
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.notes}
+                    </div>
+                  )}
+                </div>
+                {/* État */}
+                <div style={{
+                  padding: '4px 10px', borderRadius: 6,
+                  background: `${ec.color}15`, color: ec.color,
+                  fontWeight: 700, fontSize: 12, flexShrink: 0,
+                }}>
+                  {ec.icon} {ec.label}
+                </div>
+                {/* Actions rapides (seulement pour dispo/peinture) */}
+                {r.etat === 'disponible' && (
+                  <button onClick={() => changerEtat(r, 'en-peinture')} title="Envoyer en peinture"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 4 }}>🎨</button>
+                )}
+                {r.etat === 'en-peinture' && (
+                  <button onClick={() => changerEtat(r, 'disponible')} title="Marquer disponible"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 4 }}>✅</button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Formulaire d'ajout */}
+      {ajoutMode ? (
+        <div style={{
+          padding: 20, borderTop: '1px solid rgba(255,255,255,0.1)',
+          background: '#0a0908', flexShrink: 0,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'white', marginBottom: 12 }}>
+            + Nouveau réservoir
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input
+              placeholder="Numéro du réservoir"
+              value={ajoutNumero}
+              onChange={e => setAjoutNumero(e.target.value)}
+              autoFocus
+              style={{
+                padding: '10px 14px', borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+                color: 'white', fontSize: 14, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              {TYPES_RESERVOIR.map(t => (
+                <button key={t} onClick={() => setAjoutType(t)} style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'monospace',
+                  border: ajoutType === t ? `2px solid ${TYPE_COLORS[t]}` : '1px solid rgba(255,255,255,0.1)',
+                  background: ajoutType === t ? `${TYPE_COLORS[t]}20` : 'rgba(255,255,255,0.03)',
+                  color: ajoutType === t ? TYPE_COLORS[t] : 'rgba(255,255,255,0.4)',
+                }}>{t}</button>
+              ))}
+            </div>
+            <input
+              placeholder="Notes (optionnel)"
+              value={ajoutNotes}
+              onChange={e => setAjoutNotes(e.target.value)}
+              style={{
+                padding: '10px 14px', borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+                color: 'white', fontSize: 13, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setAjoutMode(false)} style={{
+                flex: 1, padding: '10px', borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+                color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>Annuler</button>
+              <button onClick={handleAjouter} disabled={saving || !ajoutNumero.trim()} style={{
+                flex: 1, padding: '10px', borderRadius: 8,
+                background: saving ? '#22c55e40' : '#22c55e', border: 'none',
+                color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer',
+                opacity: !ajoutNumero.trim() ? 0.4 : 1,
+              }}>{saving ? '...' : '✓ Ajouter'}</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+          <button onClick={() => setAjoutMode(true)} style={{
+            width: '100%', padding: '12px', borderRadius: 10,
+            background: 'rgba(14,165,233,0.1)', border: '1.5px dashed rgba(14,165,233,0.4)',
+            color: '#0ea5e9', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+          }}>
+            + Ajouter un réservoir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface DepartementConfig {
   label: string;
@@ -70,6 +350,7 @@ export const VueDepartement = () => {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [modalState, setModalState] = useState<ModalState>(null);
   const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [panneauReservoirs, setPanneauReservoirs] = useState(false);
 
   const dept = DEPARTEMENTS_CONFIG[profile?.departement ?? ''];
 
@@ -225,6 +506,18 @@ export const VueDepartement = () => {
 
         {!modeTV ? (
           <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setPanneauReservoirs(true); }}
+              style={{
+                padding: '8px 16px', borderRadius: 8,
+                background: panneauReservoirs ? 'rgba(14,165,233,0.15)' : 'rgba(255,255,255,0.05)',
+                border: panneauReservoirs ? '1px solid rgba(14,165,233,0.4)' : '1px solid rgba(255,255,255,0.15)',
+                color: panneauReservoirs ? '#0ea5e9' : 'rgba(255,255,255,0.6)',
+                cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              }}
+            >
+              🛢 Réservoirs
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); setModeTV(true); }}
               style={{
@@ -565,6 +858,16 @@ export const VueDepartement = () => {
       )}
 
       {/* ── MODAL APERÇU PDF ── */}
+      {/* ── PANNEAU RÉSERVOIRS ── */}
+      {panneauReservoirs && (
+        <>
+          <div onClick={() => setPanneauReservoirs(false)} style={{
+            position: 'fixed', inset: 0, zIndex: 399, background: 'rgba(0,0,0,0.4)',
+          }} />
+          <PanneauReservoirs onClose={() => setPanneauReservoirs(false)} />
+        </>
+      )}
+
       {pdfOuvert && (
         <div
           onClick={() => setPdfOuvert(null)}
