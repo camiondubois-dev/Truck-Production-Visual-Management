@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { TERRAIN_PIN } from '../config/terrain';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
+import type { Document } from '../types/item.types';
+import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
 import { ROAD_MAP_STATIONS, RETOUCHE_ID, CHECKLIST_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
@@ -12,6 +14,180 @@ import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 type FiltreType   = 'tous' | 'eau' | 'detail';
 type FiltreStatut = 'tous' | 'disponibles' | 'prets' | 'vendus';
 type Ecran = 'pin' | 'login' | 'ok';
+
+// ─── Panneau Réservoirs ─────────────────────────────────────────────────────
+
+function PanneauReservoirs({ onClose }: { onClose: () => void }) {
+  const [reservoirs, setReservoirs] = useState<Reservoir[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtre, setFiltre] = useState<'tous' | EtatReservoir>('tous');
+  const [showForm, setShowForm] = useState(false);
+  const [newNumero, setNewNumero] = useState('');
+  const [newType, setNewType] = useState<TypeReservoir>('2500g');
+  const [saving, setSaving] = useState(false);
+
+  const charger = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await reservoirService.getAll();
+      setReservoirs(data);
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const handleAjouter = async () => {
+    if (!newNumero.trim()) return;
+    setSaving(true);
+    try {
+      const r: Reservoir = {
+        id: `res-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+        numero: newNumero.trim(),
+        type: newType,
+        etat: 'disponible',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await reservoirService.ajouter(r);
+      setReservoirs(prev => [r, ...prev]);
+      setNewNumero('');
+      setShowForm(false);
+    } finally { setSaving(false); }
+  };
+
+  const handleChangerEtat = async (r: Reservoir, nouvelEtat: EtatReservoir) => {
+    try {
+      await supabase.from('prod_reservoirs')
+        .update({ etat: nouvelEtat, updated_at: new Date().toISOString() })
+        .eq('id', r.id);
+      setReservoirs(prev => prev.map(x => x.id === r.id ? { ...x, etat: nouvelEtat } : x));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSupprimer = async (id: string) => {
+    if (!confirm('Supprimer ce réservoir ?')) return;
+    try {
+      await reservoirService.supprimer(id);
+      setReservoirs(prev => prev.filter(x => x.id !== id));
+    } catch (e) { console.error(e); }
+  };
+
+  const filtres = filtre === 'tous' ? reservoirs : reservoirs.filter(r => r.etat === filtre);
+  const nbDispos = reservoirs.filter(r => r.etat === 'disponible').length;
+  const nbInstalles = reservoirs.filter(r => r.etat === 'installe').length;
+  const nbPeinture = reservoirs.filter(r => r.etat === 'en-peinture').length;
+
+  const inp: React.CSSProperties = { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', maxHeight: '92vh', overflowY: 'auto', paddingBottom: 40 }}>
+        {/* Poignée + header */}
+        <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ width: 32 }} />
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#6b7280', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
+        </div>
+
+        <div style={{ padding: '12px 20px 8px' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4 }}>🛢 Réservoirs</div>
+          <div style={{ fontSize: 13, color: '#6b7280' }}>{reservoirs.length} au total · {nbDispos} disponibles · {nbInstalles} installés · {nbPeinture} en peinture</div>
+        </div>
+
+        {/* Filtres */}
+        <div style={{ display: 'flex', gap: 6, padding: '8px 20px', overflowX: 'auto' }}>
+          {([
+            ['tous', `Tous (${reservoirs.length})`],
+            ['disponible', `Dispos (${nbDispos})`],
+            ['installe', `Installés (${nbInstalles})`],
+            ['en-peinture', `Peinture (${nbPeinture})`],
+          ] as [string, string][]).map(([id, label]) => (
+            <button key={id} onClick={() => setFiltre(id as any)}
+              style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: filtre === id ? 700 : 400, border: filtre === id ? 'none' : '1px solid #e5e7eb', background: filtre === id ? '#0ea5e9' : 'white', color: filtre === id ? 'white' : '#6b7280', cursor: 'pointer', flexShrink: 0 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Bouton ajouter */}
+        <div style={{ padding: '8px 20px' }}>
+          {!showForm ? (
+            <button onClick={() => setShowForm(true)}
+              style={{ width: '100%', padding: '12px', borderRadius: 12, border: '2px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: 15, cursor: 'pointer', fontWeight: 600 }}>
+              + Ajouter un réservoir
+            </button>
+          ) : (
+            <div style={{ padding: '14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Nouveau réservoir</div>
+              <input style={{ ...inp, marginBottom: 10 }} type="text" value={newNumero} onChange={e => setNewNumero(e.target.value)} placeholder="Numéro du réservoir" autoFocus />
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {(['2500g', '3750g', '4000g', '5000g'] as TypeReservoir[]).map(t => (
+                  <button key={t} onClick={() => setNewType(t)}
+                    style={{ flex: 1, padding: '10px 4px', borderRadius: 10, cursor: 'pointer', border: newType === t ? '2px solid #0ea5e9' : '1px solid #e5e7eb', background: newType === t ? '#e0f2fe' : 'white', color: newType === t ? '#0369a1' : '#6b7280', fontWeight: newType === t ? 700 : 400, fontSize: 13 }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => { setShowForm(false); setNewNumero(''); }}
+                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                  Annuler
+                </button>
+                <button onClick={handleAjouter} disabled={!newNumero.trim() || saving}
+                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: !newNumero.trim() || saving ? '#e5e7eb' : '#0ea5e9', color: !newNumero.trim() || saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 14, cursor: !newNumero.trim() || saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? '...' : '✓ Ajouter'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Liste */}
+        {loading ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>Chargement...</div>
+        ) : filtres.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af' }}>Aucun réservoir</div>
+        ) : (
+          <div style={{ padding: '4px 20px' }}>
+            {filtres.map(r => {
+              const etatColor = r.etat === 'disponible' ? '#22c55e' : r.etat === 'installe' ? '#3b82f6' : '#f59e0b';
+              const etatLabel = r.etat === 'disponible' ? '✅ Disponible' : r.etat === 'installe' ? '🔧 Installé' : '🎨 En peinture';
+              return (
+                <div key={r.id} style={{ padding: '12px 14px', borderRadius: 12, border: '1px solid #e5e7eb', background: 'white', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 17, color: '#111827' }}>#{r.numero}</span>
+                      <span style={{ fontSize: 13, color: '#6b7280', marginLeft: 8 }}>{r.type}</span>
+                    </div>
+                    <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 8, fontWeight: 700, background: `${etatColor}18`, color: etatColor }}>{etatLabel}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {r.etat !== 'disponible' && (
+                      <button onClick={() => handleChangerEtat(r, 'disponible')}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#22c55e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                        Disponible
+                      </button>
+                    )}
+                    {r.etat !== 'en-peinture' && (
+                      <button onClick={() => handleChangerEtat(r, 'en-peinture')}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#f59e0b', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                        En peinture
+                      </button>
+                    )}
+                    <button onClick={() => handleSupprimer(r.id)}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── PIN ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +353,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   const [slotChoisi, setSlotChoisi]             = useState('');
   const [slotConflict, setSlotConflict]         = useState<{item: any, slotId: string} | null>(null);
   const [assigningSlot, setAssigningSlot]       = useState(false);
+  const [documents, setDocuments]               = useState<Document[]>([]);
+  const [loadingDocs, setLoadingDocs]           = useState(false);
+  const [uploadingPdf, setUploadingPdf]         = useState(false);
 
   useEffect(() => {
     if (v.type === 'eau' && !v.aUnReservoir) {
@@ -184,6 +363,71 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         .then(({ data }) => setReservoirsDispos((data ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type }))));
     }
   }, [v.id, v.type, v.aUnReservoir]);
+
+  // Charger les documents PDF depuis prod_items
+  useEffect(() => {
+    setLoadingDocs(true);
+    supabase.from('prod_items').select('id, documents').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle()
+      .then(({ data }) => {
+        setDocuments((data?.documents ?? []) as Document[]);
+        setLoadingDocs(false);
+      });
+  }, [v.id]);
+
+  // Upload PDF
+  const handleUploadPdf = async (fichier: File) => {
+    if (fichier.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
+    if (documents.length >= 3) { alert('Maximum 3 documents'); return; }
+    setUploadingPdf(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const tailleKB = Math.round(fichier.size / 1024);
+        const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
+        const doc: Document = { id: `doc-${Date.now()}`, nom: fichier.name, taille, dateUpload: new Date().toISOString(), base64 };
+        const newDocs = [...documents, doc];
+        // Sauvegarder dans prod_items
+        const { data: prodItem } = await supabase.from('prod_items').select('id').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle();
+        if (prodItem) {
+          await supabase.from('prod_items').update({ documents: newDocs, updated_at: new Date().toISOString() }).eq('id', prodItem.id);
+          setDocuments(newDocs);
+        } else {
+          alert('Ce véhicule doit être en production pour ajouter des documents.');
+        }
+        setUploadingPdf(false);
+      };
+      reader.readAsDataURL(fichier);
+    } catch (e) { console.error(e); setUploadingPdf(false); }
+  };
+
+  // Supprimer un document
+  const handleSupprimerDoc = async (docId: string) => {
+    const newDocs = documents.filter(d => d.id !== docId);
+    const { data: prodItem } = await supabase.from('prod_items').select('id').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle();
+    if (prodItem) {
+      await supabase.from('prod_items').update({ documents: newDocs, updated_at: new Date().toISOString() }).eq('id', prodItem.id);
+      setDocuments(newDocs);
+    }
+  };
+
+  // Ouvrir un PDF dans un nouvel onglet
+  const ouvrirPdf = (doc: Document) => {
+    if (doc.base64.startsWith('data:application/pdf')) {
+      const w = window.open('');
+      if (w) {
+        w.document.write(`<html><head><title>${doc.nom}</title></head><body style="margin:0"><iframe src="${doc.base64}" style="width:100%;height:100vh;border:none"></iframe></body></html>`);
+        w.document.close();
+      }
+    } else {
+      // Image ou autre
+      const w = window.open('');
+      if (w) {
+        w.document.write(`<html><head><title>${doc.nom}</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#111"><img src="${doc.base64}" style="max-width:100%;max-height:100vh;object-fit:contain" /></body></html>`);
+        w.document.close();
+      }
+    }
+  };
 
   // Photo
   const handlePhoto = async (fichier: File) => {
@@ -360,6 +604,48 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
             )}
           </div>
         )}
+
+        {/* ── Documents PDF ── */}
+        <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            📄 Documents
+          </div>
+          {loadingDocs ? (
+            <div style={{ fontSize: 13, color: '#9ca3af' }}>Chargement...</div>
+          ) : (
+            <>
+              {documents.length === 0 ? (
+                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>Aucun document attaché.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {documents.map(doc => (
+                    <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'white', border: '1px solid #e5e7eb' }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>{doc.nom.endsWith('.pdf') ? '📄' : '🖼️'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
+                      </div>
+                      <button onClick={() => ouvrirPdf(doc)}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#eff6ff', color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>
+                        👁 Voir
+                      </button>
+                      <button onClick={() => handleSupprimerDoc(doc.id)}
+                        style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}>
+                        🗑
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {documents.length < 3 && (
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 10, border: '2px dashed #d1d5db', background: 'white', cursor: 'pointer', color: '#6b7280', fontSize: 14, fontWeight: 600 }}>
+                  {uploadingPdf ? 'Chargement...' : '📎 Ajouter un PDF'}
+                  <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadPdf(f); e.target.value = ''; }} />
+                </label>
+              )}
+            </>
+          )}
+        </div>
 
         {/* ── Road Map ── */}
         <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#fafafa', border: '1px solid #e5e7eb' }}>
@@ -591,6 +877,7 @@ function VueTerrainMain() {
   const [recherche, setRecherche]       = useState('');
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [showCreation, setShowCreation] = useState(false);
+  const [showReservoirs, setShowReservoirs] = useState(false);
 
   const charger = async () => {
     const { data } = await supabase
@@ -652,10 +939,16 @@ function VueTerrainMain() {
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{nbPrets} / {camions.length} prêts</div>
             </div>
           </div>
-          <button onClick={() => setShowCreation(true)}
-            style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#f97316', color: 'white', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-            +
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowReservoirs(true)}
+              style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#0ea5e9', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              🛢
+            </button>
+            <button onClick={() => setShowCreation(true)}
+              style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#f97316', color: 'white', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              +
+            </button>
+          </div>
         </div>
 
         {/* Barre de recherche */}
@@ -768,6 +1061,9 @@ function VueTerrainMain() {
           onClose={() => setShowCreation(false)}
           onCree={nouveau => setCamions(prev => [nouveau, ...prev])}
         />
+      )}
+      {showReservoirs && (
+        <PanneauReservoirs onClose={() => setShowReservoirs(false)} />
       )}
     </div>
   );
