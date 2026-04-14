@@ -31,9 +31,14 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const [showArchives, setShowArchives] = useState(false);
 
   // Map inventaireId → Item pour croiser les données
+  // Inclut aussi un mapping par item.id pour les orphelins sans inventaireId
   const itemByInvId = useMemo(() => {
     const map: Record<string, Item> = {};
-    items.forEach(i => { if (i.inventaireId) map[i.inventaireId] = i; });
+    items.forEach(i => {
+      if (i.inventaireId) map[i.inventaireId] = i;
+      // Aussi mapper par item.id pour retrouver les orphelins dont le vehicule.id === item.id
+      map[i.id] = i;
+    });
     return map;
   }, [items]);
 

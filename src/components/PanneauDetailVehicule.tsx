@@ -92,7 +92,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
     marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir,
   } = useInventaire();
-  const { supprimerItem, ajouterDocument, supprimerDocument, retirerVersAttente, assignerSlot, slotMap } = useGarage();
+  const { supprimerItem, ajouterDocument, supprimerDocument, assignerSlot, slotMap, rechargerItems } = useGarage();
   const { profile: session } = useAuth();
   const { clients } = useClients();
 
@@ -355,14 +355,16 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             </div>
             <RoadMapEditor
               vehicule={v}
-              onSaved={(updated) => {
-                // Si une étape "en-cours" existe et le camion n'est pas dans un slot
-                // → ouvrir le popup d'assignation de slot automatiquement
+              onSaved={async (updated) => {
                 const enCoursStep = updated.roadMap?.find(s => s.statut === 'en-cours');
                 if (enCoursStep && item && !item.slotId) {
+                  // Étape "en-cours" sans slot → ouvrir le popup d'assignation
                   const garageId = STATION_TO_GARAGE[enCoursStep.stationId];
                   if (garageId) setPopupStation(garageId);
                 }
+                // Rafraîchir les items GarageContext immédiatement pour refléter
+                // les changements de slot faits par mettreAJourRoadMap (auto-free etc.)
+                await rechargerItems();
               }}
               compact={false}
             />
@@ -458,14 +460,12 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   🔧 Slot {item.slotId} — {station?.label ?? garageId}
                 </div>
-                {/* Mettre en attente */}
-                <button onClick={() => { retirerVersAttente(item.id); onClose(); }}
-                  style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  ⏸ Mettre en attente — libérer le slot
-                </button>
+                <div style={{ fontSize: 11, color: '#92400e', marginBottom: 4 }}>
+                  💡 Pour libérer le slot, changez l'étape en cours à « En attente » dans le road map et sauvegardez.
+                </div>
                 {/* Changer de slot */}
                 {autresSlots.length > 0 && (
-                  <div>
+                  <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 11, color: '#92400e', marginBottom: 6, fontWeight: 600 }}>Changer de slot :</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {autresSlots.map(s => (
