@@ -8,7 +8,7 @@ import { PanneauDetailVehicule } from './PanneauDetailVehicule';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { reservoirService } from '../services/reservoirService';
 import type { Reservoir, TypeReservoir } from '../types/reservoirTypes';
-import type { Item } from '../types/item.types';
+import type { Item, Document } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 // ── Constantes réservoirs ──────────────────────────────────────
@@ -343,7 +343,7 @@ function BadgeCommercialSlot({ item }: { item: Item }) {
 
 export const VueDepartement = () => {
   const { profile, deconnexion } = useAuth();
-  const { items, slotMap, enAttente, assignerSlot } = useGarage();
+  const { items, slotMap, enAttente, assignerSlot, ajouterDocument } = useGarage();
   const { vehicules } = useInventaire();
 
   const [modeTV, setModeTV] = useState(false);
@@ -659,55 +659,103 @@ export const VueDepartement = () => {
                   {/* ── BADGE COMMERCIAL ── */}
                   <BadgeCommercialSlot item={item} />
 
-                  {/* ── DOCUMENTS ── */}
-                  {item.documents && item.documents.length > 0 && (
+                  {/* ── DOCUMENTS PDF ── */}
+                  <div style={{
+                    marginTop: 12,
+                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                    paddingTop: 12,
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
                     <div style={{
-                      marginTop: 10,
-                      borderTop: '1px solid rgba(255,255,255,0.1)',
-                      paddingTop: 10,
-                      display: 'flex', flexDirection: 'column', gap: 6,
+                      fontSize: 14, color: 'rgba(255,255,255,0.7)',
+                      fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8,
                     }}>
-                      <div style={{
-                        fontSize: 10, color: 'rgba(255,255,255,0.4)',
-                        fontWeight: 700, letterSpacing: '0.08em',
-                        textTransform: 'uppercase', marginBottom: 2,
-                      }}>
-                        📎 Documents
-                      </div>
-                      {item.documents.map(doc => (
-                        <button
-                          key={doc.id}
-                          onClick={(e) => ouvrirDoc(e, doc)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '7px 10px', borderRadius: 6,
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            background: 'rgba(255,255,255,0.05)',
-                            color: 'rgba(255,255,255,0.85)',
-                            cursor: 'pointer', fontSize: 12,
-                            fontWeight: 600, textAlign: 'left',
-                            width: '100%', transition: 'background 0.15s',
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
-                          }}
-                        >
-                          <span style={{ fontSize: 18, flexShrink: 0 }}>📄</span>
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {doc.nom}
-                          </span>
-                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
-                            👁 {doc.taille}
-                          </span>
-                        </button>
-                      ))}
+                      📄 Documents PDF
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>
+                        ({item.documents?.length ?? 0}/3)
+                      </span>
                     </div>
-                  )}
+
+                    {/* Documents existants */}
+                    {(item.documents ?? []).map(doc => (
+                      <button
+                        key={doc.id}
+                        onClick={(e) => ouvrirDoc(e, doc)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '10px 14px', borderRadius: 8,
+                          border: '1px solid rgba(59,130,246,0.3)',
+                          background: 'rgba(59,130,246,0.1)',
+                          color: 'white',
+                          cursor: 'pointer', fontSize: 14,
+                          fontWeight: 600, textAlign: 'left',
+                          width: '100%', transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(59,130,246,0.2)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(59,130,246,0.1)';
+                        }}
+                      >
+                        <span style={{ fontSize: 22, flexShrink: 0 }}>📄</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {doc.nom}
+                        </span>
+                        <span style={{
+                          fontSize: 12, color: '#3b82f6', fontWeight: 700,
+                          padding: '3px 8px', borderRadius: 4,
+                          background: 'rgba(59,130,246,0.15)', flexShrink: 0,
+                        }}>
+                          👁 Voir
+                        </span>
+                      </button>
+                    ))}
+
+                    {/* Bouton AJOUTER PDF — toujours visible si < 3 docs */}
+                    {(item.documents?.length ?? 0) < 3 && (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                          padding: '12px 14px', borderRadius: 8,
+                          border: '2px dashed rgba(59,130,246,0.4)',
+                          background: 'rgba(59,130,246,0.05)',
+                          color: '#3b82f6', fontSize: 15,
+                          fontWeight: 700, cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(59,130,246,0.15)';
+                          e.currentTarget.style.borderColor = 'rgba(59,130,246,0.6)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(59,130,246,0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(59,130,246,0.4)';
+                        }}
+                      >
+                        <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const base64 = reader.result as string;
+                              const tailleKB = Math.round(file.size / 1024);
+                              const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
+                              const doc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
+                              ajouterDocument(item.id, doc);
+                            };
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }}
+                        />
+                        <span style={{ fontSize: 20 }}>📎</span>
+                        + Ajouter un PDF
+                      </label>
+                    )}
+                  </div>
 
                   {item.urgence && (
                     <div style={{
