@@ -39,17 +39,19 @@ createRoot(document.getElementById('root')!).render(
         </InventaireProvider>
       </ErrorBoundary>
     ) : (
-      <AuthProvider>
-        <RoleProvider>
-          <GarageProvider>
-            <InventaireProvider>
-              <ClientProvider>
-                <App />
-              </ClientProvider>
-            </InventaireProvider>
-          </GarageProvider>
-        </RoleProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <RoleProvider>
+            <GarageProvider>
+              <InventaireProvider>
+                <ClientProvider>
+                  <App />
+                </ClientProvider>
+              </InventaireProvider>
+            </GarageProvider>
+          </RoleProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     )}
   </StrictMode>
 );
