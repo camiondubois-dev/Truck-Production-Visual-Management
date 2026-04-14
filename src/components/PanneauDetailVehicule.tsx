@@ -9,7 +9,7 @@ import { PopupAssignationSlot } from './PopupAssignationSlot';
 import { useClients } from '../contexts/ClientContext';
 import { supabase } from '../lib/supabase';
 import { STATIONS } from '../data/stations';
-import { SLOT_TO_GARAGE } from '../data/garageData';
+import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
 import type { Item, EtatCommercial, Document } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
@@ -355,7 +355,15 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             </div>
             <RoadMapEditor
               vehicule={v}
-              onSaved={() => {}}
+              onSaved={(updated) => {
+                // Si une étape "en-cours" existe et le camion n'est pas dans un slot
+                // → ouvrir le popup d'assignation de slot automatiquement
+                const enCoursStep = updated.roadMap?.find(s => s.statut === 'en-cours');
+                if (enCoursStep && item && !item.slotId) {
+                  const garageId = STATION_TO_GARAGE[enCoursStep.stationId];
+                  if (garageId) setPopupStation(garageId);
+                }
+              }}
               compact={false}
             />
           </div>

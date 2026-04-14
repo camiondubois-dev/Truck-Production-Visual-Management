@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { supabase } from '../lib/supabase';
+import { SLOT_TO_GARAGE } from '../data/garageData';
 
 interface InventaireContextType {
   vehicules: VehiculeInventaire[];
@@ -124,7 +125,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     // Si un prod_items actif existe pour ce véhicule, synchroniser sa progression
     const { data: activeItems } = await supabase
       .from('prod_items')
-      .select('id')
+      .select('id, slot_id, dernier_garage_id')
       .eq('inventaire_id', id)
       .neq('etat', 'termine');
     if (activeItems && activeItems.length > 0) {
@@ -134,13 +135,27 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       const stationsActives = roadMap
         .filter(s => s.statut !== 'planifie' && s.statut !== 'saute')
         .map(s => s.stationId);
+
+      // Vérifier si le camion doit être libéré du slot automatiquement
+      // Si aucune étape n'est "en-cours" et le camion est dans un slot → libérer
+      const hasEnCours = roadMap.some(s => s.statut === 'en-cours');
+
       for (const ai of activeItems) {
+        const patch: any = {
+          progression,
+          stations_actives: stationsActives,
+          updated_at: new Date().toISOString(),
+        };
+        // Auto-libérer le slot si plus aucune étape en-cours
+        if (!hasEnCours && ai.slot_id) {
+          patch.etat = 'en-attente';
+          patch.dernier_slot_id = ai.slot_id;
+          patch.dernier_garage_id = ai.dernier_garage_id ?? (SLOT_TO_GARAGE as any)[ai.slot_id] ?? null;
+          patch.slot_id = null;
+          patch.date_entree_slot = null;
+        }
         await supabase.from('prod_items')
-          .update({
-            progression,
-            stations_actives: stationsActives,
-            updated_at: new Date().toISOString(),
-          })
+          .update(patch)
           .eq('id', ai.id);
       }
     }
