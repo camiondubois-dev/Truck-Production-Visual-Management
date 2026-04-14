@@ -17,6 +17,7 @@ const TABS = [
   { id: 'inventaire',  label: 'Inventaire',     icon: '📋',       color: '#1e293b' },
   { id: 'reservoirs',  label: 'Réservoirs',     icon: '🛢',       color: '#0ea5e9' },
   { id: 'baseclients', label: 'Clients',        icon: '👤',       color: '#6366f1' },
+  { id: 'analyse',     label: 'Analyse',        icon: '📊',       color: '#8b5cf6' },
   { id: 'archive',     label: 'Archive',        icon: '📦',       color: '#6b7280' },
 ];
 

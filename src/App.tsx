@@ -12,8 +12,9 @@ import { VueArchive } from './components/VueArchive';
 import { VueClients } from './components/VueClients';
 import { VueReservoirs } from './components/VueReservoirs';
 import { VuePrets } from './components/VuePrets';
+import { VueAnalyse } from './components/VueAnalyse';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 'reservoirs' | 'baseclients' | 'archive';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive';
 
 export default function App() {
   const { profile, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
         {currentTab === 'inventaire'  && <VueInventaire />}
         {currentTab === 'reservoirs'  && <VueReservoirs />}
         {currentTab === 'baseclients' && <VueClients />}
+        {currentTab === 'analyse'     && <VueAnalyse />}
         {currentTab === 'archive'     && <VueArchive />}
       </div>
     </div>
