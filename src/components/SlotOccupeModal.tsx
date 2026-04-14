@@ -141,12 +141,13 @@ export function SlotOccupeModal({
   if (top + MAX_HEIGHT + MARGIN > window.innerHeight) top = MARGIN;
   if (top < MARGIN) top = MARGIN;
 
-  const handleTerminer = (e: React.MouseEvent) => {
+  const handleTerminer = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    // 1. Marquer la station comme terminée dans prod_items + sync road_map
     if (onUpdateStationStatus && item.stationActuelle) {
-      onUpdateStationStatus(item.id, item.stationActuelle, 'termine');
+      await onUpdateStationStatus(item.id, item.stationActuelle, 'termine');
     }
-    // Vérifier s'il reste des étapes non terminées après celle-ci
+    // 2. Vérifier s'il reste des étapes non terminées après celle-ci
     const etapesRestantes = item.stationsActives.filter(sid => {
       if (sid === item.stationActuelle) return false;
       const prog = item.progression?.find(p => p.stationId === sid);
@@ -154,10 +155,10 @@ export function SlotOccupeModal({
     });
     if (etapesRestantes.length === 0) {
       // Dernière étape — archiver directement
-      onTerminer(item.id);
+      await onTerminer(item.id);
     } else {
       // Il reste des étapes — mettre en attente pour la prochaine
-      onTerminerEtAvancer(item.id);
+      await onTerminerEtAvancer(item.id);
     }
     onClose();
   };

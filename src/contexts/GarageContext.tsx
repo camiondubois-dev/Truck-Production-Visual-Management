@@ -231,6 +231,9 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     };
     await itemsService.mettreAJour(itemId, patch);
     if (garageActuel) await logSortieGarage(itemId, garageActuel);
+    // Note: la sync road_map (avancerRoadMap) est déjà faite par updateStationStatus
+    // qui est toujours appelé avant terminerEtAvancer dans handleTerminer.
+    // On ne l'appelle PAS ici pour éviter un double-avancement.
     setItems(prev => prev.map(i => i.id !== itemId ? i : { ...i, ...patch }));
   };
 

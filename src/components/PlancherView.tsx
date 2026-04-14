@@ -711,17 +711,22 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
       }
     }
 
-    // 2. Fallback : prod_items en-attente sans road_map associée (trucks anciens)
+    // 2. Fallback : prod_items en-attente SANS road_map (trucks anciens uniquement)
+    // Si le véhicule a un road_map, la section 1 ci-dessus est la seule source de vérité.
+    // Le fallback ne s'applique qu'aux véhicules sans road_map pour éviter les doublons
+    // et les placements incorrects (ex: dernierGarageId périmé après terminé).
     for (const item of allEnAttente) {
       if (seenItemIds.has(item.id)) continue;
       if (!item.inventaireId || seenVehIds.has(item.inventaireId)) continue;
+      // Trouver le vehicule correspondant
+      const vehicule = vehicules.find(v => v.id === item.inventaireId);
+      if (!vehicule) continue;
+      // Si le véhicule a un road_map, on ne passe PAS par le fallback
+      if (vehicule.roadMap && vehicule.roadMap.length > 0) continue;
       const isForThisGarage =
         item.dernierGarageId === station.id ||
         STATION_TO_GARAGE[item.stationActuelle ?? ''] === station.id;
       if (!isForThisGarage) continue;
-      // Trouver le vehicule correspondant
-      const vehicule = vehicules.find(v => v.id === item.inventaireId);
-      if (!vehicule) continue;
       seenItemIds.add(item.id);
       queue.push({ vehicule, item });
     }

@@ -36,7 +36,6 @@ export function fromDB(row: any): VehiculeInventaire {
     aUnReservoir: row.a_un_reservoir ?? false,
     reservoirId: row.reservoir_id ?? undefined,
     typeReservoirRequis: row.type_reservoir_requis ?? undefined,
-    typeReservoirRequis: row.type_reservoir_requis ?? undefined,
     estPret: row.est_pret ?? false,
     etatCommercial: row.etat_commercial ?? 'non-vendu',
     dateLivraisonPlanifiee: row.date_livraison_planifiee ?? undefined,
@@ -181,6 +180,11 @@ export const inventaireService = {
       .single();
     if (!data?.road_map) return;
     const roadMap: RoadMapEtape[] = data.road_map;
+
+    // Idempotent : si l'étape est DÉJÀ terminée, ne rien faire
+    const stepActuel = roadMap.find(e => e.stationId === stationTermineeId);
+    if (stepActuel?.statut === 'termine') return;
+
     const updated = roadMap.map(e =>
       e.stationId === stationTermineeId ? { ...e, statut: 'termine' as const } : e
     );

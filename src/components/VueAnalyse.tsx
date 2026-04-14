@@ -150,14 +150,14 @@ function KpiCard({ label, value, sub, color, icon, active, onClick }: {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 20 }}>{icon}</span>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.04em' }}>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 600, letterSpacing: '0.04em' }}>
           {label}
         </span>
       </div>
       <div style={{ fontSize: 32, fontWeight: 800, color, fontFamily: 'monospace', lineHeight: 1 }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>{sub}</div>}
     </div>
   );
 }
@@ -173,10 +173,10 @@ function Section({ title, icon, children, span, badge }: {
       display: 'flex', flexDirection: 'column', gap: 16,
     }}>
       <div style={{
-        fontSize: 15, fontWeight: 700, color: 'rgba(255,255,255,0.85)',
+        fontSize: 17, fontWeight: 700, color: 'rgba(255,255,255,0.9)',
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{ fontSize: 18 }}>{icon}</span>
+        <span style={{ fontSize: 20 }}>{icon}</span>
         <span style={{ flex: 1 }}>{title}</span>
         {badge}
       </div>
@@ -186,22 +186,26 @@ function Section({ title, icon, children, span, badge }: {
 }
 
 // ── Mini Table ─────────────────────────────────────────────────
-function MiniTable({ rows, columns }: {
+function MiniTable({ rows, columns, large }: {
   rows: { id: string; cells: (string | React.ReactNode)[] }[];
   columns: string[];
+  large?: boolean;
 }) {
+  const fs = large ? 15 : 13;
+  const hfs = large ? 14 : 12;
+  const pad = large ? '12px 16px' : '8px 12px';
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 360 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: large ? 600 : 400 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: fs }}>
         <thead>
           <tr>
             {columns.map((c, i) => (
               <th key={i} style={{
-                textAlign: 'left', padding: '6px 10px',
-                color: 'rgba(255,255,255,0.4)', fontWeight: 600,
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                textAlign: 'left', padding: pad,
+                color: 'rgba(255,255,255,0.5)', fontWeight: 700,
+                borderBottom: '1px solid rgba(255,255,255,0.1)',
                 position: 'sticky', top: 0, background: '#161514',
-                fontSize: 11, letterSpacing: '0.04em',
+                fontSize: hfs, letterSpacing: '0.04em',
               }}>{c}</th>
             ))}
           </tr>
@@ -214,8 +218,8 @@ function MiniTable({ rows, columns }: {
             >
               {r.cells.map((cell, i) => (
                 <td key={i} style={{
-                  padding: '7px 10px', color: 'rgba(255,255,255,0.75)',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  padding: pad, color: 'rgba(255,255,255,0.8)',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
                 }}>{cell}</td>
               ))}
             </tr>
@@ -244,8 +248,8 @@ function CommercialBadge({ etat }: { etat: string }) {
   const c = cfg[etat] ?? cfg['non-vendu'];
   return (
     <span style={{
-      background: c.bg, color: c.color, padding: '2px 8px',
-      borderRadius: 4, fontWeight: 700, fontSize: 11,
+      background: c.bg, color: c.color, padding: '3px 10px',
+      borderRadius: 4, fontWeight: 700, fontSize: 13,
     }}>{c.label}</span>
   );
 }
@@ -257,7 +261,7 @@ function ProgressBar({ value }: { value: number }) {
       <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
         <div style={{ width: `${value}%`, height: '100%', borderRadius: 3, background: value === 100 ? '#22c55e' : '#3b82f6', transition: 'width 0.3s' }} />
       </div>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 32 }}>{value}%</span>
+      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 36 }}>{value}%</span>
     </div>
   );
 }
@@ -444,26 +448,29 @@ export function VueAnalyse() {
     ].filter(d => d.value > 0);
   }, [camionsFiltres]);
 
-  // BAR : Charge par station
+  // BAR : Charge par station (toutes les étapes road_map non-sautées)
   const stationLoad = useMemo(() => {
     return ROAD_MAP_STATIONS.map(station => {
       let enCours = 0;
       let enAttente = 0;
+      let planifie = 0;
       let termine = 0;
       camionsFiltres.forEach(v => {
         const step = v.roadMap?.find((s: RoadMapEtape) => s.stationId === station.id);
-        if (!step) return;
+        if (!step || step.statut === 'saute') return;
         if (step.statut === 'en-cours') enCours++;
         else if (step.statut === 'en-attente') enAttente++;
+        else if (step.statut === 'planifie') planifie++;
         else if (step.statut === 'termine') termine++;
       });
       return {
-        station: station.label.replace('Mécanique ', 'Méc. ').replace('Soudure ', 'Soud. '),
+        station: station.label,
         stationId: station.id,
         'En cours': enCours,
         'En attente': enAttente,
+        'Planifié': planifie,
         'Terminé': termine,
-        total: enCours + enAttente + termine,
+        total: enCours + enAttente + planifie + termine,
       };
     });
   }, [camionsFiltres]);
@@ -547,22 +554,22 @@ export function VueAnalyse() {
             `${v.marque ?? ''} ${v.modele ?? ''}`.trim() || '—',
             v.variante ?? '—',
             <span style={{
-              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+              padding: '3px 10px', borderRadius: 4, fontSize: 12, fontWeight: 700,
               background: phase === 'pret' ? '#22c55e20' : phase === 'en-production' ? '#3b82f620' : '#94a3b820',
               color: phase === 'pret' ? '#22c55e' : phase === 'en-production' ? '#3b82f6' : '#94a3b8',
             }}>
               {phase === 'pret' ? '✅ Prêt' : phase === 'en-production' ? '🔧 Production' : '📋 Dispo.'}
             </span>,
             phase === 'en-production'
-              ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 11 }}>{stationLabel}</span>
+              ? <span style={{ color: '#3b82f6', fontWeight: 600, fontSize: 13 }}>{stationLabel}</span>
               : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
             phase === 'en-production' ? <ProgressBar value={progression} /> : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
             v.aUnReservoir
               ? <span style={{ color: '#0ea5e9', fontWeight: 700 }}>✓ Oui</span>
               : <span style={{ color: 'rgba(255,255,255,0.2)' }}>Non</span>,
             v.typeReservoirRequis
-              ? <span style={{ fontWeight: 700, fontSize: 11, color: '#7dd3fc' }}>{v.typeReservoirRequis}</span>
-              : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 10 }}>—</span>,
+              ? <span style={{ fontWeight: 700, fontSize: 13, color: '#7dd3fc' }}>{v.typeReservoirRequis}</span>
+              : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 13 }}>—</span>,
             <CommercialBadge etat={getCommercial(v)} />,
             v.clientAcheteur || '—',
             v.dateLivraisonPlanifiee || '—',
@@ -753,11 +760,11 @@ export function VueAnalyse() {
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#ef4444', marginBottom: 4 }}>
                   {vendusNonPrets.length} camion{vendusNonPrets.length > 1 ? 's' : ''} vendu{vendusNonPrets.length > 1 ? 's' : ''} PAS PRÊT{vendusNonPrets.length > 1 ? 'S' : ''}
                 </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
                   {vendusNonPrets.slice(0, 5).map(v => `#${v.numero}`).join(', ')}
                   {vendusNonPrets.length > 5 ? ` +${vendusNonPrets.length - 5} autres` : ''}
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
                   Cliquer pour filtrer
                 </div>
               </div>
@@ -780,7 +787,7 @@ export function VueAnalyse() {
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#f59e0b', marginBottom: 2 }}>
                     Écart réservoirs
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
                     {camionsSansReservoir.length} camions sans réservoir · {reservoirsDisponibles.length} dispo en stock
                   </div>
                 </div>
@@ -796,13 +803,13 @@ export function VueAnalyse() {
                       background: hasGap ? '#ef444418' : hasBesoin ? '#22c55e15' : 'rgba(255,255,255,0.03)',
                       border: `1px solid ${hasGap ? '#ef444440' : hasBesoin ? '#22c55e30' : 'rgba(255,255,255,0.06)'}`,
                     }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>
                         {e.type}
                       </div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>
                         Besoin: <span style={{ color: 'white', fontWeight: 700, fontFamily: 'monospace' }}>{e.besoin}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>
                         Dispo: <span style={{ color: '#22c55e', fontWeight: 700, fontFamily: 'monospace' }}>{e.disponible}</span>
                       </div>
                       {hasGap ? (
@@ -823,11 +830,11 @@ export function VueAnalyse() {
                 })}
               </div>
               {camionsSansTypeSpecifie.length > 0 && (
-                <div style={{ marginTop: 8, fontSize: 10, color: '#f59e0b', fontStyle: 'italic' }}>
+                <div style={{ marginTop: 8, fontSize: 12, color: '#f59e0b', fontStyle: 'italic' }}>
                   ⚠ {camionsSansTypeSpecifie.length} camion{camionsSansTypeSpecifie.length > 1 ? 's' : ''} sans type de réservoir spécifié dans le road map
                 </div>
               )}
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>
                 Cliquer pour filtrer les camions sans réservoir
               </div>
             </div>
@@ -893,15 +900,13 @@ export function VueAnalyse() {
         </Section>
       </div>
 
-      {/* ── GRAPHIQUES ROW 2 ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
-
-        {/* BAR : Charge par station */}
-        <Section title="Charge par station" icon="📊"
-          badge={filters.station ? <span style={{ fontSize: 10, background: '#8b5cf620', color: '#8b5cf6', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>FILTRE: {filters.station}</span> : undefined}
+      {/* ── CHARGE PAR STATION (pleine largeur) ── */}
+      <div style={{ marginBottom: 18 }}>
+        <Section title="Charge par station (toutes étapes road map)" icon="📊"
+          badge={filters.station ? <span style={{ fontSize: 12, background: '#8b5cf620', color: '#8b5cf6', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>FILTRE: {filters.station}</span> : undefined}
         >
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stationLoad} layout="vertical" margin={{ left: 10, right: 20 }}
+          <ResponsiveContainer width="100%" height={420}>
+            <BarChart data={stationLoad} layout="vertical" margin={{ left: 10, right: 30 }}
               onClick={(state: any) => {
                 if (state?.activeLabel) {
                   const station = stationLoad.find(s => s.station === state.activeLabel);
@@ -911,17 +916,22 @@ export function VueAnalyse() {
               style={{ cursor: 'pointer' }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} />
-              <YAxis type="category" dataKey="station" width={100}
-                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
+              <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 13 }} allowDecimals={false} />
+              <YAxis type="category" dataKey="station" width={170}
+                tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 600 }} />
               <Tooltip content={<ChartTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }} />
+              <Legend wrapperStyle={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }} />
               <Bar dataKey="En cours" stackId="a" fill="#3b82f6" />
               <Bar dataKey="En attente" stackId="a" fill="#f59e0b" />
+              <Bar dataKey="Planifié" stackId="a" fill="#8b5cf6" />
               <Bar dataKey="Terminé" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Section>
+      </div>
+
+      {/* ── GRAPHIQUES ROW 2 ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
 
         {/* BAR : Aging */}
         <Section title="Ancienneté en production" icon="⏱️"
@@ -968,7 +978,7 @@ export function VueAnalyse() {
             </ResponsiveContainer>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>
               {tempsParGarage.map(d => (
-                <div key={d.stationId} style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                <div key={d.stationId} style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
                   <span style={{ color: d.color, fontWeight: 700 }}>{d.station}</span>
                   {' · '}moy: {formatDuree(d['Temps moyen (min)'])} · {d.Passages} passages
                   {d.totalMinutes > 0 && <> · total: {formatJours(d.totalMinutes)}</>}
@@ -988,13 +998,13 @@ export function VueAnalyse() {
               <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
                 {reservoirStats.disponibles}
               </div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>Disponibles</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Disponibles</div>
             </div>
             <div style={{ background: '#0ea5e915', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: '#0ea5e9', fontFamily: 'monospace' }}>
                 {reservoirStats.installes}
               </div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>Installés</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Installés</div>
             </div>
           </div>
           {reservoirStats.enPeinture > 0 && (
@@ -1002,24 +1012,24 @@ export function VueAnalyse() {
               <span style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
                 {reservoirStats.enPeinture}
               </span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 8 }}>en peinture</span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginLeft: 8 }}>en peinture</span>
             </div>
           )}
 
           {/* Par type */}
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Par type :</div>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)' }}>
+            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8, fontSize: 14 }}>Par type :</div>
             {Object.entries(reservoirStats.parType).map(([type, counts]) => (
               <div key={type} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
               }}>
-                <span style={{ fontWeight: 600 }}>{type}</span>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11, fontFamily: 'monospace' }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{type}</span>
+                <div style={{ display: 'flex', gap: 14, fontSize: 13, fontFamily: 'monospace' }}>
                   <span style={{ color: '#22c55e' }}>{counts.dispo} dispo</span>
                   <span style={{ color: '#0ea5e9' }}>{counts.installe} inst.</span>
                   {counts.peinture > 0 && <span style={{ color: '#f59e0b' }}>{counts.peinture} peint.</span>}
-                  <span style={{ color: 'rgba(255,255,255,0.3)' }}>{counts.total} total</span>
+                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{counts.total} total</span>
                 </div>
               </div>
             ))}
@@ -1027,17 +1037,17 @@ export function VueAnalyse() {
 
           {/* Couverture globale */}
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>
               Couverture camions :
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Avec réservoir</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>Avec réservoir</span>
               <span style={{ color: '#0ea5e9', fontWeight: 700, fontFamily: 'monospace' }}>
                 {camionsEau.filter(v => v.aUnReservoir).length}
               </span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Sans réservoir</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>Sans réservoir</span>
               <span style={{ color: ecartReservoir > 0 ? '#f59e0b' : 'rgba(255,255,255,0.5)', fontWeight: 700, fontFamily: 'monospace' }}>
                 {camionsSansReservoir.length}
               </span>
@@ -1046,7 +1056,7 @@ export function VueAnalyse() {
 
           {/* Écart PAR TYPE */}
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>
               Écart par type de réservoir :
             </div>
             {ecartParType.map(e => {
@@ -1055,27 +1065,27 @@ export function VueAnalyse() {
               return (
                 <div key={e.type} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 10px', marginBottom: 4, borderRadius: 8,
+                  padding: '10px 12px', marginBottom: 6, borderRadius: 8,
                   background: hasGap ? '#ef444412' : 'rgba(255,255,255,0.02)',
                   border: `1px solid ${hasGap ? '#ef444430' : 'rgba(255,255,255,0.04)'}`,
                 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', width: 50 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', width: 55 }}>
                     {e.type}
                   </span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                    <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
                       <div style={{
                         width: `${e.besoin > 0 ? Math.min(100, (e.disponible / e.besoin) * 100) : 100}%`,
-                        height: '100%', borderRadius: 3,
+                        height: '100%', borderRadius: 4,
                         background: hasGap ? '#ef4444' : '#22c55e',
                       }} />
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', minWidth: 60, textAlign: 'right' }}>
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 70, textAlign: 'right' }}>
                     {e.besoin}req / {e.disponible}dsp
                   </span>
                   <span style={{
-                    fontSize: 12, fontWeight: 800, fontFamily: 'monospace', minWidth: 30, textAlign: 'right',
+                    fontSize: 14, fontWeight: 800, fontFamily: 'monospace', minWidth: 35, textAlign: 'right',
                     color: hasGap ? '#ef4444' : surplus > 0 ? '#22c55e' : 'rgba(255,255,255,0.3)',
                   }}>
                     {hasGap ? `-${e.ecart}` : surplus > 0 ? `+${surplus}` : 'OK'}
@@ -1085,12 +1095,12 @@ export function VueAnalyse() {
             })}
             {camionsSansTypeSpecifie.length > 0 && (
               <div style={{
-                marginTop: 6, padding: '6px 10px', borderRadius: 6,
+                marginTop: 8, padding: '8px 12px', borderRadius: 6,
                 background: '#f59e0b10', border: '1px solid #f59e0b25',
-                fontSize: 11, color: '#f59e0b',
+                fontSize: 13, color: '#f59e0b',
               }}>
                 ⚠ {camionsSansTypeSpecifie.length} camion{camionsSansTypeSpecifie.length > 1 ? 's' : ''} sans type de réservoir spécifié
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>
                   Ajouter le type dans le Road Map du camion
                 </div>
               </div>
@@ -1102,6 +1112,7 @@ export function VueAnalyse() {
           <MiniTable
             columns={['Numéro', 'Type', 'État', 'Camion']}
             rows={reservoirRows}
+            large
           />
         </Section>
       </div>
@@ -1117,6 +1128,7 @@ export function VueAnalyse() {
         <MiniTable
           columns={['#', 'Véhicule', 'Var.', 'Phase', 'Station', 'Progression', 'Rés.', 'Rés. requis', 'Commercial', 'Client', 'Livraison']}
           rows={camionsRows}
+          large
         />
       </Section>
 
