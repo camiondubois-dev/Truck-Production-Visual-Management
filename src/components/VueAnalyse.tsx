@@ -454,14 +454,12 @@ export function VueAnalyse() {
       let enCours = 0;
       let enAttente = 0;
       let planifie = 0;
-      let termine = 0;
       camionsFiltres.forEach(v => {
         const step = v.roadMap?.find((s: RoadMapEtape) => s.stationId === station.id);
-        if (!step || step.statut === 'saute') return;
+        if (!step || step.statut === 'saute' || step.statut === 'termine') return;
         if (step.statut === 'en-cours') enCours++;
         else if (step.statut === 'en-attente') enAttente++;
         else if (step.statut === 'planifie') planifie++;
-        else if (step.statut === 'termine') termine++;
       });
       return {
         station: station.label,
@@ -469,8 +467,7 @@ export function VueAnalyse() {
         'En cours': enCours,
         'En attente': enAttente,
         'Planifié': planifie,
-        'Terminé': termine,
-        total: enCours + enAttente + planifie + termine,
+        total: enCours + enAttente + planifie,
       };
     });
   }, [camionsFiltres]);
@@ -591,12 +588,12 @@ export function VueAnalyse() {
       return {
         id: r.id,
         cells: [
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0ea5e9' }}>{r.numero}</span>,
-          <span style={{ fontWeight: 600 }}>{r.type}</span>,
-          <span style={{ color: ec.color, fontWeight: 700, fontSize: 11 }}>{ec.label}</span>,
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{r.numero}</span>,
+          <span style={{ fontWeight: 700, fontSize: 15 }}>{r.type}</span>,
+          <span style={{ color: ec.color, fontWeight: 700, fontSize: 14 }}>{ec.label}</span>,
           camion
-            ? <span style={{ fontFamily: 'monospace', color: '#f97316' }}>#{camion.numero}</span>
-            : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>,
+            ? <span style={{ fontFamily: 'monospace', color: '#f97316', fontSize: 15, fontWeight: 600 }}>#{camion.numero}</span>
+            : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 14 }}>—</span>,
         ],
       };
     }),
@@ -923,8 +920,7 @@ export function VueAnalyse() {
               <Legend wrapperStyle={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }} />
               <Bar dataKey="En cours" stackId="a" fill="#3b82f6" />
               <Bar dataKey="En attente" stackId="a" fill="#f59e0b" />
-              <Bar dataKey="Planifié" stackId="a" fill="#8b5cf6" />
-              <Bar dataKey="Terminé" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="Planifié" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -990,42 +986,42 @@ export function VueAnalyse() {
       )}
 
       {/* ── RÉSERVOIRS DÉTAIL ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: 18, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 18, marginBottom: 18 }}>
         <Section title="Réservoirs — Détail" icon="🛢">
           {/* Compteurs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div style={{ background: '#22c55e15', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ background: '#22c55e15', borderRadius: 10, padding: '16px 18px', textAlign: 'center' }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
                 {reservoirStats.disponibles}
               </div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Disponibles</div>
+              <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>Disponibles</div>
             </div>
-            <div style={{ background: '#0ea5e915', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#0ea5e9', fontFamily: 'monospace' }}>
+            <div style={{ background: '#0ea5e915', borderRadius: 10, padding: '16px 18px', textAlign: 'center' }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: '#0ea5e9', fontFamily: 'monospace' }}>
                 {reservoirStats.installes}
               </div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Installés</div>
+              <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>Installés</div>
             </div>
           </div>
           {reservoirStats.enPeinture > 0 && (
-            <div style={{ background: '#f59e0b15', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
-              <span style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
+            <div style={{ background: '#f59e0b15', borderRadius: 10, padding: '14px 18px', textAlign: 'center' }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
                 {reservoirStats.enPeinture}
               </span>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginLeft: 8 }}>en peinture</span>
+              <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', marginLeft: 10 }}>en peinture</span>
             </div>
           )}
 
           {/* Par type */}
-          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)' }}>
-            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8, fontSize: 14 }}>Par type :</div>
+          <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)' }}>
+            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)', marginBottom: 10, fontSize: 16 }}>Par type :</div>
             {Object.entries(reservoirStats.parType).map(([type, counts]) => (
               <div key={type} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
               }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{type}</span>
-                <div style={{ display: 'flex', gap: 14, fontSize: 13, fontFamily: 'monospace' }}>
+                <span style={{ fontWeight: 700, fontSize: 16 }}>{type}</span>
+                <div style={{ display: 'flex', gap: 16, fontSize: 15, fontFamily: 'monospace' }}>
                   <span style={{ color: '#22c55e' }}>{counts.dispo} dispo</span>
                   <span style={{ color: '#0ea5e9' }}>{counts.installe} inst.</span>
                   {counts.peinture > 0 && <span style={{ color: '#f59e0b' }}>{counts.peinture} peint.</span>}
@@ -1036,27 +1032,27 @@ export function VueAnalyse() {
           </div>
 
           {/* Couverture globale */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>
               Couverture camions :
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>Avec réservoir</span>
-              <span style={{ color: '#0ea5e9', fontWeight: 700, fontFamily: 'monospace' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, marginBottom: 8 }}>
+              <span style={{ color: 'rgba(255,255,255,0.7)' }}>Avec réservoir</span>
+              <span style={{ color: '#0ea5e9', fontWeight: 700, fontFamily: 'monospace', fontSize: 18 }}>
                 {camionsEau.filter(v => v.aUnReservoir).length}
               </span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)' }}>Sans réservoir</span>
-              <span style={{ color: ecartReservoir > 0 ? '#f59e0b' : 'rgba(255,255,255,0.5)', fontWeight: 700, fontFamily: 'monospace' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, marginBottom: 8 }}>
+              <span style={{ color: 'rgba(255,255,255,0.7)' }}>Sans réservoir</span>
+              <span style={{ color: ecartReservoir > 0 ? '#f59e0b' : 'rgba(255,255,255,0.5)', fontWeight: 700, fontFamily: 'monospace', fontSize: 18 }}>
                 {camionsSansReservoir.length}
               </span>
             </div>
           </div>
 
           {/* Écart PAR TYPE */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>
               Écart par type de réservoir :
             </div>
             {ecartParType.map(e => {
@@ -1065,11 +1061,11 @@ export function VueAnalyse() {
               return (
                 <div key={e.type} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', marginBottom: 6, borderRadius: 8,
+                  padding: '12px 14px', marginBottom: 8, borderRadius: 8,
                   background: hasGap ? '#ef444412' : 'rgba(255,255,255,0.02)',
                   border: `1px solid ${hasGap ? '#ef444430' : 'rgba(255,255,255,0.04)'}`,
                 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', width: 55 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.85)', width: 60 }}>
                     {e.type}
                   </span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1081,11 +1077,11 @@ export function VueAnalyse() {
                       }} />
                     </div>
                   </div>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 70, textAlign: 'right' }}>
+                  <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', minWidth: 80, textAlign: 'right' }}>
                     {e.besoin}req / {e.disponible}dsp
                   </span>
                   <span style={{
-                    fontSize: 14, fontWeight: 800, fontFamily: 'monospace', minWidth: 35, textAlign: 'right',
+                    fontSize: 16, fontWeight: 800, fontFamily: 'monospace', minWidth: 40, textAlign: 'right',
                     color: hasGap ? '#ef4444' : surplus > 0 ? '#22c55e' : 'rgba(255,255,255,0.3)',
                   }}>
                     {hasGap ? `-${e.ecart}` : surplus > 0 ? `+${surplus}` : 'OK'}
