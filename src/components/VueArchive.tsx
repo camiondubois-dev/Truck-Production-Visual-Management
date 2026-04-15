@@ -6,13 +6,13 @@ import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { itemsService } from '../services/itemsService';
 import type { Item } from '../types/item.types';
 
-type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+type TypeItem = 'eau' | 'client' | 'detail';
 
 export function VueArchive() {
   const { reouvrirItem, supprimerItem } = useGarage();
   const [archives, setArchives] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtreType, setFiltreType] = useState<FiltreType>('tous');
+  const [filtresType, setFiltresType] = useState<Set<TypeItem>>(new Set());
   const [recherche, setRecherche] = useState('');
   const [confirmerReouverture, setConfirmerReouverture] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -24,8 +24,16 @@ export function VueArchive() {
       .finally(() => setLoading(false));
   }, []);
 
+  const toggleType = (t: TypeItem) => {
+    setFiltresType(prev => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t); else next.add(t);
+      return next;
+    });
+  };
+
   const filtres = archives.filter(i => {
-    if (filtreType !== 'tous' && i.type !== filtreType) return false;
+    if (filtresType.size > 0 && !filtresType.has(i.type as TypeItem)) return false;
     if (recherche) {
       const q = recherche.toLowerCase();
       return (
@@ -79,36 +87,47 @@ export function VueArchive() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 8, padding: '12px 24px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>
-          {[
-            { id: 'tous'   as FiltreType, label: 'Tous',             icon: '📋' },
-            { id: 'eau'    as FiltreType, label: 'Camions à eau',    icon: 'EAU_LOGO' },
-            { id: 'client' as FiltreType, label: 'Clients externes', icon: '🔧' },
-            { id: 'detail' as FiltreType, label: 'Camions détail',   icon: '🏷️' },
-          ].map(f => (
-            <button key={f.id} onClick={() => setFiltreType(f.id)}
-              style={{
-                padding: '6px 16px', borderRadius: 20, cursor: 'pointer',
-                border: filtreType === f.id ? 'none' : '1px solid #e5e7eb',
-                background: filtreType === f.id ? '#374151' : 'white',
-                color: filtreType === f.id ? 'white' : '#6b7280',
-                fontWeight: filtreType === f.id ? 700 : 400,
-                fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              {f.icon === 'EAU_LOGO' ? <EauIcon /> : f.icon} {f.label}
-              {f.id !== 'tous' && (
+        <div style={{ display: 'flex', gap: 8, padding: '12px 24px', borderBottom: '1px solid #e5e7eb', background: 'white', alignItems: 'center' }}>
+          <button onClick={() => setFiltresType(new Set())}
+            style={{
+              padding: '6px 16px', borderRadius: 20, cursor: 'pointer',
+              border: filtresType.size === 0 ? 'none' : '1px solid #e5e7eb',
+              background: filtresType.size === 0 ? '#374151' : 'white',
+              color: filtresType.size === 0 ? 'white' : '#6b7280',
+              fontWeight: filtresType.size === 0 ? 700 : 400, fontSize: 13,
+            }}>
+            📋 Tous
+          </button>
+          {([
+            { id: 'eau'    as TypeItem, label: 'Camions à eau',    icon: 'EAU_LOGO', color: '#f97316' },
+            { id: 'client' as TypeItem, label: 'Clients externes', icon: '🔧',       color: '#3b82f6' },
+            { id: 'detail' as TypeItem, label: 'Camions détail',   icon: '🏷️',       color: '#22c55e' },
+          ].map(f => {
+            const actif = filtresType.has(f.id);
+            return (
+              <button key={f.id} onClick={() => toggleType(f.id)}
+                style={{
+                  padding: '6px 16px', borderRadius: 20, cursor: 'pointer',
+                  border: actif ? 'none' : '1px solid #e5e7eb',
+                  background: actif ? f.color : 'white',
+                  color: actif ? 'white' : '#6b7280',
+                  fontWeight: actif ? 700 : 400,
+                  fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
+                  outline: actif ? `2px solid ${f.color}40` : 'none', outlineOffset: 2,
+                }}
+              >
+                {f.icon === 'EAU_LOGO' ? <EauIcon /> : f.icon} {f.label}
                 <span style={{
                   fontSize: 11, fontWeight: 700,
-                  background: filtreType === f.id ? 'rgba(255,255,255,0.3)' : '#f3f4f6',
-                  color: filtreType === f.id ? 'white' : '#9ca3af',
+                  background: actif ? 'rgba(255,255,255,0.3)' : '#f3f4f6',
+                  color: actif ? 'white' : '#9ca3af',
                   padding: '1px 7px', borderRadius: 10,
                 }}>
                   {archives.filter(i => i.type === f.id).length}
                 </span>
-              )}
-            </button>
-          ))}
+              </button>
+            );
+          }))}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>

@@ -15,7 +15,7 @@ import { getSectionVehicule, PanneauDetailVehicule } from './PanneauDetailVehicu
 import { CarteVehicule, SectionHeaderCard } from './VueAsana';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
-type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+type TypeVehicule = 'eau' | 'client' | 'detail';
 type FiltreDept = 'tous' | string; // station ID
 type FiltrePretCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location' | 'reserve';
 
@@ -258,7 +258,8 @@ export function VueInventaire() {
 
   const INVENTAIRE_COLS = ['numero', 'marque', 'modele', 'nom_client', 'client_acheteur', 'notes'];
   const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');
-  const [filtreType, setFiltreType] = useState<FiltreType>('tous');
+  const [filtresType, setFiltresType] = useState<Set<TypeVehicule>>(new Set());
+  const toggleType = (t: TypeVehicule) => setFiltresType(prev => { const n = new Set(prev); if (n.has(t)) n.delete(t); else n.add(t); return n; });
   const [filtreDept, setFiltreDept] = useState<FiltreDept>('tous');
   const [filtrePretCommercial, setFiltrePretCommercial] = useState<FiltrePretCommercial>('tous');
   const [recherche, setRecherche] = useState('');
@@ -302,7 +303,7 @@ export function VueInventaire() {
         if (filtrePretCommercial === 'location'  && v.etatCommercial !== 'location')   return false;
         if (filtrePretCommercial === 'reserve'   && v.etatCommercial !== 'reserve')    return false;
       }
-      if (filtreType !== 'tous' && v.type !== filtreType) return false;
+      if (filtresType.size > 0 && !filtresType.has(v.type as TypeVehicule)) return false;
       if (filtreDept !== 'tous' && !(v.roadMap ?? []).some(e => e.stationId === filtreDept && (e.statut === 'en-attente' || e.statut === 'en-cours'))) return false;
       return true;
     })
@@ -400,12 +401,23 @@ export function VueInventaire() {
             </button>
           ))}
           <div style={{ width: 1, background: '#e5e7eb', margin: '0 4px' }} />
-          {(['tous', 'eau', 'client', 'detail'] as FiltreType[]).map(id => (
-            <button key={id} onClick={() => setFiltreType(id)}
-              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreType === id ? 'none' : '1px solid #e5e7eb', background: filtreType === id ? '#f97316' : 'white', color: filtreType === id ? 'white' : '#6b7280', fontWeight: filtreType === id ? 700 : 400, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {id === 'eau' ? <><EauIcon /> Eau</> : id === 'tous' ? 'Tous types' : id === 'client' ? '🔧 Client' : '🏷️ Détail'}
-            </button>
-          ))}
+          <button onClick={() => setFiltresType(new Set())}
+            style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtresType.size === 0 ? 'none' : '1px solid #e5e7eb', background: filtresType.size === 0 ? '#374151' : 'white', color: filtresType.size === 0 ? 'white' : '#6b7280', fontWeight: filtresType.size === 0 ? 700 : 400 }}>
+            Tous types
+          </button>
+          {([
+            { id: 'eau'    as TypeVehicule, label: 'Eau',    icon: 'EAU', color: '#f97316' },
+            { id: 'client' as TypeVehicule, label: 'Client', icon: '🔧', color: '#3b82f6' },
+            { id: 'detail' as TypeVehicule, label: 'Détail', icon: '🏷️', color: '#22c55e' },
+          ].map(f => {
+            const actif = filtresType.has(f.id);
+            return (
+              <button key={f.id} onClick={() => toggleType(f.id)}
+                style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: actif ? 'none' : '1px solid #e5e7eb', background: actif ? f.color : 'white', color: actif ? 'white' : '#6b7280', fontWeight: actif ? 700 : 400, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {f.id === 'eau' ? <><EauIcon /> {f.label}</> : `${f.icon} ${f.label}`}
+              </button>
+            );
+          }))}
         </div>
 
         {/* Sub-filtre prêts par statut commercial */}

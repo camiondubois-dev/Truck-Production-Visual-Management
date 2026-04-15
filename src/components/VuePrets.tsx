@@ -4,7 +4,7 @@ import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
-type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
+type TypeVehicule = 'eau' | 'client' | 'detail';
 type FiltreCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location';
 
 function getLabelVehicule(v: VehiculeInventaire): string {
@@ -18,7 +18,8 @@ function getLabelVehicule(v: VehiculeInventaire): string {
 export function VuePrets() {
   const { vehicules, mettreAJourCommercial, archiverVehicule } = useInventaire();
   const { items, archiverItem } = useGarage();
-  const [filtreType, setFiltreType] = useState<FiltreType>('tous');
+  const [filtresType, setFiltresType] = useState<Set<TypeVehicule>>(new Set());
+  const toggleType = (t: TypeVehicule) => setFiltresType(prev => { const n = new Set(prev); if (n.has(t)) n.delete(t); else n.add(t); return n; });
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('tous');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recherche, setRecherche] = useState('');
@@ -36,7 +37,7 @@ export function VuePrets() {
         v.clientAcheteur?.toLowerCase().includes(q) ||
         v.vehicule?.toLowerCase().includes(q);
     })
-    .filter(v => filtreType === 'tous' || v.type === filtreType)
+    .filter(v => filtresType.size === 0 || filtresType.has(v.type as TypeVehicule))
     .filter(v => {
       if (filtreCommercial === 'tous') return true;
       if (filtreCommercial === 'a-vendre') return !v.etatCommercial || v.etatCommercial === 'non-vendu';
@@ -97,17 +98,24 @@ export function VuePrets() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, padding: '12px 24px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>
+          <button onClick={() => setFiltresType(new Set())}
+            style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtresType.size === 0 ? 'none' : '1px solid #e5e7eb', background: filtresType.size === 0 ? '#22c55e' : 'white', color: filtresType.size === 0 ? 'white' : '#6b7280', fontWeight: filtresType.size === 0 ? 700 : 400 }}>
+            Tous <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.8 }}>{prets.length}</span>
+          </button>
           {([
-            { id: 'tous'   as FiltreType, label: 'Tous' },
-            { id: 'eau'    as FiltreType, label: 'Camions à eau' },
-            { id: 'detail' as FiltreType, label: 'Camions détail' },
-            { id: 'client' as FiltreType, label: 'Jobs clients' },
-          ]).map(f => (
-            <button key={f.id} onClick={() => setFiltreType(f.id)}
-              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreType === f.id ? 'none' : '1px solid #e5e7eb', background: filtreType === f.id ? '#22c55e' : 'white', color: filtreType === f.id ? 'white' : '#6b7280', fontWeight: filtreType === f.id ? 700 : 400 }}>
-              {f.label} <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.8 }}>{prets.filter(v => f.id === 'tous' || v.type === f.id).length}</span>
-            </button>
-          ))}
+            { id: 'eau'    as TypeVehicule, label: 'Camions à eau',  color: '#f97316' },
+            { id: 'detail' as TypeVehicule, label: 'Camions détail', color: '#22c55e' },
+            { id: 'client' as TypeVehicule, label: 'Jobs clients',   color: '#3b82f6' },
+          ]).map(f => {
+            const actif = filtresType.has(f.id);
+            return (
+              <button key={f.id} onClick={() => toggleType(f.id)}
+                style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: actif ? 'none' : '1px solid #e5e7eb', background: actif ? f.color : 'white', color: actif ? 'white' : '#6b7280', fontWeight: actif ? 700 : 400 }}>
+                {f.label} <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.8 }}>{prets.filter(v => v.type === f.id).length}</span>
+              </button>
+            );
+          }
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
