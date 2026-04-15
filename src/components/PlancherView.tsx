@@ -415,6 +415,7 @@ export function PlancherView() {
         if (!detailVehicule) return null;
         return (
           <PanneauDetailVehicule
+            key={detailVehicule.id}
             vehicule={detailVehicule}
             item={detailItem}
             onClose={() => setModalState(null)}

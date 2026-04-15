@@ -315,6 +315,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
       {/* ── Panneau détail ──────────────────────────────────── */}
       {selectedVehicule && (
         <PanneauDetailVehicule
+          key={selectedVehicule.id}
           vehicule={selectedVehicule}
           item={selectedItem}
           onClose={() => setSelectedId(null)}

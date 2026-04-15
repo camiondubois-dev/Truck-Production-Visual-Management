@@ -552,6 +552,7 @@ export function VueInventaire() {
 
       {selected && (
         <PanneauDetailVehicule
+          key={selected.id}
           vehicule={selected}
           item={itemByInvId[selected.id]}
           onClose={() => setSelectedId(null)}
