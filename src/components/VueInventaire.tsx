@@ -293,6 +293,8 @@ export function VueInventaire() {
       if (filtreStatut === 'pret' && !v.estPret) return false;
       if (filtreStatut === 'vendu' && v.etatCommercial !== 'vendu' && v.etatCommercial !== 'reserve' && v.etatCommercial !== 'location') return false;
       if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && filtreStatut !== 'vendu' && v.statut !== filtreStatut) return false;
+      // "Disponible" = pas en production ET pas vendu/loué/réservé
+      if (filtreStatut === 'disponible' && v.etatCommercial && v.etatCommercial !== 'non-vendu') return false;
       // Sub-filtre prêt par statut commercial
       if (filtreStatut === 'pret' && filtrePretCommercial !== 'tous') {
         if (filtrePretCommercial === 'a-vendre'  && v.etatCommercial !== 'non-vendu')  return false;
@@ -352,7 +354,7 @@ export function VueInventaire() {
     setSelectedId(null);
   };
 
-  const disponibles = vehicules.filter(v => v.statut === 'disponible').length;
+  const disponibles = vehicules.filter(v => v.statut === 'disponible' && (!v.etatCommercial || v.etatCommercial === 'non-vendu')).length;
   const enProd = vehicules.filter(v => v.statut === 'en-production').length;
 
   return (
