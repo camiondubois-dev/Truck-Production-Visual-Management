@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
 import { fromDB as inventaireFromDB } from '../services/inventaireService';
@@ -9,11 +9,14 @@ import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
 import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
+import type { Item } from '../types/item.types';
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
+import { getSectionVehicule } from './PanneauDetailVehicule';
+import { CarteVehicule, SectionHeaderCard } from './VueAsana';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
 type FiltreType = 'tous' | 'eau' | 'client' | 'detail';
@@ -242,8 +245,18 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
 }
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourType, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
-  const { supprimerItem } = useGarage();
+  const { vehicules, importerVehicules, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
+  const { items, supprimerItem } = useGarage();
+
+  // Map inventaireId → Item (pour CarteVehicule)
+  const itemByInvId = useMemo(() => {
+    const map: Record<string, Item> = {};
+    items.forEach(i => {
+      if (i.inventaireId) map[i.inventaireId] = i;
+      map[i.id] = i;
+    });
+    return map;
+  }, [items]);
   const { profile: session } = useAuth();
   const isGestion = session?.role === 'gestion';
 
@@ -257,7 +270,7 @@ export function VueInventaire() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [erreurImport, setErreurImport] = useState<string | null>(null);
   const [showModalAjout, setShowModalAjout] = useState(false);
-  const [typeOverrides, setTypeOverrides] = useState<Record<string, 'eau' | 'detail'>>({});
+  const [typeOverrides] = useState<Record<string, 'eau' | 'detail'>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -438,96 +451,107 @@ export function VueInventaire() {
           </div>
         )}
 
-        {/* Table */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {vehicules.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun véhicule dans l'inventaire</div>
-              <div style={{ fontSize: 14, marginBottom: 20 }}>Cliquez sur <strong style={{ color: '#22c55e' }}>+ Ajouter</strong> ou importez un fichier Excel</div>
+        {/* Liste style VueAsana (cartes + sections) */}
+        {vehicules.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9ca3af' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun véhicule dans l'inventaire</div>
+            <div style={{ fontSize: 14, marginBottom: 20 }}>Cliquez sur <strong style={{ color: '#22c55e' }}>+ Ajouter</strong> ou importez un fichier Excel</div>
+          </div>
+        ) : (
+          <>
+            {/* En-têtes stations — sticky */}
+            <div style={{
+              display: 'flex', alignItems: 'stretch', flexShrink: 0,
+              borderBottom: '3px solid #e5e7eb', background: '#f8fafc',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ width: 340, minWidth: 340, flexShrink: 0, padding: '12px 16px', fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center' }}>
+                Véhicule
+              </div>
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${ROAD_MAP_STATIONS.length}, 1fr)`, gap: 0 }}>
+                {ROAD_MAP_STATIONS.map(s => (
+                  <div key={s.id} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    padding: '10px 4px', borderLeft: '1px solid #e5e7eb',
+                  }}>
+                    <span style={{ fontSize: 20, marginBottom: 3 }}>{s.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: s.color, textAlign: 'center', lineHeight: 1.2 }}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : filtres.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}><div style={{ fontSize: 14 }}>Aucun résultat pour ces filtres</div></div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  {['Numéro', 'Type', 'Marque', 'Modèle', 'Année', 'Client / Description', 'Statut', ''].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtres.map(v => {
-                  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
-                  const typeBg = v.type === 'eau' ? '#fff7ed' : v.type === 'client' ? '#eff6ff' : '#f0fdf4';
-                  const isSelected = selectedId === v.id;
-                  return (
-                    <tr key={v.id} onClick={() => setSelectedId(isSelected ? null : v.id)}
-                      style={{ borderBottom: '1px solid #e5e7eb', background: isSelected ? `${typeColor}22` : typeBg, borderLeft: isSelected ? `3px solid ${typeColor}` : '3px solid transparent', cursor: 'pointer', transition: 'background 0.1s' }}
-                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = `${typeColor}15`; }}
-                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = typeBg; }}
-                    >
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: typeColor }}>#{v.numero}</span>
-                          {v.estPret && <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Prêt</span>}
-                        </div>
-                      </td>
-                      <td style={{ padding: '8px 16px' }} onClick={e => e.stopPropagation()}>
-                        {v.type === 'client' ? (
-                          <span style={{ fontSize: 12, background: '#3b82f618', color: '#3b82f6', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔧 Client</span>
-                        ) : (
-                          <select value={v.type} onChange={async (e) => { const val = e.target.value as 'eau' | 'detail'; setTypeOverrides(prev => ({ ...prev, [v.id]: val })); await mettreAJourType(v.id, val); setTypeOverrides(prev => { const next = { ...prev }; delete next[v.id]; return next; }); }}
-                            style={{ fontSize: 12, fontWeight: 600, borderRadius: 10, padding: '2px 8px', border: `1px solid ${v.type === 'eau' ? '#f97316' : '#22c55e'}40`, background: `${v.type === 'eau' ? '#f97316' : '#22c55e'}18`, color: v.type === 'eau' ? '#f97316' : '#22c55e', cursor: 'pointer', outline: 'none' }}>
-                            <option value="eau">Eau</option>
-                            <option value="detail">🏷️ Détail</option>
-                          </select>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600 }}>{v.marque ?? '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#6b7280' }}>{v.modele ?? '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#6b7280' }}>{v.annee ?? '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 12, color: '#6b7280', maxWidth: 200 }}>{v.nomClient ?? v.descriptionTravail ?? v.clientAcheteur ?? '—'}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {/* Production status — hide "Disponible" when truck has a commercial status */}
-                          {(() => {
-                            const nonDispo = v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location';
-                            if (v.statut === 'en-production') {
-                              return <span style={{ fontSize: 11, background: '#fff7ed', color: '#c2410c', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>🔧 En production</span>;
-                            }
-                            if (!nonDispo) {
-                              return <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>✅ Disponible</span>;
-                            }
-                            return null;
-                          })()}
-                          {/* Commercial status badge */}
-                          {v.etatCommercial === 'vendu' && (
-                            <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✓ Vendu{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
-                          )}
-                          {v.etatCommercial === 'reserve' && (
-                            <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔒 Réservé{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
-                          )}
-                          {v.etatCommercial === 'location' && (
-                            <span style={{ fontSize: 11, background: '#ede9fe', color: '#6d28d9', padding: '3px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>🔑 Location{v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}</span>
-                          )}
-                          {v.type === 'eau' && (v.aUnReservoir
-                            ? <span style={{ fontSize: 10, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>✅ Réservoir</span>
-                            : <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 8px', borderRadius: 4, fontWeight: 700, width: 'fit-content' }}>⚠️ Sans réservoir</span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        {/* Road map drives production — no manual "Créer job" needed */}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+
+            {/* Liste scrollable */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {filtres.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
+                  <div style={{ fontSize: 14 }}>Aucun résultat pour ces filtres</div>
+                </div>
+              ) : (() => {
+                const aPlanifier   = filtres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
+                const enAttente    = filtres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
+                const dansLeGarage = filtres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
+                const pretsSec     = filtres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
+                const archives     = filtres.filter(v => v.statut === 'archive');
+                return (
+                  <>
+                    {aPlanifier.length > 0 && (
+                      <>
+                        <SectionHeaderCard label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
+                        {aPlanifier.map(v => (
+                          <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={v.type}
+                            selected={selectedId === v.id}
+                            onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                        ))}
+                      </>
+                    )}
+                    {enAttente.length > 0 && (
+                      <>
+                        <SectionHeaderCard label="⏳ En attente" color="#f59e0b" count={enAttente.length} />
+                        {enAttente.map(v => (
+                          <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={v.type}
+                            selected={selectedId === v.id}
+                            onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                        ))}
+                      </>
+                    )}
+                    {dansLeGarage.length > 0 && (
+                      <>
+                        <SectionHeaderCard label="🔧 Dans le garage" color="#3b82f6" count={dansLeGarage.length} />
+                        {dansLeGarage.map(v => (
+                          <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={v.type}
+                            selected={selectedId === v.id}
+                            onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                        ))}
+                      </>
+                    )}
+                    {pretsSec.length > 0 && (
+                      <>
+                        <SectionHeaderCard label="✅ Prêts" color="#22c55e" count={pretsSec.length} />
+                        {pretsSec.map(v => (
+                          <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={v.type}
+                            selected={selectedId === v.id}
+                            onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                        ))}
+                      </>
+                    )}
+                    {archives.length > 0 && (
+                      <>
+                        <SectionHeaderCard label="📦 Archivés" color="#d1d5db" count={archives.length} />
+                        {archives.map(v => (
+                          <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={v.type}
+                            selected={selectedId === v.id}
+                            onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
+                        ))}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </>
+        )}
       </div>
 
       {selected && (

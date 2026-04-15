@@ -20,6 +20,7 @@ interface VueAsanaProps {
 }
 
 type FiltreVue = 'tous' | 'a-planifier' | 'dans-le-garage' | 'en-attente' | 'pret' | string; // string = stationId
+type FiltreCommercial = 'tous' | 'non-vendu' | 'vendu' | 'reserve' | 'location';
 
 // ── Composant principal ──────────────────────────────────────────
 export function VueAsana({ type, config }: VueAsanaProps) {
@@ -28,6 +29,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [filtreActif, setFiltreActif] = useState<FiltreVue>('tous');
+  const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('tous');
   const [showArchives, setShowArchives] = useState(false);
 
   // Map inventaireId → Item pour croiser les données
@@ -84,25 +86,38 @@ export function VueAsana({ type, config }: VueAsanaProps) {
 
   // Filtre actif appliqué
   const vehiculesFiltres = useMemo(() => {
-    if (filtreActif === 'tous') return mesVehicules;
+    let result = mesVehicules;
     if (filtreActif === 'a-planifier') {
-      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
+      result = result.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
+    } else if (filtreActif === 'pret') {
+      result = result.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
+    } else if (filtreActif === 'dans-le-garage') {
+      result = result.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
+    } else if (filtreActif === 'en-attente') {
+      result = result.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
+    } else if (filtreActif !== 'tous') {
+      // Filtre par station
+      result = result.filter(v => {
+        if (!v.roadMap) return false;
+        return v.roadMap.some(s => s.stationId === filtreActif && (s.statut === 'en-attente' || s.statut === 'en-cours'));
+      });
     }
-    if (filtreActif === 'pret') {
-      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'pret');
+    // Filtre commercial (Vendu/Location/Disponible/Réservé)
+    if (filtreCommercial !== 'tous') {
+      result = result.filter(v => (v.etatCommercial ?? 'non-vendu') === filtreCommercial);
     }
-    if (filtreActif === 'dans-le-garage') {
-      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'dans-le-garage');
-    }
-    if (filtreActif === 'en-attente') {
-      return mesVehicules.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'en-attente');
-    }
-    // Filtre par station: camions qui ont cette étape active (en-attente ou en-cours)
-    return mesVehicules.filter(v => {
-      if (!v.roadMap) return false;
-      return v.roadMap.some(s => s.stationId === filtreActif && (s.statut === 'en-attente' || s.statut === 'en-cours'));
+    return result;
+  }, [mesVehicules, filtreActif, filtreCommercial, itemByInvId]);
+
+  // Comptes pour filtres commerciaux
+  const countsCommercial = useMemo(() => {
+    const c = { 'non-vendu': 0, vendu: 0, reserve: 0, location: 0 };
+    mesVehicules.filter(v => v.statut !== 'archive').forEach(v => {
+      const e = (v.etatCommercial ?? 'non-vendu') as keyof typeof c;
+      if (e in c) c[e]++;
     });
-  }, [mesVehicules, filtreActif, itemByInvId]);
+    return c;
+  }, [mesVehicules]);
 
   // Sections
   const aPlanifier   = vehiculesFiltres.filter(v => v.statut !== 'archive' && getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
@@ -163,6 +178,21 @@ export function VueAsana({ type, config }: VueAsanaProps) {
             );
           })}
         </div>
+
+        {/* ── Filtres commerciaux (Vendu / Location / Disponible) ──── */}
+        {type !== 'client' && (
+          <div style={{
+            display: 'flex', gap: 6, padding: '8px 20px 10px', borderBottom: '1px solid #e5e7eb',
+            background: '#fafbfc', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center',
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>Commercial :</span>
+            <FiltreBtn active={filtreCommercial === 'tous'} onClick={() => setFiltreCommercial('tous')} label="Tous" />
+            <FiltreBtn active={filtreCommercial === 'non-vendu'} onClick={() => setFiltreCommercial('non-vendu')} label={`✅ Disponible (${countsCommercial['non-vendu']})`} color="#64748b" />
+            <FiltreBtn active={filtreCommercial === 'vendu'} onClick={() => setFiltreCommercial('vendu')} label={`💰 Vendu (${countsCommercial.vendu})`} color="#22c55e" />
+            <FiltreBtn active={filtreCommercial === 'reserve'} onClick={() => setFiltreCommercial('reserve')} label={`🔒 Réservé (${countsCommercial.reserve})`} color="#f59e0b" />
+            <FiltreBtn active={filtreCommercial === 'location'} onClick={() => setFiltreCommercial('location')} label={`🔑 Location (${countsCommercial.location})`} color="#7c3aed" />
+          </div>
+        )}
 
         {/* ── En-têtes stations fixes + liste ─────────────────── */}
         {mesVehicules.filter(v => v.statut !== 'archive').length === 0 ? (
@@ -294,7 +324,7 @@ function StatPill({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function FiltreBtn({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color?: string }) {
+export function FiltreBtn({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color?: string }) {
   const c = color ?? '#6b7280';
   return (
     <button onClick={onClick}
@@ -311,7 +341,7 @@ function FiltreBtn({ active, onClick, label, color }: { active: boolean; onClick
   );
 }
 
-function SectionHeaderCard({ label, color, count, onClick, clickable }: {
+export function SectionHeaderCard({ label, color, count, onClick, clickable }: {
   label: string; color: string; count: number; onClick?: () => void; clickable?: boolean;
 }) {
   return (
@@ -341,7 +371,7 @@ function getLabelVehicule(v: VehiculeInventaire): string {
 
 // ── CarteVehicule ────────────────────────────────────────────────
 
-function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
+export function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
   vehicule: VehiculeInventaire;
   item?: Item;
   type: TypeItem;

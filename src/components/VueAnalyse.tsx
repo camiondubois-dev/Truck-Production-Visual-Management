@@ -31,6 +31,7 @@ interface Filters {
   reservoir?: 'avec' | 'sans';
   aging?: string;         // bin label
   alerte?: 'vendu-pas-pret' | 'ecart-reservoir';
+  vendusPret?: 'pret' | 'pas-pret';  // Sous-filtre des vendus : prêts ou pas prêts
 }
 
 const FILTER_LABELS: Record<string, string> = {
@@ -342,8 +343,26 @@ export function VueAnalyse() {
     if (filters.alerte === 'ecart-reservoir') {
       result = result.filter(v => !v.aUnReservoir && v.statut !== 'archive');
     }
+    // Sous-filtre des vendus : prêts ou pas prêts (ne s'applique que si commercial='vendu')
+    if (filters.commercial === 'vendu' && filters.vendusPret) {
+      if (filters.vendusPret === 'pret') {
+        result = result.filter(v => v.estPret);
+      } else {
+        result = result.filter(v => !v.estPret);
+      }
+    }
     return result;
   }, [camionsEau, filters]);
+
+  // Compteurs vendus prêts / pas prêts
+  const vendusStats = useMemo(() => {
+    const vendus = camionsEau.filter(v => getCommercial(v) === 'vendu');
+    return {
+      total: vendus.length,
+      prets: vendus.filter(v => v.estPret).length,
+      pasPrets: vendus.filter(v => !v.estPret).length,
+    };
+  }, [camionsEau]);
 
   // ── Catégories principales ────────────────────────────────
   const prets = useMemo(() => camionsFiltres.filter(v => v.estPret), [camionsFiltres]);
@@ -1112,6 +1131,60 @@ export function VueAnalyse() {
           />
         </Section>
       </div>
+
+      {/* ── SOUS-FILTRE VENDUS : PRÊTS / PAS PRÊTS ── */}
+      {filters.commercial === 'vendu' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '12px 16px', marginBottom: 16, borderRadius: 10,
+          background: 'rgba(34,197,94,0.08)',
+          border: '1px solid rgba(34,197,94,0.3)',
+        }}>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: 600 }}>
+            💰 Vendus ({vendusStats.total}) :
+          </span>
+          <button
+            onClick={() => toggleFilter('vendusPret', 'pret')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: filters.vendusPret === 'pret' ? '#22c55e' : 'rgba(255,255,255,0.06)',
+              color: filters.vendusPret === 'pret' ? '#fff' : 'rgba(255,255,255,0.75)',
+              border: `1px solid ${filters.vendusPret === 'pret' ? '#22c55e' : 'rgba(255,255,255,0.15)'}`,
+            }}
+          >
+            ✅ Prêts ({vendusStats.prets})
+          </button>
+          <button
+            onClick={() => toggleFilter('vendusPret', 'pas-pret')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: filters.vendusPret === 'pas-pret' ? '#ef4444' : 'rgba(255,255,255,0.06)',
+              color: filters.vendusPret === 'pas-pret' ? '#fff' : 'rgba(255,255,255,0.75)',
+              border: `1px solid ${filters.vendusPret === 'pas-pret' ? '#ef4444' : 'rgba(255,255,255,0.15)'}`,
+            }}
+          >
+            ⏳ Pas prêts ({vendusStats.pasPrets})
+          </button>
+          {filters.vendusPret && (
+            <button
+              onClick={() => toggleFilter('vendusPret', filters.vendusPret)}
+              style={{
+                marginLeft: 'auto',
+                padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                cursor: 'pointer',
+                background: 'transparent', color: 'rgba(255,255,255,0.5)',
+                border: '1px solid rgba(255,255,255,0.15)',
+              }}
+            >
+              ✕ Retirer sous-filtre
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── TABLEAU DÉTAILLÉ CAMIONS ── */}
       <Section title={`Détail camions à eau (${camionsFiltres.length}${hasFilters ? ` / ${camionsEau.length}` : ''})`} icon="🚛"
