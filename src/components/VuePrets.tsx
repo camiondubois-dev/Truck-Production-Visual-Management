@@ -21,10 +21,21 @@ export function VuePrets() {
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('tous');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [recherche, setRecherche] = useState('');
 
   const prets = vehicules.filter(v => v.estPret === true);
 
   const filtres = prets
+    .filter(v => {
+      if (!recherche.trim()) return true;
+      const q = recherche.trim().toLowerCase();
+      return v.numero?.toLowerCase().includes(q) ||
+        v.marque?.toLowerCase().includes(q) ||
+        v.modele?.toLowerCase().includes(q) ||
+        v.nomClient?.toLowerCase().includes(q) ||
+        v.clientAcheteur?.toLowerCase().includes(q) ||
+        v.vehicule?.toLowerCase().includes(q);
+    })
     .filter(v => filtreType === 'tous' || v.type === filtreType)
     .filter(v => {
       if (filtreCommercial === 'tous') return true;
@@ -76,6 +87,13 @@ export function VuePrets() {
               </button>
             ))}
           </div>
+          <input
+            type="text"
+            placeholder="Rechercher #, client, marque..."
+            value={recherche}
+            onChange={e => setRecherche(e.target.value)}
+            style={{ padding: '7px 12px', borderRadius: 7, border: '1px solid #e5e7eb', fontSize: 13, width: 220, outline: 'none' }}
+          />
         </div>
 
         <div style={{ display: 'flex', gap: 8, padding: '12px 24px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>

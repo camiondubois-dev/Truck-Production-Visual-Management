@@ -31,6 +31,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const [filtreActif, setFiltreActif] = useState<FiltreVue>('tous');
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('tous');
   const [showArchives, setShowArchives] = useState(false);
+  const [recherche, setRecherche] = useState('');
 
   // Map inventaireId → Item pour croiser les données
   // Inclut aussi un mapping par item.id pour les orphelins sans inventaireId
@@ -87,6 +88,18 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   // Filtre actif appliqué
   const vehiculesFiltres = useMemo(() => {
     let result = mesVehicules;
+    // Recherche textuelle (filtre in-memory, instantané)
+    if (recherche.trim()) {
+      const q = recherche.trim().toLowerCase();
+      result = result.filter(v =>
+        v.numero?.toLowerCase().includes(q) ||
+        v.marque?.toLowerCase().includes(q) ||
+        v.modele?.toLowerCase().includes(q) ||
+        v.nomClient?.toLowerCase().includes(q) ||
+        v.clientAcheteur?.toLowerCase().includes(q) ||
+        v.vehicule?.toLowerCase().includes(q)
+      );
+    }
     if (filtreActif === 'a-planifier') {
       result = result.filter(v => getSectionVehicule(v, itemByInvId[v.id]) === 'a-planifier');
     } else if (filtreActif === 'pret') {
@@ -107,7 +120,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
       result = result.filter(v => (v.etatCommercial ?? 'non-vendu') === filtreCommercial);
     }
     return result;
-  }, [mesVehicules, filtreActif, filtreCommercial, itemByInvId]);
+  }, [mesVehicules, filtreActif, filtreCommercial, itemByInvId, recherche]);
 
   // Comptes pour filtres commerciaux
   const countsCommercial = useMemo(() => {
@@ -152,10 +165,19 @@ export function VueAsana({ type, config }: VueAsanaProps) {
             <StatPill label="Dans le garage" value={dansLeGarage.length} color="#3b82f6" />
             <StatPill label="Prêts"          value={prets.length}        color="#22c55e" />
           </div>
-          <button onClick={() => setShowModal(true)}
-            style={{ background: config.color, color: 'white', border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            + Nouveau
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="text"
+              placeholder="Rechercher #, client, marque..."
+              value={recherche}
+              onChange={e => setRecherche(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 7, border: '1px solid #e5e7eb', fontSize: 13, width: 220, outline: 'none' }}
+            />
+            <button onClick={() => setShowModal(true)}
+              style={{ background: config.color, color: 'white', border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              + Nouveau
+            </button>
+          </div>
         </div>
 
         {/* ── Barre de filtres ────────────────────────────────── */}

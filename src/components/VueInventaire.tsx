@@ -2,20 +2,16 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
 import { fromDB as inventaireFromDB } from '../services/inventaireService';
-import { photoService } from '../services/photoService';
-import { supabase } from '../lib/supabase';
-import { reservoirService } from '../services/reservoirService';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
-import type { VehiculeInventaire, EtapeFaite } from '../types/inventaireTypes';
+import type { VehiculeInventaire } from '../types/inventaireTypes';
 import type { Item } from '../types/item.types';
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
 import type { Client } from '../types/clientTypes';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
-import { RoadMapEditor } from './RoadMapEditor';
-import { getSectionVehicule } from './PanneauDetailVehicule';
+import { getSectionVehicule, PanneauDetailVehicule } from './PanneauDetailVehicule';
 import { CarteVehicule, SectionHeaderCard } from './VueAsana';
 
 type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
@@ -245,7 +241,7 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
 }
 
 export function VueInventaire() {
-  const { vehicules, importerVehicules, marquerDisponible, supprimerVehicule, ajouterVehicule, mettreAJourEtapes, mettreAJourReservoir, marquerPret, mettreAJourRoadMap } = useInventaire();
+  const { vehicules, importerVehicules, marquerDisponible, supprimerVehicule, ajouterVehicule } = useInventaire();
   const { items, supprimerItem } = useGarage();
 
   // Map inventaireId → Item (pour CarteVehicule)
@@ -555,18 +551,10 @@ export function VueInventaire() {
       </div>
 
       {selected && (
-        <PanneauDetailInventaire
+        <PanneauDetailVehicule
           vehicule={selected}
+          item={itemByInvId[selected.id]}
           onClose={() => setSelectedId(null)}
-          onRetourInventaire={() => retournerEnInventaire(selected)}
-          onSupprimer={() => { supprimerVehicule(selected.id); setSelectedId(null); }}
-          isGestion={isGestion}
-          onEtapesChange={mettreAJourEtapes}
-          onReservoirChange={mettreAJourReservoir}
-          onMarquerPret={marquerPret}
-          onMettreAJour={(updated) => {
-            mettreAJourRoadMap(updated.id, updated.roadMap ?? []);
-          }}
         />
       )}
 
@@ -576,309 +564,6 @@ export function VueInventaire() {
           onClose={() => setShowModalAjout(false)}
         />
       )}
-    </div>
-  );
-}
-
-function PanneauDetailInventaire({ vehicule: v, onClose, onRetourInventaire, onSupprimer, isGestion, onEtapesChange, onReservoirChange, onMarquerPret, onMettreAJour }: {
-  vehicule: VehiculeInventaire;
-  onClose: () => void;
-  onRetourInventaire: () => void;
-  onSupprimer: () => void;
-  isGestion: boolean;
-  onEtapesChange: (id: string, etapes: EtapeFaite[]) => Promise<void>;
-  onReservoirChange: (id: string, aUnReservoir: boolean, reservoirId: string | null) => Promise<void>;
-  onMarquerPret: (id: string, estPret: boolean) => Promise<void>;
-  onMettreAJour: (updated: VehiculeInventaire) => void;
-}) {
-  const [activeTab, setActiveTab] = useState<'info' | 'roadmap'>('info');
-  const [confirmerSuppression, setConfirmerSuppression] = useState(false);
-  const [confirmerRetour, setConfirmerRetour] = useState(false);
-  const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
-  const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
-  const [reservoirSelectionne, setReservoirSelectionne] = useState<string>('');
-  const [savingReservoir, setSavingReservoir] = useState(false);
-  const [savingPret, setSavingPret] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { mettreAJourPhotoInventaire } = useInventaire();
-  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
-  const typeLabel = v.type === 'eau' ? 'Camion à eau' : v.type === 'client' ? 'Client externe' : 'Camion détail';
-
-  useEffect(() => {
-    if (v.type !== 'eau') return;
-    if (v.aUnReservoir && v.reservoirId) {
-      supabase.from('prod_reservoirs').select('numero,type').eq('id', v.reservoirId).maybeSingle()
-        .then(({ data }) => setReservoirInstalle(data ? { numero: data.numero, type: data.type } : null));
-    } else if (!v.aUnReservoir) {
-      supabase.from('prod_reservoirs').select('id,numero,type').eq('etat', 'disponible')
-        .then(({ data }) => setReservoirsDisponibles((data ?? []).map((r: any) => ({ id: r.id, numero: r.numero, type: r.type }))));
-    }
-  }, [v.id, v.type, v.aUnReservoir, v.reservoirId]);
-
-  const handleAssignerReservoir = async () => {
-    if (!reservoirSelectionne) return;
-    setSavingReservoir(true);
-    try {
-      await reservoirService.installerSurInventaire(reservoirSelectionne, v.id);
-      await onReservoirChange(v.id, true, reservoirSelectionne);
-    } finally { setSavingReservoir(false); }
-  };
-
-  const handleMarquerAvecReservoir = async () => {
-    setSavingReservoir(true);
-    try {
-      await onReservoirChange(v.id, true, null);
-      if (v.jobId) {
-        await supabase.from('prod_items').update({ a_un_reservoir: true, reservoir_id: null }).eq('inventaire_id', v.id);
-      }
-    } finally { setSavingReservoir(false); }
-  };
-
-  const handleRetirerReservoir = async () => {
-    setSavingReservoir(true);
-    try {
-      if (v.reservoirId) {
-        await reservoirService.desinstallerDeInventaire(v.reservoirId, v.id);
-      }
-      await onReservoirChange(v.id, false, null);
-    } finally { setSavingReservoir(false); }
-  };
-
-
-  return (
-    <div style={{ position: 'fixed', right: 0, top: 0, width: 400, height: '100dvh', background: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150 }}>
-      <div style={{ padding: 24 }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af' }}>✕</button>
-
-        {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 700, color: typeColor, marginBottom: 4 }}>#{v.numero}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, background: `${typeColor}18`, color: typeColor, padding: '3px 10px', borderRadius: 10, fontWeight: 600 }}>{typeLabel}</span>
-            {v.variante && <span style={{ fontSize: 12, background: '#f1f5f9', color: '#374151', padding: '3px 10px', borderRadius: 10, fontWeight: 600 }}>{v.variante}</span>}
-            {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>✅ Prêt</span>}
-          </div>
-        </div>
-
-        {/* Tab switcher */}
-        <div style={{ display: 'flex', gap: 4, paddingBottom: 16, borderBottom: '1px solid #e5e7eb', marginBottom: 16 }}>
-          {(['info', 'roadmap'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: activeTab === tab ? 700 : 400, fontSize: 13,
-                background: activeTab === tab ? '#111827' : '#f1f5f9',
-                color: activeTab === tab ? 'white' : '#6b7280',
-              }}>
-              {tab === 'info' ? '📋 Infos' : '🗺️ Road Map'}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'roadmap' && (
-          <div>
-            {/* Road map summary badges */}
-            {(v.roadMap ?? []).length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-                {(['en-attente','en-cours'] as const).map(st => {
-                  const n = (v.roadMap??[]).filter(e=>e.statut===st).length;
-                  if (!n) return null;
-                  const cfg = st === 'en-cours' ? {bg:'#eff6ff',color:'#1d4ed8'} : {bg:'#fff7ed',color:'#c2410c'};
-                  return <span key={st} style={{fontSize:11,padding:'2px 10px',borderRadius:10,fontWeight:700,background:cfg.bg,color:cfg.color}}>{st==='en-cours'?'🔵':'⏳'} {n} {st==='en-cours'?'en cours':'en attente'}</span>;
-                })}
-              </div>
-            )}
-            <RoadMapEditor
-              vehicule={v}
-              onSaved={updated => onMettreAJour(updated)}
-              compact={false}
-            />
-          </div>
-        )}
-
-        {activeTab === 'info' && <>
-
-        {/* Photo */}
-        <div style={{ marginBottom: 20 }}>
-          {v.photoUrl ? (
-            <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-              <img src={v.photoUrl} alt={`Photo #${v.numero}`} style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
-              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
-                <label style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 11, fontWeight: 600 }}>
-                  Changer
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
-                    const f = e.target.files?.[0]; if (!f) return;
-                    setUploadingPhoto(true);
-                    try {
-                      if (v.photoUrl) await photoService.supprimerPhoto(v.photoUrl);
-                      const url = await photoService.uploaderPhoto(f, 'inventaire');
-                      await mettreAJourPhotoInventaire(v.id, url);
-                    } finally { setUploadingPhoto(false); }
-                  }} />
-                </label>
-                <button onClick={async () => { if (!v.photoUrl) return; await photoService.supprimerPhoto(v.photoUrl); await mettreAJourPhotoInventaire(v.id, null); }}
-                  style={{ padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'rgba(220,38,38,0.8)', color: 'white', fontSize: 11, fontWeight: 600, border: 'none' }}>
-                  Supprimer
-                </button>
-              </div>
-              {uploadingPhoto && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 13, fontWeight: 600 }}>Chargement...</div>}
-            </div>
-          ) : (
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', borderRadius: 10, border: '2px dashed #d1d5db', cursor: uploadingPhoto ? 'wait' : 'pointer', background: '#fafafa', color: '#9ca3af', fontSize: 13, fontWeight: 500 }}>
-              {uploadingPhoto ? 'Chargement...' : '📷 Ajouter une photo'}
-              <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploadingPhoto} onChange={async e => {
-                const f = e.target.files?.[0]; if (!f) return;
-                setUploadingPhoto(true);
-                try {
-                  const url = await photoService.uploaderPhoto(f, 'inventaire');
-                  await mettreAJourPhotoInventaire(v.id, url);
-                } finally { setUploadingPhoto(false); }
-              }} />
-            </label>
-          )}
-        </div>
-
-        {/* Statut */}
-        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: v.etatCommercial && v.etatCommercial !== 'non-vendu' ? 8 : 20, background: v.statut === 'disponible' ? '#f0fdf4' : '#fff7ed', border: `1px solid ${v.statut === 'disponible' ? '#86efac' : '#fed7aa'}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: v.statut === 'disponible' ? '#166534' : '#c2410c' }}>
-            {v.statut === 'disponible' ? '✅ Disponible' : '🔧 En production'}
-          </div>
-          {v.dateEnProduction && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Mis en production le {new Date(v.dateEnProduction).toLocaleDateString('fr-CA')}</div>}
-        </div>
-
-        {/* Statut commercial */}
-        {v.etatCommercial && v.etatCommercial !== 'non-vendu' && (() => {
-          const cfg = v.etatCommercial === 'vendu'
-            ? { bg: '#f0fdf4', border: '#86efac', color: '#166534', label: `✓ Vendu${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` }
-            : v.etatCommercial === 'reserve'
-            ? { bg: '#fefce8', border: '#fde68a', color: '#92400e', label: `🔒 Réservé${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` }
-            : { bg: '#f5f3ff', border: '#c4b5fd', color: '#6d28d9', label: `🔑 Location${v.clientAcheteur ? ` — ${v.clientAcheteur}` : ''}` };
-          return (
-            <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 20, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{cfg.label}</div>
-              {v.dateLivraisonPlanifiee && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>📅 Livraison planifiée : {new Date(v.dateLivraisonPlanifiee).toLocaleDateString('fr-CA')}</div>}
-            </div>
-          );
-        })()}
-
-        {/* Réservoir */}
-        {v.type === 'eau' && (
-          <div style={{ marginBottom: 20, padding: '14px 16px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fafafa' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Réservoir</div>
-            {v.aUnReservoir ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: 8, fontWeight: 700 }}>✅ Réservoir installé</span>
-                  {reservoirInstalle && <span style={{ fontSize: 11, color: '#6b7280', fontFamily: 'monospace' }}>#{reservoirInstalle.numero} — {reservoirInstalle.type}</span>}
-                </div>
-                <button onClick={handleRetirerReservoir} disabled={savingReservoir} style={{ padding: '7px 14px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer', border: '1px solid #fca5a5', background: 'white', color: '#ef4444', fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
-                  {savingReservoir ? 'En cours...' : 'Retirer le réservoir'}
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>Assigner un réservoir de l'inventaire</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <select value={reservoirSelectionne} onChange={e => setReservoirSelectionne(e.target.value)} style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', color: reservoirSelectionne ? '#111827' : '#9ca3af' }}>
-                      <option value="">— Choisir un réservoir —</option>
-                      {reservoirsDisponibles.map(r => (<option key={r.id} value={r.id}>#{r.numero} ({r.type})</option>))}
-                    </select>
-                    <button onClick={handleAssignerReservoir} disabled={!reservoirSelectionne || savingReservoir} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', cursor: !reservoirSelectionne || savingReservoir ? 'not-allowed' : 'pointer', background: !reservoirSelectionne || savingReservoir ? '#e5e7eb' : '#f97316', color: !reservoirSelectionne || savingReservoir ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 12 }}>
-                      {savingReservoir ? '...' : 'Assigner'}
-                    </button>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
-                  <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>ou</span>
-                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
-                </div>
-                <button onClick={handleMarquerAvecReservoir} disabled={savingReservoir} style={{ padding: '8px', borderRadius: 7, cursor: savingReservoir ? 'wait' : 'pointer', border: '1px solid #d1d5db', background: 'white', color: '#374151', fontSize: 12, fontWeight: 600, opacity: savingReservoir ? 0.5 : 1 }}>
-                  {savingReservoir ? 'En cours...' : '✅ Marquer comme ayant un réservoir'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Informations */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Informations</div>
-          <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 2 }}>
-            {v.marque && <div><span style={{ fontWeight: 600, color: '#374151' }}>Marque :</span> {v.marque}</div>}
-            {v.modele && <div><span style={{ fontWeight: 600, color: '#374151' }}>Modèle :</span> {v.modele}</div>}
-            {v.annee && <div><span style={{ fontWeight: 600, color: '#374151' }}>Année :</span> {v.annee}</div>}
-            {v.clientAcheteur && <div><span style={{ fontWeight: 600, color: '#374151' }}>Client acheteur :</span> {v.clientAcheteur}</div>}
-            {v.nomClient && <div><span style={{ fontWeight: 600, color: '#374151' }}>Client :</span> {v.nomClient}</div>}
-            {v.telephone && <div><span style={{ fontWeight: 600, color: '#374151' }}>Téléphone :</span> {v.telephone}</div>}
-            {v.vehicule && <div><span style={{ fontWeight: 600, color: '#374151' }}>Véhicule :</span> {v.vehicule}</div>}
-            {v.descriptionTravail && <div><span style={{ fontWeight: 600, color: '#374151' }}>Travail :</span> {v.descriptionTravail}</div>}
-            {v.descriptionTravaux && <div><span style={{ fontWeight: 600, color: '#374151' }}>Travaux :</span> {v.descriptionTravaux}</div>}
-            {v.notes && <div><span style={{ fontWeight: 600, color: '#374151' }}>Notes :</span> {v.notes}</div>}
-            <div><span style={{ fontWeight: 600, color: '#374151' }}>Importé le :</span> {new Date(v.dateImport).toLocaleDateString('fr-CA')}</div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          {/* Marquer comme prêt / Annuler prêt — disponible pour tout véhicule non archivé */}
-          {v.statut !== 'archive' && (
-            !v.estPret ? (
-              <button onClick={async () => { setSavingPret(true); try { await onMarquerPret(v.id, true); } finally { setSavingPret(false); } }}
-                disabled={savingPret}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: savingPret ? '#86efac' : '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: savingPret ? 'wait' : 'pointer', opacity: savingPret ? 0.7 : 1 }}>
-                {savingPret ? 'En cours...' : '✅ Marquer comme prêt'}
-              </button>
-            ) : (
-              <button onClick={async () => { setSavingPret(true); try { await onMarquerPret(v.id, false); } finally { setSavingPret(false); } }}
-                disabled={savingPret}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', color: '#6b7280', fontWeight: 700, fontSize: 14, cursor: savingPret ? 'wait' : 'pointer' }}>
-                {savingPret ? 'En cours...' : '↩ Annuler — pas encore prêt'}
-              </button>
-            )
-          )}
-
-          {/* Retour inventaire */}
-          {v.statut === 'en-production' && (
-            !confirmerRetour ? (
-              <button onClick={() => setConfirmerRetour(true)}
-                style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                ↩ Retourner en inventaire
-              </button>
-            ) : (
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>Retourner ce véhicule en inventaire?</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Le job de production associé sera supprimé et le véhicule redeviendra disponible.</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setConfirmerRetour(false)} style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Annuler</button>
-                  <button onClick={() => { onRetourInventaire(); setConfirmerRetour(false); }} style={{ flex: 1, padding: '8px', borderRadius: 6, border: 'none', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>↩ Confirmer</button>
-                </div>
-              </div>
-            )
-          )}
-
-          {/* Supprimer */}
-          {isGestion && (
-            !confirmerSuppression ? (
-              <button onClick={() => setConfirmerSuppression(true)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                🗑 Supprimer de l'inventaire
-              </button>
-            ) : (
-              <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 8, padding: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>⚠️ Confirmer la suppression?</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Cette action est irréversible.</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setConfirmerSuppression(false)} style={{ flex: 1, padding: '8px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Annuler</button>
-                  <button onClick={onSupprimer} style={{ flex: 1, padding: '8px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>🗑 Supprimer</button>
-                </div>
-              </div>
-            )
-          )}
-        </div>
-        </>}
-      </div>
     </div>
   );
 }
