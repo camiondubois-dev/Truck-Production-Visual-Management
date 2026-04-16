@@ -84,13 +84,6 @@ export function PlancherView() {
     return map;
   }, [items]);
 
-  // Index inventaireId → VehiculeInventaire (pour lire le road_map depuis les cartes)
-  const vehiculeByInvId = useMemo(() => {
-    const map: Record<string, VehiculeInventaire> = {};
-    vehiculesComplets.forEach(v => { map[v.id] = v; });
-    return map;
-  }, [vehiculesComplets]);
-
   // Véhicules COMPLETS : prod_inventaire + items orphelins (prod_items sans prod_inventaire)
   // Identique à la logique de VueAsana — même source de données partout
   const vehiculesComplets = useMemo(() => {
@@ -123,6 +116,13 @@ export function PlancherView() {
       }));
     return [...vehicules, ...orphelins];
   }, [vehicules, items]);
+
+  // Index inventaireId → VehiculeInventaire (pour lire le road_map depuis les cartes)
+  const vehiculeByInvId = useMemo(() => {
+    const map: Record<string, VehiculeInventaire> = {};
+    vehiculesComplets.forEach(v => { map[v.id] = v; });
+    return map;
+  }, [vehiculesComplets]);
 
   // Reorder atomique : reçoit la nouvelle liste ordonnée depuis StationBlock,
   // calcule les priorités 1..N pour chaque véhicule et sauvegarde en un seul appel
