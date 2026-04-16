@@ -301,7 +301,7 @@ const DEPARTEMENTS_CONFIG: Record<string, DepartementConfig> = {
   'soudure-generale':    { label: 'Soudure générale',      icon: '🔥', color: '#f97316', cols: 1, slots: ['17'] },
   'mecanique-generale':  { label: 'Mécanique générale',    icon: '🔧', color: '#3b82f6', cols: 2, slots: ['9A', '10A', '9B', '10B'] },
   'mecanique-moteur':    { label: 'Mécanique moteur',      icon: '⚙️', color: '#3b82f6', cols: 3, slots: ['11', '12', '13', '16', '15', '14'] },
-  'sous-traitants':      { label: 'Sous-traitants',        icon: '🤝', color: '#a855f7', cols: 2, slots: ['S-01', 'S-02', 'S-03', 'S-04', 'S-05', 'S-06'] },
+  'sous-traitants':      { label: 'Sous-traitants',        icon: '🤝', color: '#a855f7', cols: 4, slots: ['S-01', 'S-02', 'S-03', 'S-04', 'S-05', 'S-06', 'S-07', 'S-08', 'S-09', 'S-10', 'S-11', 'S-12'] },
   'soudure-specialisee': { label: 'Soudure spécialisée', icon: '⚡', color: '#f97316', cols: 2, slots: ['5', '6', '4', '3'] },
   'peinture':            { label: 'Peinture',              icon: '🎨', color: '#6b7280', cols: 2, slots: ['7', '8', '2', '1'] },
 };

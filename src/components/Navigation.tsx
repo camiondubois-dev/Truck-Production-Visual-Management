@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
@@ -26,6 +27,12 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
   const { items } = useGarage();
 
   const pretsCount = items.filter(i => i.etat !== 'termine' && toutesEtapesCompletees(i)).length;
+
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div style={{
@@ -106,10 +113,27 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
         );
       })}
 
+      {/* Horloge */}
+      <div style={{
+        marginLeft: 'auto',
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+        gap: 1, padding: '0 8px',
+      }}>
+        <span style={{
+          fontFamily: 'monospace', fontSize: 17, fontWeight: 700,
+          color: 'white', letterSpacing: '0.05em', lineHeight: 1,
+        }}>
+          {now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1 }}>
+          {now.toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' })}
+        </span>
+      </div>
+
       <button
         onClick={() => deconnexion()}
         style={{
-          marginLeft: 'auto', background: 'transparent',
+          background: 'transparent',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 6, color: 'rgba(255,255,255,0.3)',
           padding: '6px 14px', cursor: 'pointer',
