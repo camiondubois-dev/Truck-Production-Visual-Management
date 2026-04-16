@@ -272,7 +272,7 @@ export function PlancherView() {
         width: '100%', height: '100%',
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 3fr',
-        gridTemplateRows: '1fr 1fr',
+        gridTemplateRows: '1fr auto auto',
         gap: '8px', padding: '8px',
         background: '#0f0e0b',
         boxSizing: 'border-box',
@@ -302,9 +302,9 @@ export function PlancherView() {
 
       <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
 
-      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
+      <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '1 / -1', gridRow: '2' }} />
 
-      <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
+      <div style={{ gridColumn: '1 / -1', gridRow: '3', display: 'flex', gap: 6, minHeight: 0 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-specialisee')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
         <PeintureStationBlock station={STATIONS.find((s) => s.id === 'peinture')!} />
       </div>
