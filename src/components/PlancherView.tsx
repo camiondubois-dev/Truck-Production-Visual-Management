@@ -302,10 +302,6 @@ export function PlancherView() {
 
       <StationBlock station={STATIONS.find((s) => s.id === 'mecanique-moteur')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '3', gridRow: '1' }} />
 
-      <div style={{ gridColumn: '1', gridRow: '2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <HorlogeWidget />
-      </div>
-
       <StationBlock station={STATIONS.find((s) => s.id === 'sous-traitants')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} style={{ gridColumn: '2', gridRow: '2' }} />
 
       <div style={{ gridColumn: '3', gridRow: '2', display: 'flex', gap: 6, minHeight: 0 }}>
@@ -608,55 +604,6 @@ function ModalJobOccupe({ item, slot, position, onVider, onClose }: {
       >
         Fermer
       </button>
-    </div>
-  );
-}
-
-function HorlogeWidget() {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const heure = now.toLocaleTimeString('fr-CA', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  });
-
-  const date = now.toLocaleDateString('fr-CA', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
-
-  const fuseau = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  return (
-    <div style={{
-      background: '#161410',
-      border: '1.5px solid rgba(255,255,255,0.08)',
-      borderRadius: 12, padding: '20px 28px',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', gap: 8,
-      width: '100%', boxSizing: 'border-box',
-    }}>
-      <div style={{
-        fontFamily: 'monospace', fontSize: 'clamp(28px, 3.5vw, 48px)',
-        fontWeight: 900, color: '#005AA0', letterSpacing: '0.05em', lineHeight: 1,
-      }}>
-        {heure}
-      </div>
-      <div style={{
-        fontSize: 'clamp(10px, 1.1vw, 14px)', color: 'rgba(255,255,255,0.6)',
-        fontWeight: 600, textTransform: 'capitalize', textAlign: 'center',
-      }}>
-        {date}
-      </div>
-      <div style={{
-        fontSize: 'clamp(8px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.25)',
-        fontFamily: 'monospace', letterSpacing: '0.05em',
-      }}>
-        {fuseau}
-      </div>
     </div>
   );
 }
