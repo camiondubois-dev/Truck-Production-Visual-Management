@@ -117,13 +117,6 @@ export function PlancherView() {
     return [...vehicules, ...orphelins];
   }, [vehicules, items]);
 
-  // Index inventaireId → VehiculeInventaire (pour lire le road_map depuis les cartes)
-  const vehiculeByInvId = useMemo(() => {
-    const map: Record<string, VehiculeInventaire> = {};
-    vehiculesComplets.forEach(v => { map[v.id] = v; });
-    return map;
-  }, [vehiculesComplets]);
-
   // Reorder atomique : reçoit la nouvelle liste ordonnée depuis StationBlock,
   // calcule les priorités 1..N pour chaque véhicule et sauvegarde en un seul appel
   const handleReorder = useCallback(async (newOrder: QueueEntry[]) => {
@@ -694,6 +687,13 @@ interface StationBlockProps {
 
 function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, onOpenDetail, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
+
+  // Index inventaireId → VehiculeInventaire (pour la description sous-traitant sur les fiches)
+  const vehiculeByInvId = useMemo(() => {
+    const map: Record<string, VehiculeInventaire> = {};
+    vehicules.forEach(v => { map[v.id] = v; });
+    return map;
+  }, [vehicules]);
 
   // File d'attente : road_map en-attente = source de vérité + fallback prod_items
   const finalQueue = useMemo((): QueueEntry[] => {
