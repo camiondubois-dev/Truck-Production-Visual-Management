@@ -84,6 +84,13 @@ export function PlancherView() {
     return map;
   }, [items]);
 
+  // Index inventaireId → VehiculeInventaire (pour lire le road_map depuis les cartes)
+  const vehiculeByInvId = useMemo(() => {
+    const map: Record<string, VehiculeInventaire> = {};
+    vehiculesComplets.forEach(v => { map[v.id] = v; });
+    return map;
+  }, [vehiculesComplets]);
+
   // Véhicules COMPLETS : prod_inventaire + items orphelins (prod_items sans prod_inventaire)
   // Identique à la logique de VueAsana — même source de données partout
   const vehiculesComplets = useMemo(() => {
@@ -868,6 +875,13 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
             onSlotClick={onSlotClick}
             isOptional={station.optional}
             onOpenDetail={onOpenDetail}
+            soustraitantDesc={
+              slotMap[slot.id]?.inventaireId
+                ? vehiculeByInvId[slotMap[slot.id]!.inventaireId!]?.roadMap
+                    ?.find(e => e.stationId === 'sous-traitants' && e.description && (e.statut === 'en-cours' || e.statut === 'en-attente'))
+                    ?.description
+                : undefined
+            }
           />
         ))}
       </div>
@@ -1065,9 +1079,10 @@ interface SlotCardSimpleProps {
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   isOptional?: boolean;
   onOpenDetail?: (vehiculeId: string) => void;
+  soustraitantDesc?: string;
 }
 
-function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional, onOpenDetail }: SlotCardSimpleProps) {
+function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional, onOpenDetail, soustraitantDesc }: SlotCardSimpleProps) {
   const isTempJob = item && (item.type === 'export' || item.type === 'demantelement' || item.type === 'autres');
 
   const typeColor = item
@@ -1166,6 +1181,20 @@ function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional, onOp
           <span style={{ fontSize: 'clamp(9px, 0.9vw, 12px)', color: 'rgba(255,255,255,0.55)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {item.label.split(' ').slice(0, 3).join(' ')}
           </span>
+          {soustraitantDesc && (
+            <div style={{
+              fontSize: 'clamp(7px, 0.75vw, 10px)',
+              color: '#c084fc',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              🏭 {soustraitantDesc}
+            </div>
+          )}
           {item.type === 'eau' && (
             <div style={{
               fontSize: 'clamp(7px, 0.7vw, 9px)', fontWeight: 700,
