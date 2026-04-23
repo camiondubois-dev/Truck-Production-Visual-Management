@@ -64,6 +64,24 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // ── Keep-alive pour TV / affichage permanent ──────────────────
+  useEffect(() => {
+    const heartbeat = setInterval(async () => {
+      await supabase.from('prod_inventaire').select('id').limit(1);
+    }, 25_000);
+    return () => clearInterval(heartbeat);
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        inventaireService.getAll().then(setVehicules).catch(console.error);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   const importerVehicules = async (nouveaux: VehiculeInventaire[]) => {
     await inventaireService.importerPlusieurs(nouveaux);
     const updated = await inventaireService.getAll();

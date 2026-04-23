@@ -55,6 +55,26 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // ── Keep-alive pour TV / affichage permanent ──────────────────
+  // Ping léger toutes les 25s pour garder le WebSocket Supabase ouvert
+  useEffect(() => {
+    const heartbeat = setInterval(async () => {
+      await supabase.from('prod_items').select('id').limit(1);
+    }, 25_000);
+    return () => clearInterval(heartbeat);
+  }, []);
+
+  // Quand la TV "se réveille" (visibilité retrouvée), recharge les données
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        chargerItems();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   const ajouterItem = async (item: Item) => {
     await itemsService.ajouter(item);
     setItems(prev => [item, ...prev]);
