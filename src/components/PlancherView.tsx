@@ -1278,37 +1278,51 @@ function ModalRoadMapSlot({ slot, vehicule, position, onAssigner, onClose }: {
     finally { setSaving(false); }
   };
 
+  const panelTop = Math.max(64, Math.min(position.y, window.innerHeight - 120));
+  const panelLeft = Math.min(position.x, window.innerWidth - 420);
+  const maxH = window.innerHeight - panelTop - 16;
+
   return (
     <div onClick={e => e.stopPropagation()} style={{
       position: 'fixed',
-      top: Math.min(position.y, window.innerHeight - 640),
-      left: Math.min(position.x, window.innerWidth - 420),
+      top: panelTop, left: panelLeft,
       zIndex: 200,
       background: '#1a1814', border: `1px solid ${typeColor}55`,
-      borderRadius: 12, padding: 16, width: 400,
+      borderRadius: 12, width: 400,
       boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-      maxHeight: '82vh', overflowY: 'auto',
+      maxHeight: maxH, display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ fontFamily: 'monospace', color: typeColor, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
-        🗺️ Road Map — #{vehicule.numero} → Slot {slot.id}
+      {/* En-tête fixe */}
+      <div style={{ padding: '14px 16px 0', flexShrink: 0 }}>
+        <div style={{ fontFamily: 'monospace', color: typeColor, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
+          🗺️ Road Map — #{vehicule.numero} → Slot {slot.id}
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
+          {vehicule.nomClient ? ` · ${vehicule.nomClient}` : ''}
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
-        {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
-        {vehicule.nomClient ? ` · ${vehicule.nomClient}` : ''}
+
+      {/* Zone scrollable */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', minHeight: 0 }}>
+        <div style={{ background: 'white', borderRadius: 10, padding: 14, marginBottom: 8 }}>
+          <RoadMapEditor vehicule={vehicule} onSaved={() => {}} compact={false} />
+        </div>
       </div>
-      <div style={{ background: 'white', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-        <RoadMapEditor vehicule={vehicule} onSaved={() => {}} compact={false} />
+
+      {/* Boutons toujours visibles en bas */}
+      <div style={{ padding: '10px 16px 14px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button onClick={handleAssigner} disabled={saving} style={{
+          width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+          background: saving ? '#374151' : typeColor, color: 'white',
+          fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer',
+        }}>
+          {saving ? '⏳ Assignation...' : `✓ Assigner au Slot ${slot.id}`}
+        </button>
+        <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
+          Annuler
+        </button>
       </div>
-      <button onClick={handleAssigner} disabled={saving} style={{
-        width: '100%', padding: '12px', borderRadius: 8, border: 'none',
-        background: saving ? '#374151' : typeColor, color: 'white',
-        fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer', marginBottom: 6,
-      }}>
-        {saving ? '⏳ Assignation...' : `✓ Assigner au Slot ${slot.id}`}
-      </button>
-      <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
-        Annuler
-      </button>
     </div>
   );
 }
