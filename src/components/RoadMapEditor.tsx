@@ -369,49 +369,55 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
               const cfg = STATUT_CONFIG[step.statut] ?? STATUT_CONFIG.planifie;
               return (
                 <div key={step.id ?? `${step.stationId}-${idx}`} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 10px', borderRadius: 8,
+                  display: 'flex', flexDirection: 'column', gap: 5,
+                  padding: '8px 10px', borderRadius: 8,
                   background: cfg.bg, border: `1px solid ${cfg.color}25`,
                 }}>
-                  <span style={{
-                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                    background: (station as any)?.color ?? '#64748b',
-                    color: 'white', fontSize: 10, fontWeight: 800,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>{idx + 1}</span>
-                  <span style={{ fontSize: fs, flex: 1 }}>{station?.icon} {station?.label}</span>
-                  {(station as any)?.hasDescription && (
-                    <input
-                      type="text"
-                      value={step.description ?? ''}
-                      onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, description: e.target.value } : s))}
-                      placeholder="Description (ex: XYZ Inc.)"
-                      style={{ fontSize: 11, padding: '3px 6px', borderRadius: 5, border: '1px solid #d1d5db', width: 130, outline: 'none' }}
-                    />
-                  )}
-                  <select
-                    value={step.statut}
-                    onChange={e => changeStatut(idx, e.target.value as RoadMapEtape['statut'])}
-                    onClick={e => e.stopPropagation()}
-                    style={{
-                      fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '3px 6px',
-                      border: `1px solid ${cfg.color}60`, background: cfg.bg, color: cfg.color,
-                      cursor: 'pointer', outline: 'none',
-                    }}
-                  >
-                    <option value="planifie">⬜ Planifié</option>
-                    <option value="en-attente">⏳ En attente</option>
-                    <option value="en-cours">🔵 En cours</option>
-                    <option value="termine">✅ Terminé</option>
-                    <option value="saute">⏭️ Sauté</option>
-                  </select>
-                  <button onClick={() => moveUp(idx)} disabled={idx === 0}
-                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 13, color: idx === 0 ? '#e5e7eb' : '#6b7280', padding: '2px' }}>↑</button>
-                  <button onClick={() => moveDown(idx)} disabled={idx === steps.length - 1}
-                    style={{ background: 'none', border: 'none', cursor: idx === steps.length - 1 ? 'default' : 'pointer', fontSize: 13, color: idx === steps.length - 1 ? '#e5e7eb' : '#6b7280', padding: '2px' }}>↓</button>
-                  <button onClick={() => removeStep(idx)}
-                    title="Supprimer cette étape"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#ef4444', padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}>✕</button>
+                  {/* Ligne 1 : numéro + label + ✕ */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                      background: (station as any)?.color ?? '#64748b',
+                      color: 'white', fontSize: 10, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{idx + 1}</span>
+                    <span style={{ fontSize: fs, flex: 1, fontWeight: 600 }}>{station?.icon} {station?.label}</span>
+                    <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 12, color: idx === 0 ? '#e5e7eb' : '#9ca3af', padding: '2px' }}>↑</button>
+                    <button onClick={() => moveDown(idx)} disabled={idx === steps.length - 1}
+                      style={{ background: 'none', border: 'none', cursor: idx === steps.length - 1 ? 'default' : 'pointer', fontSize: 12, color: idx === steps.length - 1 ? '#e5e7eb' : '#9ca3af', padding: '2px' }}>↓</button>
+                    <button onClick={() => removeStep(idx)}
+                      title="Supprimer"
+                      style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', fontSize: 12, color: '#ef4444', padding: '3px 7px', borderRadius: 5, fontWeight: 700, flexShrink: 0 }}>✕</button>
+                  </div>
+                  {/* Ligne 2 : description + statut */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 28 }}>
+                    {(station as any)?.hasDescription && (
+                      <input
+                        type="text"
+                        value={step.description ?? ''}
+                        onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, description: e.target.value } : s))}
+                        placeholder="Description (ex: XYZ Inc.)"
+                        style={{ fontSize: 11, padding: '3px 6px', borderRadius: 5, border: '1px solid #d1d5db', flex: 1, outline: 'none', minWidth: 0 }}
+                      />
+                    )}
+                    <select
+                      value={step.statut}
+                      onChange={e => changeStatut(idx, e.target.value as RoadMapEtape['statut'])}
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        fontSize: 11, fontWeight: 700, borderRadius: 6, padding: '3px 6px',
+                        border: `1px solid ${cfg.color}60`, background: cfg.bg, color: cfg.color,
+                        cursor: 'pointer', outline: 'none', flexShrink: 0,
+                      }}
+                    >
+                      <option value="planifie">⬜ Planifié</option>
+                      <option value="en-attente">⏳ En attente</option>
+                      <option value="en-cours">🔵 En cours</option>
+                      <option value="termine">✅ Terminé</option>
+                      <option value="saute">⏭️ Sauté</option>
+                    </select>
+                  </div>
                 </div>
               );
             })}
