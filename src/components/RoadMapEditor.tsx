@@ -194,7 +194,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
         {steps.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-              Statuts
+              Étapes planifiées
             </div>
             {steps.map((step, idx) => {
               const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
@@ -212,6 +212,15 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>{idx + 1}</span>
                   <span style={{ fontSize: 13, flex: 1 }}>{station?.icon} {station?.label}</span>
+                  {(station as any)?.hasDescription && (
+                    <input
+                      type="text"
+                      value={step.description ?? ''}
+                      onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, description: e.target.value } : s))}
+                      placeholder="Ex: XYZ Inc."
+                      style={{ fontSize: 11, padding: '3px 6px', borderRadius: 5, border: '1px solid #d1d5db', width: 100, outline: 'none' }}
+                    />
+                  )}
                   <select
                     value={step.statut}
                     onChange={e => changeStatut(idx, e.target.value as RoadMapEtape['statut'])}
@@ -228,6 +237,11 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
                     <option value="termine">✅ Terminé</option>
                     <option value="saute">⏭️ Sauté</option>
                   </select>
+                  <button
+                    onClick={() => removeStep(idx)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#d1d5db', padding: '2px', lineHeight: 1 }}
+                    title="Supprimer cette étape"
+                  >✕</button>
                 </div>
               );
             })}

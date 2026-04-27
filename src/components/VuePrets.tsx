@@ -65,9 +65,10 @@ export function VuePrets() {
       const jobActif = items.find(i => i.inventaireId === vehicule.id && i.etat !== 'termine');
       if (jobActif) await archiverItem(jobActif.id);
       setSelectedId(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[VuePrets] Erreur archivage :', err);
-      alert('Erreur lors de l\'archivage. Voir la console pour les détails.');
+      const msg = err?.message ?? err?.error_description ?? JSON.stringify(err);
+      alert(`Erreur archivage : ${msg}`);
     }
   };
 
