@@ -10,14 +10,13 @@ import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
-import { RoadMapEditor } from './RoadMapEditor';
 import { PanneauDetailVehicule } from './PanneauDetailVehicule';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import type { Slot, Item, Document } from '../types/item.types';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
 
 // Types de jobs temporaires — persistés dans prod_items comme les autres jobs
 const TYPES_JOB_TEMP = ['export', 'demantelement', 'autres'] as const;
@@ -1207,12 +1206,19 @@ function ModalInventairePicker({ slot, position, vehicules, onSelect, onClose }:
   const tc = (t: string) => t === 'eau' ? '#f97316' : t === 'client' ? '#3b82f6' : '#22c55e';
   const ti = (t: string) => t === 'eau' ? '💧' : t === 'client' ? '🔧' : '🏷️';
 
+  const pickerTop = Math.max(64, Math.min(position.y, window.innerHeight - 120));
+  const pickerLeft = Math.min(position.x, window.innerWidth - 360);
+  const pickerMaxH = window.innerHeight - pickerTop - 16;
+
   return (
     <div onClick={e => e.stopPropagation()} style={{
-      position: 'fixed', top: position.y, left: position.x, zIndex: 200,
+      position: 'fixed',
+      top: pickerTop, left: pickerLeft,
+      zIndex: 200,
       background: '#1a1814', border: '1px solid rgba(99,179,237,0.4)',
       borderRadius: 12, padding: 16, width: 340,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.7)', maxHeight: '75vh',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      maxHeight: pickerMaxH,
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{ fontFamily: 'monospace', color: '#63b3ed', fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
@@ -1269,59 +1275,292 @@ function ModalRoadMapSlot({ slot, vehicule, position, onAssigner, onClose }: {
   onAssigner: (v: VehiculeInventaire) => void;
   onClose: () => void;
 }) {
+  const { mettreAJourRoadMap } = useInventaire();
+  const [steps, setSteps] = useState<RoadMapEtape[]>(
+    (vehicule.roadMap ?? []).sort((a, b) => a.ordre - b.ordre)
+  );
+  const [typeReservoir, setTypeReservoir] = useState(vehicule.typeReservoirRequis ?? '');
   const [saving, setSaving] = useState(false);
+
   const typeColor = vehicule.type === 'eau' ? '#f97316' : vehicule.type === 'client' ? '#3b82f6' : '#22c55e';
+  const typeIcon = vehicule.type === 'eau' ? '💧' : vehicule.type === 'client' ? '🔧' : '🏷️';
+
+  const panelTop = Math.max(64, Math.min(position.y, window.innerHeight - 120));
+  const panelLeft = Math.min(position.x, window.innerWidth - 440);
+  const maxH = window.innerHeight - panelTop - 16;
+
+  const genId = () =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `step-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const toggleStation = (stationId: string) => {
+    const station = ROAD_MAP_STATIONS.find(s => s.id === stationId);
+    const hasDescription = !!(station as any)?.hasDescription;
+    const lastIdx = [...steps].map((s, i) => ({ s, i })).reverse().find(({ s }) => s.stationId === stationId)?.i ?? -1;
+    if (lastIdx >= 0 && !hasDescription) {
+      setSteps(steps.filter((_, i) => i !== lastIdx).map((s, i) => ({ ...s, ordre: i + 1 })));
+    } else {
+      setSteps([...steps, { id: genId(), stationId, ordre: steps.length + 1, statut: 'planifie', description: hasDescription ? '' : undefined }]);
+    }
+  };
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return;
+    const n = [...steps]; [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]];
+    setSteps(n.map((s, i) => ({ ...s, ordre: i + 1 })));
+  };
+  const moveDown = (idx: number) => {
+    if (idx === steps.length - 1) return;
+    const n = [...steps]; [n[idx], n[idx + 1]] = [n[idx + 1], n[idx]];
+    setSteps(n.map((s, i) => ({ ...s, ordre: i + 1 })));
+  };
 
   const handleAssigner = async () => {
     setSaving(true);
-    try { await onAssigner(vehicule); }
-    finally { setSaving(false); }
+    try {
+      await mettreAJourRoadMap(vehicule.id, steps);
+      if (vehicule.type === 'eau') {
+        await supabase.from('prod_inventaire')
+          .update({ type_reservoir_requis: typeReservoir || null, updated_at: new Date().toISOString() })
+          .eq('id', vehicule.id);
+      }
+      await onAssigner(vehicule);
+    } catch (err) {
+      console.error('[ModalRoadMapSlot]', err);
+    } finally { setSaving(false); }
   };
 
-  const panelTop = Math.max(64, Math.min(position.y, window.innerHeight - 120));
-  const panelLeft = Math.min(position.x, window.innerWidth - 420);
-  const maxH = window.innerHeight - panelTop - 16;
+  const DARK_STATUTS: Record<string, { label: string; color: string; bg: string }> = {
+    planifie:     { label: 'Planifié',   color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+    'en-attente': { label: 'En attente', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)'  },
+    'en-cours':   { label: 'En cours',   color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
+    termine:      { label: 'Terminé',    color: '#34d399', bg: 'rgba(52,211,153,0.12)'  },
+    saute:        { label: 'Sauté',      color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+  };
 
   return (
     <div onClick={e => e.stopPropagation()} style={{
       position: 'fixed',
       top: panelTop, left: panelLeft,
       zIndex: 200,
-      background: '#1a1814', border: `1px solid ${typeColor}55`,
-      borderRadius: 12, width: 400,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-      maxHeight: maxH, display: 'flex', flexDirection: 'column',
+      background: '#12110e',
+      border: `1px solid ${typeColor}30`,
+      borderRadius: 14, width: 420,
+      boxShadow: `0 24px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.04)`,
+      maxHeight: maxH,
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
     }}>
-      {/* En-tête fixe */}
-      <div style={{ padding: '14px 16px 0', flexShrink: 0 }}>
-        <div style={{ fontFamily: 'monospace', color: typeColor, fontWeight: 700, marginBottom: 4, fontSize: 13 }}>
-          🗺️ Road Map — #{vehicule.numero} → Slot {slot.id}
+
+      {/* ── Header ── */}
+      <div style={{
+        padding: '16px 18px 14px', flexShrink: 0,
+        background: `linear-gradient(135deg, ${typeColor}0d, transparent)`,
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: `${typeColor}18`, border: `1.5px solid ${typeColor}45`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18, flexShrink: 0,
+          }}>{typeIcon}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: 'white', fontWeight: 800, fontSize: 15, fontFamily: 'monospace', letterSpacing: '-0.01em' }}>
+              #{vehicule.numero}
+              {vehicule.nomClient && <span style={{ color: typeColor, fontSize: 12, marginLeft: 8, fontWeight: 600 }}>· {vehicule.nomClient}</span>}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
+              {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
+            </div>
+          </div>
+          <div style={{
+            background: `${typeColor}18`, border: `1px solid ${typeColor}35`,
+            borderRadius: 8, padding: '5px 10px',
+            color: typeColor, fontSize: 12, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0,
+          }}>→ {slot.id}</div>
         </div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
-          {[vehicule.marque, vehicule.modele, vehicule.annee].filter(Boolean).join(' ')}
-          {vehicule.nomClient ? ` · ${vehicule.nomClient}` : ''}
+        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          🗺 Configuration du Road Map
         </div>
       </div>
 
-      {/* Zone scrollable */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', minHeight: 0 }}>
-        <div style={{ background: 'white', borderRadius: 10, padding: 14, marginBottom: 8 }}>
-          <RoadMapEditor vehicule={vehicule} onSaved={() => {}} compact={false} />
+      {/* ── Body scrollable ── */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '14px 18px' }}>
+
+        {/* Postes de travail */}
+        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+          Postes de travail
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 18 }}>
+          {ROAD_MAP_STATIONS.map(station => {
+            const count = steps.filter(s => s.stationId === station.id).length;
+            const isSelected = count > 0;
+            const firstIdx = steps.findIndex(s => s.stationId === station.id);
+            return (
+              <button
+                key={station.id}
+                onClick={() => toggleStation(station.id)}
+                style={{
+                  padding: '10px 6px 8px', borderRadius: 10,
+                  border: isSelected ? `1.5px solid ${station.color}55` : '1.5px solid rgba(255,255,255,0.07)',
+                  background: isSelected ? `${station.color}14` : 'rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                  transition: 'all 0.15s',
+                  boxShadow: isSelected ? `0 0 14px ${station.color}18` : 'none',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isSelected ? `${station.color}1e` : 'rgba(255,255,255,0.06)';
+                  e.currentTarget.style.borderColor = isSelected ? `${station.color}80` : 'rgba(255,255,255,0.14)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isSelected ? `${station.color}14` : 'rgba(255,255,255,0.03)';
+                  e.currentTarget.style.borderColor = isSelected ? `${station.color}55` : 'rgba(255,255,255,0.07)';
+                }}
+              >
+                <div style={{
+                  width: 22, height: 22, borderRadius: 6,
+                  background: isSelected ? station.color : 'rgba(255,255,255,0.06)',
+                  border: isSelected ? 'none' : '1.5px dashed rgba(255,255,255,0.12)',
+                  color: isSelected ? 'white' : 'rgba(255,255,255,0.25)',
+                  fontSize: 10, fontWeight: 900, fontFamily: 'monospace',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: isSelected ? `0 2px 8px ${station.color}50` : 'none',
+                }}>
+                  {isSelected ? (count > 1 ? `×${count}` : firstIdx + 1) : '+'}
+                </div>
+                <div style={{ fontSize: 17, lineHeight: 1 }}>{station.icon}</div>
+                <div style={{
+                  fontSize: 9.5, fontWeight: isSelected ? 700 : 500,
+                  color: isSelected ? station.color : 'rgba(255,255,255,0.32)',
+                  textAlign: 'center', lineHeight: 1.25,
+                }}>{station.label}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Ordre des étapes */}
+        {steps.length > 0 && (
+          <>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+              Ordre des étapes — {steps.length} étape{steps.length > 1 ? 's' : ''}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+              {steps.map((step, idx) => {
+                const station = ROAD_MAP_STATIONS.find(s => s.id === step.stationId);
+                const sc = DARK_STATUTS[step.statut] ?? DARK_STATUTS.planifie;
+                const stColor = (station as any)?.color ?? '#64748b';
+                return (
+                  <div key={step.id ?? `${step.stationId}-${idx}`} style={{
+                    borderRadius: 8,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    borderLeft: `3px solid ${stColor}`,
+                    padding: '8px 10px',
+                    display: 'flex', flexDirection: 'column', gap: 5,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                        background: stColor, color: 'white',
+                        fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>{idx + 1}</span>
+                      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                        {station?.icon} {station?.label}
+                      </span>
+                      <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                        style={{ background: 'none', border: 'none', fontSize: 12, cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)', padding: '2px 4px', lineHeight: 1 }}>↑</button>
+                      <button onClick={() => moveDown(idx)} disabled={idx === steps.length - 1}
+                        style={{ background: 'none', border: 'none', fontSize: 12, cursor: idx === steps.length - 1 ? 'default' : 'pointer', color: idx === steps.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.45)', padding: '2px 4px', lineHeight: 1 }}>↓</button>
+                      <button
+                        onClick={() => setSteps(steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, ordre: i + 1 })))}
+                        style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', cursor: 'pointer', fontSize: 11, color: '#f87171', padding: '3px 7px', borderRadius: 5, fontWeight: 700, flexShrink: 0 }}>✕</button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 27 }}>
+                      {(station as any)?.hasDescription && (
+                        <input
+                          type="text"
+                          value={step.description ?? ''}
+                          onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, description: e.target.value } : s))}
+                          placeholder="Ex: XYZ Inc."
+                          style={{
+                            flex: 1, fontSize: 11, padding: '4px 8px', borderRadius: 6,
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)',
+                            outline: 'none', minWidth: 0,
+                          }}
+                        />
+                      )}
+                      <select
+                        value={step.statut}
+                        onChange={e => setSteps(steps.map((s, i) => i === idx ? { ...s, statut: e.target.value as RoadMapEtape['statut'] } : s))}
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '3px 8px',
+                          border: `1px solid ${sc.color}35`, background: sc.bg, color: sc.color,
+                          cursor: 'pointer', outline: 'none', flexShrink: 0,
+                        }}
+                      >
+                        <option value="planifie">⬜ Planifié</option>
+                        <option value="en-attente">⏳ En attente</option>
+                        <option value="en-cours">🔵 En cours</option>
+                        <option value="termine">✅ Terminé</option>
+                        <option value="saute">⏭️ Sauté</option>
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Réservoir requis (eau seulement) */}
+        {vehicule.type === 'eau' && (
+          <div style={{
+            padding: '10px 12px', borderRadius: 10,
+            background: 'rgba(14,165,233,0.07)', border: '1px solid rgba(14,165,233,0.2)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 16 }}>🛢</span>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#7dd3fc', whiteSpace: 'nowrap' }}>Réservoir requis :</label>
+            <select
+              value={typeReservoir}
+              onChange={e => setTypeReservoir(e.target.value)}
+              style={{
+                flex: 1, padding: '5px 8px', borderRadius: 6,
+                border: '1px solid rgba(14,165,233,0.25)', fontSize: 12, fontWeight: 600,
+                outline: 'none', background: 'rgba(14,165,233,0.1)', color: '#7dd3fc',
+              }}
+            >
+              <option value="">— Non spécifié —</option>
+              {['2500g', '3750g', '4000g', '5000g'].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* Boutons toujours visibles en bas */}
-      <div style={{ padding: '10px 16px 14px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* ── Footer ── */}
+      <div style={{ padding: '12px 18px 16px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button onClick={handleAssigner} disabled={saving} style={{
-          width: '100%', padding: '12px', borderRadius: 8, border: 'none',
-          background: saving ? '#374151' : typeColor, color: 'white',
-          fontWeight: 700, fontSize: 14, cursor: saving ? 'wait' : 'pointer',
+          width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+          background: saving ? '#374151' : typeColor,
+          color: 'white', fontWeight: 700, fontSize: 14,
+          cursor: saving ? 'wait' : 'pointer',
+          boxShadow: saving ? 'none' : `0 4px 20px ${typeColor}40`,
+          transition: 'all 0.2s', letterSpacing: '0.01em',
         }}>
-          {saving ? '⏳ Assignation...' : `✓ Assigner au Slot ${slot.id}`}
+          {saving ? '⏳ Assignation en cours...' : `✓ Sauvegarder et assigner — Slot ${slot.id}`}
         </button>
-        <button onClick={onClose} style={{ width: '100%', padding: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12 }}>
-          Annuler
-        </button>
+        <button onClick={onClose} style={{
+          width: '100%', padding: '8px', background: 'transparent',
+          border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+          color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12,
+        }}>Annuler</button>
       </div>
     </div>
   );
