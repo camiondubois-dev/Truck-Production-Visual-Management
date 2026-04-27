@@ -45,7 +45,7 @@ type ModalState =
   | { type: 'detail'; vehiculeId: string; itemId?: string }
   | null;
 
-export function PlancherView() {
+export function PlancherView({ showWizard = false, setShowWizard }: { showWizard?: boolean; setShowWizard?: (v: boolean) => void }) {
   const {
     items,
     slotMap, enAttente, assignerSlot,
@@ -57,14 +57,15 @@ export function PlancherView() {
   const { vehicules, mettreAJourRoadMap, mettreAJourPriorites } = useInventaire();
 
   const [modalState, setModalState] = useState<ModalState>(null);
-  const [showWizard, setShowWizard] = useState(false);
+  // showWizard/setShowWizard viennent des props (levés dans App.tsx)
+  const _setShowWizard = setShowWizard ?? (() => {});
 
   // Fermer tout modal en appuyant sur Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setModalState(null);
-        setShowWizard(false);
+        _setShowWizard(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -280,19 +281,6 @@ export function PlancherView() {
         position: 'relative',
       }}
     >
-      <button
-        onClick={(e) => { e.stopPropagation(); setShowWizard(true); }}
-        style={{
-          position: 'absolute', top: 20, right: 20,
-          padding: '8px 16px', background: '#f97316',
-          color: 'white', border: 'none', borderRadius: 8,
-          fontWeight: 700, fontSize: 14, cursor: 'pointer',
-          zIndex: 100, display: 'flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        + Nouveau
-      </button>
-
       <div style={{ gridColumn: '1', gridRow: '1', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
         <StationBlock station={STATIONS.find((s) => s.id === 'soudure-generale')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
         <StationBlock station={STATIONS.find((s) => s.id === 'point-s')!} slotMap={slotMap} onSlotClick={handleSlotClick} allEnAttente={allEnAttente} onWaitingItemClick={handleWaitingItemClick} onCreateAndAssign={handleCreateAndAssign} vehicules={vehiculesComplets} itemByInvId={itemByInvId} onReorder={handleReorder} onOpenDetail={handleOpenDetail} />
@@ -421,7 +409,7 @@ export function PlancherView() {
 
       {showWizard && (
         <CreateWizardModal
-          onClose={() => setShowWizard(false)}
+          onClose={() => _setShowWizard(false)}
           onCreate={(item) => ajouterItem(item as Item)}
         />
       )}

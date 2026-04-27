@@ -19,6 +19,7 @@ type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 
 export default function App() {
   const { profile, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<Tab>('plancher');
+  const [showWizard, setShowWizard] = useState(false);
 
   if (loading) {
     return (
@@ -43,9 +44,13 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0f0e0b' }}>
-      <Navigation currentTab={currentTab} onTabChange={(id) => setCurrentTab(id as Tab)} />
+      <Navigation
+        currentTab={currentTab}
+        onTabChange={(id) => setCurrentTab(id as Tab)}
+        onNouveau={currentTab === 'plancher' ? () => setShowWizard(true) : undefined}
+      />
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-        {currentTab === 'plancher'    && <PlancherView />}
+        {currentTab === 'plancher'    && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
         {currentTab === 'eau'         && <VueCamionsEau />}
         {currentTab === 'clients'     && <VueClientsExternes />}
         {currentTab === 'detail'      && <VueCamionsDetail />}

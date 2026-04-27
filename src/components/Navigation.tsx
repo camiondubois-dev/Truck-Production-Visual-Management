@@ -7,6 +7,7 @@ import { toutesEtapesCompletees } from '../utils/progressionUtils';
 interface NavigationProps {
   currentTab: string;
   onTabChange: (tabId: string) => void;
+  onNouveau?: () => void;
 }
 
 const TABS = [
@@ -22,7 +23,7 @@ const TABS = [
   { id: 'archive',     label: 'Archive',        icon: '📦',       color: '#6b7280' },
 ];
 
-export function Navigation({ currentTab, onTabChange }: NavigationProps) {
+export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationProps) {
   const { deconnexion } = useAuth();
   const { items } = useGarage();
 
@@ -121,8 +122,25 @@ export function Navigation({ currentTab, onTabChange }: NavigationProps) {
         })}
       </div>
 
-      {/* Droite — horloge + déconnexion, toujours visible */}
+      {/* Droite — nouveau + horloge + déconnexion, toujours visible */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, paddingLeft: 12 }}>
+
+        {/* Bouton + Nouveau (seulement sur Vue Plancher) */}
+        {onNouveau && (
+          <button
+            onClick={onNouveau}
+            style={{
+              background: '#f97316', border: 'none', borderRadius: 8,
+              color: 'white', padding: '7px 14px', cursor: 'pointer',
+              fontSize: 13, fontWeight: 700, fontFamily: 'system-ui, sans-serif',
+              whiteSpace: 'nowrap', transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#ea6c0a'}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#f97316'}
+          >
+            + Nouveau
+          </button>
+        )}
 
         {/* Horloge */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
