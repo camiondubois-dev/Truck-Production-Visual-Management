@@ -59,11 +59,16 @@ export function VuePrets() {
   const enLocation = prets.filter(v => v.etatCommercial === 'location').length;
 
   const handleArchiver = async (vehicule: VehiculeInventaire) => {
-    await archiverVehicule(vehicule.id);
-    // Aussi archiver le job actif dans prod_items si applicable
-    const jobActif = items.find(i => i.inventaireId === vehicule.id && i.etat !== 'termine');
-    if (jobActif) await archiverItem(jobActif.id);
-    setSelectedId(null);
+    try {
+      await archiverVehicule(vehicule.id);
+      // Aussi archiver le job actif dans prod_items si applicable
+      const jobActif = items.find(i => i.inventaireId === vehicule.id && i.etat !== 'termine');
+      if (jobActif) await archiverItem(jobActif.id);
+      setSelectedId(null);
+    } catch (err) {
+      console.error('[VuePrets] Erreur archivage :', err);
+      alert('Erreur lors de l\'archivage. Voir la console pour les détails.');
+    }
   };
 
   return (

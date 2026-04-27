@@ -81,21 +81,24 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
   };
 
   // Mode compact: toggle une station (clic = ajoute, re-clic = retire le dernier ajouté)
+  // Exception: stations avec hasDescription (ex: sous-traitants) → toujours ajouter
   const toggleStation = (stationId: string) => {
-    // Find last occurrence to remove
+    const station = ROAD_MAP_STATIONS.find(s => s.id === stationId);
+    const hasDescription = !!(station as any)?.hasDescription;
+
     const lastIdx = [...steps].map((s, i) => ({ s, i })).reverse().find(({ s }) => s.stationId === stationId)?.i ?? -1;
-    if (lastIdx >= 0) {
-      // Retirer
+
+    if (lastIdx >= 0 && !hasDescription) {
+      // Retirer (seulement pour les stations sans description — usage unique)
       setSteps(steps.filter((_, i) => i !== lastIdx).map((s, i) => ({ ...s, ordre: i + 1 })));
     } else {
-      // Ajouter en fin de liste
-      const station = ROAD_MAP_STATIONS.find(s => s.id === stationId);
+      // Ajouter en fin de liste (toujours pour sous-traitants et similaires)
       const newStep: RoadMapEtape = {
         id: generateStepId(),
         stationId,
         ordre: steps.length + 1,
         statut: 'planifie',
-        description: (station as any)?.hasDescription ? '' : undefined,
+        description: hasDescription ? '' : undefined,
       };
       setSteps([...steps, newStep]);
     }
