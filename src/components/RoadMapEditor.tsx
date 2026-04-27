@@ -410,7 +410,8 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
                   <button onClick={() => moveDown(idx)} disabled={idx === steps.length - 1}
                     style={{ background: 'none', border: 'none', cursor: idx === steps.length - 1 ? 'default' : 'pointer', fontSize: 13, color: idx === steps.length - 1 ? '#e5e7eb' : '#6b7280', padding: '2px' }}>↓</button>
                   <button onClick={() => removeStep(idx)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '2px' }}>✕</button>
+                    title="Supprimer cette étape"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#ef4444', padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}>✕</button>
                 </div>
               );
             })}
