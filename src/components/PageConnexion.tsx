@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { TVConnexion } from './TVConnexion';
 
 export function PageConnexion() {
   const { connexion } = useAuth();
@@ -7,6 +8,16 @@ export function PageConnexion() {
   const [motDePasse, setMotDePasse] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [modeTV, setModeTV] = useState(false);
+
+  if (modeTV) {
+    return (
+      <TVConnexion
+        onConnecte={() => window.location.reload()}
+        onRetourAdmin={() => setModeTV(false)}
+      />
+    );
+  }
 
   const handleConnexion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +129,27 @@ export function PageConnexion() {
             {loading ? '⏳ Connexion...' : '→ Se connecter'}
           </button>
         </form>
+
+        {/* Séparateur + bouton TV */}
+        <div style={{
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          padding: '16px 40px 20px',
+          textAlign: 'center',
+        }}>
+          <button
+            onClick={() => setModeTV(true)}
+            style={{
+              background: 'transparent', border: 'none',
+              color: 'rgba(255,255,255,0.3)', fontSize: 13,
+              cursor: 'pointer', fontFamily: 'system-ui, sans-serif',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; }}
+          >
+            📺 Accès TV / Garage
+          </button>
+        </div>
       </div>
     </div>
   );

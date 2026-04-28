@@ -13,8 +13,13 @@ import { VueClients } from './components/VueClients';
 import { VueReservoirs } from './components/VueReservoirs';
 import { VuePrets } from './components/VuePrets';
 import { VueAnalyse } from './components/VueAnalyse';
+import { VueTV } from './components/VueTV';
+import { TVConnexion } from './components/TVConnexion';
+import { VueAdminTV } from './components/VueAdminTV';
+import { getTVSession } from './hooks/useTVAccess';
+import { supabase } from './lib/supabase';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive' | 'tv-admin';
 
 export default function App() {
   const { profile, loading } = useAuth();
@@ -42,6 +47,23 @@ export default function App() {
     return <VueDepartement />;
   }
 
+  // Rôle TV : vérifie si un garage est déjà sélectionné en localStorage
+  if (profile.role === 'tv') {
+    const tvSession = getTVSession();
+    if (tvSession) {
+      return <VueTV />;
+    }
+    return (
+      <TVConnexion
+        onConnecte={() => window.location.reload()}
+        onRetourAdmin={async () => {
+          await supabase.auth.signOut();
+          window.location.reload();
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0f0e0b' }}>
       <Navigation
@@ -60,6 +82,7 @@ export default function App() {
         {currentTab === 'baseclients' && <VueClients />}
         {currentTab === 'analyse'     && <VueAnalyse />}
         {currentTab === 'archive'     && <VueArchive />}
+        {currentTab === 'tv-admin'    && <VueAdminTV />}
       </div>
     </div>
   );

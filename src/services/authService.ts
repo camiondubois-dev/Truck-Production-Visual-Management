@@ -4,7 +4,7 @@ export interface Profile {
   id: string;
   email: string;
   nom?: string;
-  role: 'gestion' | 'planification' | 'employe';
+  role: 'gestion' | 'planification' | 'employe' | 'tv';
   departement?: string;
   actif: boolean;
 }

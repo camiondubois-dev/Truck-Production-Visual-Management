@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
 import { toutesEtapesCompletees } from '../utils/progressionUtils';
+import type { Profile } from '../services/authService';
 
 interface NavigationProps {
   currentTab: string;
@@ -23,8 +24,10 @@ const TABS = [
   { id: 'archive',     label: 'Archive',        icon: '📦',       color: '#6b7280' },
 ];
 
+const TV_TAB = { id: 'tv-admin', label: 'TV', icon: '📺', color: '#f97316' };
+
 export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationProps) {
-  const { deconnexion } = useAuth();
+  const { deconnexion, profile } = useAuth();
   const { items } = useGarage();
 
   const pretsCount = items.filter(i => i.etat !== 'termine' && toutesEtapesCompletees(i)).length;
@@ -73,7 +76,7 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
         display: 'flex', alignItems: 'center', gap: 4,
         flex: 1, overflow: 'hidden',
       }}>
-        {TABS.map((tab) => {
+        {[...TABS, ...(profile?.role === 'gestion' ? [TV_TAB] : [])].map((tab) => {
           const count = tab.id === 'prets' ? pretsCount : undefined;
           return (
             <button
