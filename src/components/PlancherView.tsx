@@ -963,20 +963,20 @@ export function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWa
                       }
                     }}
                     style={{
-                      flex: 1, display: 'flex', alignItems: 'center', gap: 4,
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 5,
                       background: `${couleur}13`,
                       border: `1px solid ${couleur}44`,
-                      borderRadius: 4, padding: '2px 6px',
+                      borderRadius: 4, padding: '3px 7px',
                       cursor: (!inSlot) ? 'pointer' : 'default',
-                      fontSize: 'clamp(9px, 0.9vw, 11px)',
-                      fontFamily: 'monospace', color: couleur, fontWeight: 700,
+                      fontSize: 'clamp(12px, 1.25vw, 15px)',
+                      fontFamily: 'monospace', color: couleur, fontWeight: 800,
                       opacity: inSlot ? 0.5 : 1,
                       minWidth: 0, overflow: 'hidden',
                     }}
                     onMouseEnter={(e) => { if (!inSlot) e.currentTarget.style.background = `${couleur}22`; }}
                     onMouseLeave={(e) => { if (!inSlot) e.currentTarget.style.background = `${couleur}13`; }}
                   >
-                    {vehicule.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(9px, 0.9vw, 11px)' }}>{vehicule.type === 'client' ? '🔧' : '🏷️'}</span>}
+                    {vehicule.type === 'eau' ? <EauIcon /> : <span style={{ fontSize: 'clamp(11px, 1.1vw, 13px)' }}>{vehicule.type === 'client' ? '🔧' : '🏷️'}</span>}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{vehicule.numero}</span>
                     {!item && (
                       <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>ATT</span>
@@ -1065,12 +1065,12 @@ export function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWa
                   onMouseLeave={e => { e.currentTarget.style.background = `${couleur}10`; }}
                 >
                   {v.type === 'eau' ? <EauIcon /> : (
-                    <span style={{ fontSize: 'clamp(9px, 0.8vw, 11px)' }}>
+                    <span style={{ fontSize: 'clamp(11px, 1.05vw, 13px)' }}>
                       {v.type === 'client' ? '🔧' : '🏷️'}
                     </span>
                   )}
                   <span style={{
-                    color: couleur, fontSize: 'clamp(10px, 1vw, 13px)', fontWeight: 800,
+                    color: couleur, fontSize: 'clamp(13px, 1.35vw, 17px)', fontWeight: 800,
                     fontFamily: 'monospace',
                   }}>
                     #{v.numero}
