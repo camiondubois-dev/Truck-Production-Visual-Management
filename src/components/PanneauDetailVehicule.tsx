@@ -90,7 +90,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const {
     mettreAJourRoadMap, mettreAJourPhotoInventaire,
     marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
-    marquerDisponible, mettreAJourReservoir,
+    marquerDisponible, mettreAJourReservoir, mettreAJourType,
   } = useInventaire();
   const { supprimerItem, ajouterDocument, supprimerDocument, assignerSlot, slotMap, rechargerItems } = useGarage();
   const { profile: session } = useAuth();
@@ -165,6 +165,11 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
 
   const changerDateLivraison = async (date: string) => {
     await mettreAJourCommercial(v.id, etatCommercial as EtatCommercial, date || null, v.clientAcheteur ?? null);
+  };
+
+  const changerType = async (newType: 'eau' | 'detail') => {
+    if (newType === v.type) return;
+    await mettreAJourType(v.id, newType);
   };
 
   // Réservoir handlers
@@ -267,6 +272,33 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
               </label>
             )}
           </div>
+
+          {/* ── Type (Eau / Détail) ─────────────── */}
+          {(v.type === 'eau' || v.type === 'detail') && (
+            <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type de camion</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['eau', 'detail'] as const).map(t => {
+                  const actif = v.type === t;
+                  const color = t === 'eau' ? '#f97316' : '#22c55e';
+                  const bg    = t === 'eau' ? '#fff7ed' : '#f0fdf4';
+                  return (
+                    <button key={t} onClick={() => changerType(t)}
+                      style={{
+                        flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer',
+                        fontSize: 13, fontWeight: actif ? 700 : 500,
+                        border: actif ? `2px solid ${color}` : '1px solid #e5e7eb',
+                        background: actif ? bg : 'white',
+                        color: actif ? color : '#9ca3af',
+                        transition: 'all 0.15s',
+                      }}>
+                      {t === 'eau' ? '💧 Eau' : '🏷️ Détail'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ── Statut commercial ───────────────── */}
           {montrerCommercial && (
