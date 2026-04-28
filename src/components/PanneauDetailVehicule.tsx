@@ -194,7 +194,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   return (
     <>
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'fixed', right: 0, top: 0, width: 380, height: '100dvh',
+        position: 'fixed', right: 0, top: 0, width: 460, height: '100dvh',
         background: 'white', borderLeft: '1px solid #e5e7eb',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
       }}>
