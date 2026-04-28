@@ -596,7 +596,7 @@ function ModalJobOccupe({ item, slot, position, onVider, onClose }: {
 }
 
 // ── Types internes ─────────────────────────────────────────────
-interface QueueEntry {
+export interface QueueEntry {
   vehicule: VehiculeInventaire;  // toujours présent — road_map est source de vérité
   item?: Item;                   // prod_items correspondant si disponible (pour assigner slot)
   priorite?: number;
@@ -611,15 +611,16 @@ interface StationBlockProps {
   onSlotClick: (e: React.MouseEvent, slot: Slot) => void;
   allEnAttente: Item[];
   onWaitingItemClick: (e: React.MouseEvent, item: Item, garageId: string) => void;
-  onCreateAndAssign: (e: React.MouseEvent, vehicule: VehiculeInventaire, garageId: string) => Promise<void>;
+  onCreateAndAssign?: (e: React.MouseEvent, vehicule: VehiculeInventaire, garageId: string) => Promise<void>;
   vehicules: VehiculeInventaire[];
   itemByInvId: Record<string, Item>;
   onReorder: (newOrder: QueueEntry[]) => Promise<void>;
   onOpenDetail?: (vehiculeId: string) => void;
+  showPlanifies?: boolean;  // active la section "Pipeline planifié" (TV uniquement)
   style?: React.CSSProperties;
 }
 
-function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, onOpenDetail, style }: StationBlockProps) {
+export function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingItemClick, onCreateAndAssign, vehicules, itemByInvId, onReorder, onOpenDetail, showPlanifies, style }: StationBlockProps) {
   const roadMapStations = GARAGE_TO_ROAD_MAP_STATIONS[station.id] ?? [];
 
   // Index inventaireId → VehiculeInventaire (pour la description sous-traitant sur les fiches)
@@ -681,6 +682,28 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
       return a.priorite - b.priorite;
     });
   }, [vehicules, itemByInvId, allEnAttente, station.id]);
+
+  // ── Camions planifiés (statut 'planifie') — uniquement TV ───────────────
+  const planifies = useMemo((): VehiculeInventaire[] => {
+    if (!showPlanifies || roadMapStations.length === 0) return [];
+    const inQueue = new Set(finalQueue.map(e => e.vehicule.id));
+    const seen = new Set<string>();
+    const result: VehiculeInventaire[] = [];
+    for (const v of vehicules) {
+      if (!v.roadMap) continue;
+      const step = v.roadMap.find(s =>
+        roadMapStations.includes(s.stationId) && s.statut === 'planifie'
+      );
+      if (!step) continue;
+      if (inQueue.has(v.id)) continue;
+      if (seen.has(v.id)) continue;
+      const item = itemByInvId[v.id];
+      if (item?.slotId) continue; // déjà dans un slot
+      seen.add(v.id);
+      result.push(v);
+    }
+    return result;
+  }, [vehicules, finalQueue, itemByInvId, showPlanifies, station.id]);
 
   // ── localQueue : source d'affichage locale ──────────────────────────────
   // Mis à jour IMMÉDIATEMENT lors d'un reorder (pas d'attente réseau).
@@ -996,6 +1019,62 @@ function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWaitingIt
                     onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
                     onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
                   >▼</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pipeline planifié — TV uniquement */}
+      {showPlanifies && planifies.length > 0 && (
+        <div style={{
+          borderTop: '1px solid rgba(148,163,184,0.2)',
+          padding: '5px 8px 6px',
+          flexShrink: 0,
+          background: 'rgba(0,0,0,0.2)',
+          maxHeight: '30%',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            fontSize: 'clamp(8px, 0.75vw, 9px)',
+            fontFamily: 'monospace', fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: '#94a3b8', marginBottom: 4,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />
+            Pipeline planifié
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {planifies.map(v => {
+              const couleur = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+              return (
+                <div
+                  key={v.id}
+                  onClick={(e) => { e.stopPropagation(); if (onOpenDetail) onOpenDetail(v.id); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    background: `${couleur}10`,
+                    border: `1px solid ${couleur}30`,
+                    borderRadius: 4, padding: '2px 7px',
+                    cursor: onOpenDetail ? 'pointer' : 'default',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (onOpenDetail) e.currentTarget.style.background = `${couleur}22`; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = `${couleur}10`; }}
+                >
+                  {v.type === 'eau' ? <EauIcon /> : (
+                    <span style={{ fontSize: 'clamp(9px, 0.8vw, 11px)' }}>
+                      {v.type === 'client' ? '🔧' : '🏷️'}
+                    </span>
+                  )}
+                  <span style={{
+                    color: couleur, fontSize: 'clamp(10px, 1vw, 13px)', fontWeight: 800,
+                    fontFamily: 'monospace',
+                  }}>
+                    #{v.numero}
+                  </span>
                 </div>
               );
             })}
@@ -1581,7 +1660,7 @@ type PeintureModal =
   | { type: 'occupe';   slot: Slot; reservoir: ReservoirSlotInfo; position: { x: number; y: number } }
   | null;
 
-function PeintureStationBlock({
+export function PeintureStationBlock({
   station,
   style,
 }: {
