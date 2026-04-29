@@ -517,14 +517,37 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
           })()}
 
           {/* ── Marquer prêt ─────────────────────── */}
-          {!v.estPret && v.statut !== 'archive' && (
-            <div style={{ marginBottom: 14 }}>
-              <button onClick={() => marquerPret(v.id, true)}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                ✅ Marquer comme prêt
-              </button>
-            </div>
-          )}
+          {!v.estPret && v.statut !== 'archive' && (() => {
+            const etapesRestantes = (v.roadMap ?? []).filter(s => s.statut !== 'termine' && s.statut !== 'saute');
+            const manqueReservoir  = v.type === 'eau' && !v.aUnReservoir;
+            const blocages: string[] = [];
+            if (etapesRestantes.length > 0) blocages.push(`${etapesRestantes.length} étape${etapesRestantes.length > 1 ? 's' : ''} non terminée${etapesRestantes.length > 1 ? 's' : ''}`);
+            if (manqueReservoir) blocages.push('aucun réservoir installé');
+            const bloque = blocages.length > 0;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <button
+                  onClick={() => { if (!bloque) marquerPret(v.id, true); }}
+                  disabled={bloque}
+                  title={bloque ? `Impossible : ${blocages.join(' · ')}` : ''}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: 8, border: 'none',
+                    background: bloque ? '#e5e7eb' : '#22c55e',
+                    color: bloque ? '#9ca3af' : 'white',
+                    fontWeight: 700, fontSize: 14,
+                    cursor: bloque ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                  ✅ Marquer comme prêt
+                </button>
+                {bloque && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 6, background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', fontSize: 12, lineHeight: 1.4 }}>
+                    ⚠️ Impossible de marquer prêt : {blocages.join(' · ')}.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {v.estPret && (
             <div style={{ marginBottom: 14 }}>
               <button onClick={() => marquerPret(v.id, false)}

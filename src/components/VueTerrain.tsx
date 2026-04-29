@@ -522,8 +522,20 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     onMisAJour({ ...v, variante: val ?? undefined });
   };
 
+  // Validation prêt
+  const etapesRestantes = (v.roadMap ?? []).filter(s => s.statut !== 'termine' && s.statut !== 'saute');
+  const manqueReservoir  = v.type === 'eau' && !v.aUnReservoir;
+  const blocagesPret: string[] = [];
+  if (etapesRestantes.length > 0) blocagesPret.push(`${etapesRestantes.length} étape${etapesRestantes.length > 1 ? 's' : ''} non terminée${etapesRestantes.length > 1 ? 's' : ''}`);
+  if (manqueReservoir) blocagesPret.push('aucun réservoir installé');
+  const blocagePret = blocagesPret.length > 0;
+
   // Marquer prêt
   const handleMarquerPret = async () => {
+    if (blocagePret) {
+      alert(`Impossible de marquer prêt :\n${blocagesPret.join('\n')}`);
+      return;
+    }
     setSaving(true);
     try {
       await inventaireService.marquerPret(v.id, true);
@@ -922,10 +934,22 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
               {saving ? '...' : '↩️ Retirer le statut prêt'}
             </button>
           ) : (
-            <button onClick={handleMarquerPret} disabled={saving}
-              style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: saving ? '#e5e7eb' : '#22c55e', color: saving ? '#9ca3af' : 'white', fontWeight: 700, fontSize: 16, cursor: saving ? 'wait' : 'pointer' }}>
-              {saving ? 'En cours...' : saved ? '✓ Prêt !' : '✅ Marquer prêt'}
-            </button>
+            <>
+              <button onClick={handleMarquerPret} disabled={saving || blocagePret}
+                title={blocagePret ? `Impossible : ${blocagesPret.join(' · ')}` : ''}
+                style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+                  background: (saving || blocagePret) ? '#e5e7eb' : '#22c55e',
+                  color: (saving || blocagePret) ? '#9ca3af' : 'white',
+                  fontWeight: 700, fontSize: 16,
+                  cursor: blocagePret ? 'not-allowed' : (saving ? 'wait' : 'pointer') }}>
+                {saving ? 'En cours...' : saved ? '✓ Prêt !' : '✅ Marquer prêt'}
+              </button>
+              {blocagePret && (
+                <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', fontSize: 13, lineHeight: 1.4 }}>
+                  ⚠️ Impossible de marquer prêt : {blocagesPret.join(' · ')}.
+                </div>
+              )}
+            </>
           )}
         </div>
 
