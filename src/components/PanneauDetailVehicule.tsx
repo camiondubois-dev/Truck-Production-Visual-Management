@@ -21,11 +21,16 @@ export function getSectionVehicule(v: VehiculeInventaire, item?: Item): Section 
   if (estVehiculePret(v)) return 'pret';
   if (item?.slotId) return 'dans-le-garage';
   if (!v.roadMap || v.roadMap.length === 0) return 'a-planifier';
-  const active = v.roadMap.filter(s => s.statut !== 'planifie' && s.statut !== 'saute');
-  if (active.length === 0) return 'a-planifier';
-  if (active.some(s => s.statut === 'en-cours')) return 'dans-le-garage';
-  if (active.some(s => s.statut === 'en-attente')) return 'en-attente';
-  if (active.every(s => s.statut === 'termine')) return 'pret';
+
+  // Une étape "non finie" est toute étape autre que terminé ou sauté
+  const nonFinies = v.roadMap.filter(s => s.statut !== 'termine' && s.statut !== 'saute');
+
+  // Toutes les étapes sont finies ET réservoir installé (pour eau) → vraiment prêt
+  if (nonFinies.length === 0 && (v.type !== 'eau' || v.aUnReservoir)) return 'pret';
+
+  // Sinon, déterminer la section selon les étapes en cours / en attente
+  if (nonFinies.some(s => s.statut === 'en-cours')) return 'dans-le-garage';
+  if (nonFinies.some(s => s.statut === 'en-attente')) return 'en-attente';
   return 'a-planifier';
 }
 
