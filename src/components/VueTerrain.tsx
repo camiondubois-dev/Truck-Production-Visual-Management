@@ -4,7 +4,7 @@ import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { TERRAIN_PIN } from '../config/terrain';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
 import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
 import { ROAD_MAP_STATIONS, RETOUCHE_ID, CHECKLIST_STATIONS } from '../data/etapes';
@@ -591,8 +591,8 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
         <div style={{ padding: '4px 20px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
             <span style={{ fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: v.type === 'eau' ? '#f97316' : '#22c55e' }}>#{v.numero}</span>
-            {v.estPret && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>✅ Prêt</span>}
-            {!v.estPret && v.statut === 'en-production' && (
+            {estVehiculePret(v) && <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>✅ Prêt</span>}
+            {!estVehiculePret(v) && v.statut === 'en-production' && (
               <span style={{ fontSize: 12, background: '#fff7ed', color: '#c2410c', padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>
                 🔧 En production
               </span>
@@ -991,8 +991,8 @@ function VueTerrainMain() {
   const filtrés = camions
     .filter(c => {
       if (filtreType !== 'tous' && c.type !== filtreType) return false;
-      if (filtreStatut === 'disponibles' && c.estPret) return false;
-      if (filtreStatut === 'prets' && !c.estPret) return false;
+      if (filtreStatut === 'disponibles' && estVehiculePret(c)) return false;
+      if (filtreStatut === 'prets' && !estVehiculePret(c)) return false;
       if (filtreStatut === 'vendus' && c.etatCommercial !== 'vendu' && c.etatCommercial !== 'reserve' && c.etatCommercial !== 'location') return false;
       if (q) {
         const haystack = [c.numero, c.marque, c.modele, c.annee?.toString(), c.variante].filter(Boolean).join(' ').toLowerCase();
@@ -1001,12 +1001,13 @@ function VueTerrainMain() {
       return true;
     })
     .sort((a, b) => {
-      if (a.estPret && !b.estPret) return 1;
-      if (!a.estPret && b.estPret) return -1;
+      const aPret = estVehiculePret(a), bPret = estVehiculePret(b);
+      if (aPret && !bPret) return 1;
+      if (!aPret && bPret) return -1;
       return a.numero.localeCompare(b.numero);
     });
 
-  const nbPrets = camions.filter(c => c.estPret).length;
+  const nbPrets = camions.filter(estVehiculePret).length;
   const selected = camions.find(c => c.id === selectedId) ?? null;
 
   const handleMisAJour = (updated: VehiculeInventaire) => {
@@ -1062,8 +1063,8 @@ function VueTerrainMain() {
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
           {([
             ['tous',        'Tous',         camions.length],
-            ['disponibles', 'Disponibles',  camions.filter(c => !c.estPret).length],
-            ['prets',       '✅ Prêts',      camions.filter(c => c.estPret).length],
+            ['disponibles', 'Disponibles',  camions.filter(c => !estVehiculePret(c)).length],
+            ['prets',       '✅ Prêts',      camions.filter(estVehiculePret).length],
             ['vendus',      '✓ Non dispo',   camions.filter(c => c.etatCommercial === 'vendu' || c.etatCommercial === 'reserve' || c.etatCommercial === 'location').length],
           ] as [FiltreStatut, string, number][]).map(([id, label, count]) => (
             <button key={id} onClick={() => setFiltreStatut(id)}
@@ -1095,7 +1096,7 @@ function VueTerrainMain() {
             <div style={{ fontSize: 16 }}>Aucun camion</div>
           </div>
         ) : filtrés.map(camion => {
-          const pret = camion.estPret ?? false;
+          const pret = estVehiculePret(camion);
           return (
             <div key={camion.id} onClick={() => setSelectedId(camion.id)}
               style={{ background: pret ? '#f0fdf4' : 'white', borderRadius: 14, border: `1px solid ${pret ? '#86efac' : '#e5e7eb'}`, borderLeft: `4px solid ${pret ? '#22c55e' : camion.type === 'eau' ? '#f97316' : '#22c55e'}`, padding: '14px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', opacity: pret ? 0.75 : 1 }}>
@@ -1122,7 +1123,7 @@ function VueTerrainMain() {
                   {camion.variante && ` · ${camion.variante}`}
                 </div>
                 {/* Étapes progress */}
-                {!camion.estPret && (camion.etapesFaites ?? []).some(e => e.fait && e.stationId !== RETOUCHE_ID) && (() => {
+                {!pret && (camion.etapesFaites ?? []).some(e => e.fait && e.stationId !== RETOUCHE_ID) && (() => {
                   const nb = CHECKLIST_STATIONS.filter(s => (camion.etapesFaites ?? []).find(e => e.stationId === s.id)?.fait).length;
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -1133,7 +1134,7 @@ function VueTerrainMain() {
                     </div>
                   );
                 })()}
-                {!camion.estPret && (camion.etapesFaites ?? []).find(e => e.stationId === RETOUCHE_ID && e.fait) && (
+                {!pret && (camion.etapesFaites ?? []).find(e => e.stationId === RETOUCHE_ID && e.fait) && (
                   <span style={{ fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginTop: 3, display: 'inline-block' }}>⚠️ Retouche</span>
                 )}
               </div>

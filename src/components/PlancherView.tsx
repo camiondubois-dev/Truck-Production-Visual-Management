@@ -16,7 +16,7 @@ import { inventaireService } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import type { Slot, Item, Document } from '../types/item.types';
-import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
 
 // Types de jobs temporaires — persistés dans prod_items comme les autres jobs
 const TYPES_JOB_TEMP = ['export', 'demantelement', 'autres'] as const;
@@ -1325,7 +1325,7 @@ function ModalInventairePicker({ slot, position, vehicules, onSelect, onClose }:
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>{ti(v.type)}</span>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: tc(v.type), fontSize: 13 }}>#{v.numero}</span>
-              {v.estPret && <span style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>PRÊT</span>}
+              {estVehiculePret(v) && <span style={{ fontSize: 9, background: '#dcfce7', color: '#166534', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>PRÊT</span>}
               {v.statut === 'en-production' && <span style={{ fontSize: 9, background: '#fff7ed', color: '#c2410c', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>EN PROD</span>}
               <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
                 {(v.roadMap ?? []).length} étape{(v.roadMap ?? []).length !== 1 ? 's' : ''}

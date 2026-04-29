@@ -5,7 +5,7 @@ import { fromDB as inventaireFromDB } from '../services/inventaireService';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Item } from '../types/item.types';
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 import { useClients } from '../contexts/ClientContext';
@@ -291,7 +291,7 @@ export function VueInventaire() {
 
   const filtres = [...baseList]
     .filter(v => {
-      if (filtreStatut === 'pret' && !v.estPret) return false;
+      if (filtreStatut === 'pret' && !estVehiculePret(v)) return false;
       if (filtreStatut === 'vendu' && v.etatCommercial !== 'vendu' && v.etatCommercial !== 'reserve' && v.etatCommercial !== 'location') return false;
       if (filtreStatut !== 'tous' && filtreStatut !== 'pret' && filtreStatut !== 'vendu' && v.statut !== filtreStatut) return false;
       // "Disponible" = pas en production ET pas vendu/loué/réservé
@@ -314,13 +314,13 @@ export function VueInventaire() {
     });
 
   const selected = vehicules.find(v => v.id === selectedId) ?? null;
-  const pretsCount = vehicules.filter(v => v.estPret).length;
+  const pretsCount = vehicules.filter(estVehiculePret).length;
   const vendusCount = vehicules.filter(v => v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location').length;
   const pretsParCommercial = {
-    aVendre:  vehicules.filter(v => v.estPret && v.etatCommercial === 'non-vendu').length,
-    aLivrer:  vehicules.filter(v => v.estPret && v.etatCommercial === 'vendu').length,
-    location: vehicules.filter(v => v.estPret && v.etatCommercial === 'location').length,
-    reserve:  vehicules.filter(v => v.estPret && v.etatCommercial === 'reserve').length,
+    aVendre:  vehicules.filter(v => estVehiculePret(v) && v.etatCommercial === 'non-vendu').length,
+    aLivrer:  vehicules.filter(v => estVehiculePret(v) && v.etatCommercial === 'vendu').length,
+    location: vehicules.filter(v => estVehiculePret(v) && v.etatCommercial === 'location').length,
+    reserve:  vehicules.filter(v => estVehiculePret(v) && v.etatCommercial === 'reserve').length,
   };
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {

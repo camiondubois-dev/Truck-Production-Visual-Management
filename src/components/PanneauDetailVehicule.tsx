@@ -11,14 +11,14 @@ import { supabase } from '../lib/supabase';
 import { STATIONS } from '../data/stations';
 import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
 import type { Item, EtatCommercial, Document } from '../types/item.types';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 
 // ── Types exportés ──────────────────────────────────────────────
 export type Section = 'a-planifier' | 'en-attente' | 'dans-le-garage' | 'pret' | 'archive';
 
 export function getSectionVehicule(v: VehiculeInventaire, item?: Item): Section {
   if (v.statut === 'archive') return 'archive';
-  if (v.estPret) return 'pret';
+  if (estVehiculePret(v)) return 'pret';
   if (item?.slotId) return 'dans-le-garage';
   if (!v.roadMap || v.roadMap.length === 0) return 'a-planifier';
   const active = v.roadMap.filter(s => s.statut !== 'planifie' && s.statut !== 'saute');
@@ -226,7 +226,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                   Slot {item.slotId}
                 </span>
               )}
-              {v.estPret && (
+              {estVehiculePret(v) && (
                 <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>✅ Prêt</span>
               )}
               <BadgeCommercial etat={v.etatCommercial} client={v.clientAcheteur} />

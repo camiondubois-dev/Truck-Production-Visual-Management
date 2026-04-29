@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
-import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 
 type TypeVehicule = 'eau' | 'client' | 'detail';
 type FiltreCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location';
@@ -24,7 +24,7 @@ export function VuePrets() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recherche, setRecherche] = useState('');
 
-  const prets = vehicules.filter(v => v.estPret === true);
+  const prets = vehicules.filter(estVehiculePret);
 
   const filtres = prets
     .filter(v => {

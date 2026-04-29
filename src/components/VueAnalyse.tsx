@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Legend, CartesianGrid,
 } from 'recharts';
-import type { VehiculeInventaire, RoadMapEtape } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
 
 // ── Types ──────────────────────────────────────────────────────
 interface Reservoir {
@@ -84,7 +84,7 @@ function formatJours(minutes: number): string {
 }
 
 function getPhase(v: VehiculeInventaire): 'pret' | 'en-production' | 'disponible' {
-  if (v.estPret) return 'pret';
+  if (estVehiculePret(v)) return 'pret';
   if (v.statut === 'en-production') return 'en-production';
   return 'disponible';
 }
@@ -392,16 +392,16 @@ export function VueAnalyse() {
       result = result.filter(v => getPhase(v) === 'en-production' && getAgingBin(v) === filters.aging);
     }
     if (filters.alerte === 'vendu-pas-pret') {
-      result = result.filter(v => getCommercial(v) === 'vendu' && !v.estPret);
+      result = result.filter(v => getCommercial(v) === 'vendu' && !estVehiculePret(v));
     }
     if (filters.alerte === 'ecart-reservoir') {
       result = result.filter(v => !v.aUnReservoir && v.statut !== 'archive');
     }
     if (filters.commercial === 'vendu' && filters.vendusPret) {
       if (filters.vendusPret === 'pret') {
-        result = result.filter(v => v.estPret);
+        result = result.filter(v => estVehiculePret(v));
       } else {
-        result = result.filter(v => !v.estPret);
+        result = result.filter(v => !estVehiculePret(v));
       }
     }
     return result;
@@ -412,19 +412,19 @@ export function VueAnalyse() {
     const vendus = camionsBase.filter(v => getCommercial(v) === 'vendu');
     return {
       total: vendus.length,
-      prets: vendus.filter(v => v.estPret).length,
-      pasPrets: vendus.filter(v => !v.estPret).length,
+      prets: vendus.filter(v => estVehiculePret(v)).length,
+      pasPrets: vendus.filter(v => !estVehiculePret(v)).length,
     };
   }, [camionsBase]);
 
   // ── Catégories ────────────────────────────────────────────
-  const prets = useMemo(() => camionsFiltres.filter(v => v.estPret), [camionsFiltres]);
+  const prets = useMemo(() => camionsFiltres.filter(v => estVehiculePret(v)), [camionsFiltres]);
   const enProduction = useMemo(() => camionsFiltres.filter(v => v.statut === 'en-production'), [camionsFiltres]);
-  const disponibles = useMemo(() => camionsFiltres.filter(v => v.statut === 'disponible' && !v.estPret), [camionsFiltres]);
+  const disponibles = useMemo(() => camionsFiltres.filter(v => v.statut === 'disponible' && !estVehiculePret(v)), [camionsFiltres]);
 
   // ── Alertes (sur données eau non-filtrées) ────────────────
   const vendusNonPrets = useMemo(() =>
-    camionsEau.filter(v => getCommercial(v) === 'vendu' && !v.estPret),
+    camionsEau.filter(v => getCommercial(v) === 'vendu' && !estVehiculePret(v)),
     [camionsEau]
   );
   const camionsSansReservoir = useMemo(() =>
@@ -578,8 +578,8 @@ export function VueAnalyse() {
     }
     return list
       .sort((a, b) => {
-        const aVnp = getCommercial(a) === 'vendu' && !a.estPret ? 0 : 1;
-        const bVnp = getCommercial(b) === 'vendu' && !b.estPret ? 0 : 1;
+        const aVnp = getCommercial(a) === 'vendu' && !estVehiculePret(a) ? 0 : 1;
+        const bVnp = getCommercial(b) === 'vendu' && !estVehiculePret(b) ? 0 : 1;
         if (aVnp !== bVnp) return aVnp - bVnp;
         return getProgression(b) - getProgression(a);
       })
@@ -590,7 +590,7 @@ export function VueAnalyse() {
           ? ROAD_MAP_STATIONS.find(s => s.id === stationId)?.label ?? stationId
           : '—';
         const progression = getProgression(v);
-        const isVenduNonPret = getCommercial(v) === 'vendu' && !v.estPret;
+        const isVenduNonPret = getCommercial(v) === 'vendu' && !estVehiculePret(v);
         const numCell = (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {isVenduNonPret && <span title="Vendu mais pas prêt!" style={{ fontSize: 14 }}>🚨</span>}
