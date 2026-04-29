@@ -31,7 +31,24 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     inventaireService.getAll()
-      .then(setVehicules)
+      .then(async (vs) => {
+        // Auto-cleanup : décocher est_pret pour les camions qui ne satisfont pas les conditions
+        // (étapes non terminées ou réservoir manquant pour eau).
+        // Évite les anciens "faux prêts" laissés par un bug ou une modif manuelle.
+        const aCorriger = vs.filter(v => {
+          if (!v.estPret) return false;
+          const etapesRestantes = (v.roadMap ?? []).filter(s => s.statut !== 'termine' && s.statut !== 'saute');
+          if (etapesRestantes.length > 0) return true;
+          if (v.type === 'eau' && !v.aUnReservoir) return true;
+          return false;
+        });
+        if (aCorriger.length > 0) {
+          await Promise.all(aCorriger.map(v => inventaireService.marquerPret(v.id, false).catch(() => {})));
+          setVehicules(vs.map(v => aCorriger.some(c => c.id === v.id) ? { ...v, estPret: false } : v));
+        } else {
+          setVehicules(vs);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
