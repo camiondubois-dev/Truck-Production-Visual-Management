@@ -210,9 +210,19 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
       }}>
         <div style={{ padding: 20 }}>
           <button onClick={onClose}
-            style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            style={{
+              position: 'fixed', top: 12, right: 12, zIndex: 200,
+              background: 'rgba(255,255,255,0.95)',
+              border: '1px solid #e5e7eb',
+              cursor: 'pointer', fontSize: 18, color: '#374151',
+              width: 36, height: 36, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              backdropFilter: 'blur(8px)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.95)'; e.currentTarget.style.color = '#374151'; e.currentTarget.style.borderColor = '#e5e7eb'; }}
           >✕</button>
 
           {/* ── En-tête ─────────────────────────── */}

@@ -249,19 +249,12 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         })}
       </div>
 
-      {/* Panneau détail */}
+      {/* Panneau détail (se positionne lui-même en fixed) */}
       {selected && !onSelectVehicule && (
-        <div style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 460, maxWidth: '100vw',
-          background: 'white', boxShadow: '-8px 0 32px rgba(0,0,0,0.5)',
-          zIndex: 200, overflowY: 'auto',
-        }}>
-          <PanneauDetailVehicule
-            vehicule={selected}
-            item={selectedItem}
-            onClose={() => setSelectedId(null)} />
-        </div>
+        <PanneauDetailVehicule
+          vehicule={selected}
+          item={selectedItem}
+          onClose={() => setSelectedId(null)} />
       )}
     </div>
   );
