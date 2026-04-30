@@ -119,15 +119,37 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
     return map;
   }, [items]);
 
-  const engagés = useMemo(() =>
-    vehicules.filter(v => v.statut !== 'archive' && isEngagé(v) && !estVehiculePret(v)),
+  const cmpDate = (a: VehiculeInventaire, b: VehiculeInventaire) => {
+    const ja = joursAvant(a.dateLivraisonPlanifiee);
+    const jb = joursAvant(b.dateLivraisonPlanifiee);
+    if (ja === null && jb === null) return 0;
+    if (ja === null) return 1;
+    if (jb === null) return -1;
+    return ja - jb;
+  };
+
+  // Tous les engagés (vendus + réservés + location)
+  const tousEngagés = useMemo(() =>
+    vehicules.filter(v => v.statut !== 'archive' && isEngagé(v)),
   [vehicules]);
+
+  // Pas encore prêts → kanban du haut
+  const aLivrer = useMemo(() =>
+    tousEngagés.filter(v => !estVehiculePret(v)),
+  [tousEngagés]);
+
+  // Prêts → bandeau du bas
+  const prets = useMemo(() => {
+    const list = tousEngagés.filter(estVehiculePret);
+    list.sort(cmpDate);
+    return list;
+  }, [tousEngagés]);
 
   const buckets = useMemo(() => {
     const result: Record<BucketDef['id'], VehiculeInventaire[]> = {
       'retard': [], 'aujourdhui': [], 'semaine': [], 'mois': [], 'plus-tard': [], 'sans-date': [],
     };
-    for (const v of engagés) {
+    for (const v of aLivrer) {
       const j = joursAvant(v.dateLivraisonPlanifiee);
       if (j === null)      result['plus-tard'].push(v);
       else if (j < 0)      result['retard'].push(v);
@@ -136,24 +158,15 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
       else if (j <= 30)    result['mois'].push(v);
       else                 result['plus-tard'].push(v);
     }
-    // Sort par date (le plus urgent en haut)
-    const cmp = (a: VehiculeInventaire, b: VehiculeInventaire) => {
-      const ja = joursAvant(a.dateLivraisonPlanifiee);
-      const jb = joursAvant(b.dateLivraisonPlanifiee);
-      if (ja === null && jb === null) return 0;
-      if (ja === null) return 1;
-      if (jb === null) return -1;
-      return ja - jb;
-    };
     for (const k of Object.keys(result) as BucketDef['id'][]) {
-      result[k].sort(cmp);
+      result[k].sort(cmpDate);
     }
     return result;
-  }, [engagés]);
+  }, [aLivrer]);
 
-  const total = engagés.length;
+  const total = tousEngagés.length;
   const enRetard = buckets['retard'].length;
-  const sansReservoir = engagés.filter(v => v.type === 'eau' && !v.aUnReservoir).length;
+  const sansReservoir = aLivrer.filter(v => v.type === 'eau' && !v.aUnReservoir).length;
 
   const selected = selectedId ? vehicules.find(v => v.id === selectedId) ?? null : null;
   const selectedItem = selected ? itemByInvId[selected.id] : undefined;
@@ -215,6 +228,7 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           <KPIBlock value={enRetard}      label="En retard" color="#dc2626" pulse={enRetard > 0} />
           <KPIBlock value={buckets['aujourdhui'].length} label="Aujourd'hui / Demain" color="#ea580c" />
           <KPIBlock value={sansReservoir} label="Sans réservoir" color="#f59e0b" />
+          <KPIBlock value={prets.length}  label="Prêts à livrer" color="#22c55e" />
         </div>
 
         {/* Horloge */}
@@ -231,13 +245,13 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         </div>
       </div>
 
-      {/* ── Kanban 5 colonnes ──────────────────────────────────── */}
+      {/* ── Kanban 5 colonnes (À LIVRER) ───────────────────────── */}
       <div style={{
         flex: 1, minHeight: 0,
         display: 'grid',
         gridTemplateColumns: 'repeat(5, 1fr)',
         gap: 'clamp(8px, 0.9vw, 14px)',
-        padding: 'clamp(10px, 1.2vw, 18px)',
+        padding: 'clamp(8px, 1vw, 14px) clamp(10px, 1.2vw, 18px) 0',
       }}>
         {BUCKETS.map(b => {
           const list = b.id === 'plus-tard'
@@ -248,6 +262,9 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           );
         })}
       </div>
+
+      {/* ── Bandeau PRÊTS À LIVRER ─────────────────────────────── */}
+      <BandeauPrets prets={prets} onClick={handleClick} itemByInvId={itemByInvId} />
 
       {/* Panneau détail (se positionne lui-même en fixed) */}
       {selected && !onSelectVehicule && (
@@ -366,27 +383,29 @@ function Colonne({ bucket, vehicules, onClick, itemByInvId }: {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body — no-scroll, distribue l'espace en parts égales */}
       <div className="livr-col-body" style={{
-        flex: 1, minHeight: 0, overflowY: 'auto',
-        padding: 'clamp(6px, 0.7vw, 10px)',
-        display: 'flex', flexDirection: 'column',
-        gap: 'clamp(5px, 0.5vw, 8px)',
+        flex: 1, minHeight: 0, overflow: 'hidden',
+        padding: 'clamp(5px, 0.5vw, 8px)',
+        display: 'grid',
+        gridTemplateRows: vehicules.length > 0 ? `repeat(${vehicules.length}, minmax(0, 1fr))` : '1fr',
+        gap: 'clamp(3px, 0.4vw, 6px)',
       }}>
         {vehicules.length === 0 ? (
           <div style={{
-            textAlign: 'center', padding: '24px 8px',
-            color: 'rgba(255,255,255,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(255,255,255,0.2)',
             fontSize: 'clamp(10px, 0.9vw, 12px)', fontStyle: 'italic',
           }}>
-            Aucun camion
+            —
           </div>
         ) : vehicules.map((v, idx) => (
           <CarteCamionDashboard key={v.id} v={v} accent={bucket.accent}
             inGarage={!!itemByInvId[v.id]?.slotId}
             slotId={itemByInvId[v.id]?.slotId}
             onClick={() => onClick(v.id)}
-            delay={idx * 30} />
+            delay={idx * 30}
+            compact={vehicules.length > 4} />
         ))}
       </div>
     </div>
@@ -394,13 +413,15 @@ function Colonne({ bucket, vehicules, onClick, itemByInvId }: {
 }
 
 // ── Carte camion (compacte, dense, visuelle) ────────────────────
-function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
+function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay, compact }: {
   v: VehiculeInventaire;
   accent: string;
   inGarage: boolean;
   slotId?: string;
   onClick: () => void;
   delay: number;
+  /** Mode condensé quand beaucoup de cartes dans la colonne */
+  compact?: boolean;
 }) {
   const j = joursAvant(v.dateLivraisonPlanifiee);
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -439,12 +460,13 @@ function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
         border: `1px solid ${accent}40`,
         borderLeft: `3px solid ${typeColor}`,
         borderRadius: 8,
-        padding: 'clamp(7px, 0.7vw, 10px) clamp(8px, 0.8vw, 11px)',
+        padding: compact ? '5px 8px' : 'clamp(6px, 0.6vw, 9px) clamp(7px, 0.7vw, 10px)',
         cursor: 'pointer',
         transition: 'all 0.15s',
         display: 'flex', flexDirection: 'column',
-        gap: 'clamp(4px, 0.4vw, 6px)',
+        gap: compact ? 3 : 'clamp(3px, 0.35vw, 5px)',
         animationDelay: `${delay}ms`,
+        minHeight: 0, overflow: 'hidden',
       }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLDivElement;
@@ -460,11 +482,11 @@ function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
       }}
     >
       {/* Ligne 1 : photo/icône · numéro · commercial · date */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <PhotoOuIcone v={v} taille="clamp(34px, 3.4vw, 48px)" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 6 : 8, flexShrink: 0 }}>
+        <PhotoOuIcone v={v} taille={compact ? 28 : 'clamp(34px, 3.4vw, 48px)'} />
         <span style={{
           fontFamily: 'monospace', fontWeight: 900,
-          fontSize: 'clamp(13px, 1.25vw, 17px)', color: typeColor,
+          fontSize: compact ? 13 : 'clamp(13px, 1.25vw, 17px)', color: typeColor,
           lineHeight: 1,
         }}>
           #{v.numero}
@@ -487,17 +509,28 @@ function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
         </span>
       </div>
 
-      {/* Ligne 2 : client + label véhicule */}
-      <div style={{
-        fontSize: 'clamp(10px, 0.9vw, 12px)',
-        color: 'rgba(255,255,255,0.75)', fontWeight: 600,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        lineHeight: 1.25,
-      }}>
-        {client && <span style={{ color: 'white' }}>{client}</span>}
-        {client && ' · '}
-        <span style={{ color: 'rgba(255,255,255,0.5)' }}>{getLabelVehicule(v)}</span>
-      </div>
+      {/* Ligne 2 : client + label véhicule (caché en mode compact) */}
+      {!compact && (
+        <div style={{
+          fontSize: 'clamp(10px, 0.9vw, 12px)',
+          color: 'rgba(255,255,255,0.75)', fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          lineHeight: 1.25,
+        }}>
+          {client && <span style={{ color: 'white' }}>{client}</span>}
+          {client && ' · '}
+          <span style={{ color: 'rgba(255,255,255,0.5)' }}>{getLabelVehicule(v)}</span>
+        </div>
+      )}
+      {compact && client && (
+        <div style={{
+          fontSize: 11, color: 'white', fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          lineHeight: 1.2,
+        }}>
+          {client}
+        </div>
+      )}
 
       {/* Ligne 3 : barre de progression + pct */}
       {(v.roadMap ?? []).length > 0 && (
@@ -520,8 +553,8 @@ function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
         </div>
       )}
 
-      {/* Ligne 4 : étape en cours/prochaine + alertes */}
-      <div style={{
+      {/* Ligne 4 : étape en cours/prochaine + alertes (caché si compact) */}
+      {!compact && <div style={{
         display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
         fontSize: 'clamp(9px, 0.8vw, 11px)',
       }}>
@@ -552,6 +585,141 @@ function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay }: {
         {restantes.length > 0 && (
           <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>
             {restantes.length} restante{restantes.length > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>}
+    </div>
+  );
+}
+
+// ── Bandeau Prêts à livrer (en bas) ─────────────────────────────
+function BandeauPrets({ prets, onClick, itemByInvId }: {
+  prets: VehiculeInventaire[];
+  onClick: (id: string) => void;
+  itemByInvId: Record<string, Item>;
+}) {
+  return (
+    <div style={{
+      flexShrink: 0,
+      borderTop: '2px solid rgba(34,197,94,0.4)',
+      background: 'linear-gradient(180deg, rgba(20,83,45,0.45) 0%, rgba(20,83,45,0.15) 100%)',
+      padding: 'clamp(8px, 0.9vw, 12px) clamp(10px, 1.2vw, 18px)',
+      display: 'flex', flexDirection: 'column', gap: 8,
+      maxHeight: '24%',
+      minHeight: 'clamp(110px, 14vh, 170px)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{
+          fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 900,
+          color: '#86efac', letterSpacing: '0.05em',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          ✅ PRÊTS À LIVRER
+        </span>
+        <span style={{
+          fontSize: 'clamp(18px, 1.8vw, 26px)', fontWeight: 900, color: '#22c55e', lineHeight: 1,
+        }}>
+          {prets.length}
+        </span>
+        <div style={{ flex: 1, height: 1, background: 'rgba(34,197,94,0.25)' }} />
+        <span style={{ fontSize: 'clamp(9px, 0.8vw, 11px)', color: 'rgba(134,239,172,0.7)', fontStyle: 'italic' }}>
+          Toutes étapes complétées · Plus rapprochés à gauche
+        </span>
+      </div>
+
+      {prets.length === 0 ? (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.25)', fontSize: 'clamp(11px, 1vw, 13px)', fontStyle: 'italic',
+        }}>
+          Aucun camion prêt à livrer pour le moment
+        </div>
+      ) : (
+        <div style={{
+          flex: 1, minHeight: 0, overflow: 'hidden',
+          display: 'grid',
+          gridTemplateColumns: `repeat(${Math.min(prets.length, 12)}, minmax(0, 1fr))`,
+          gap: 'clamp(5px, 0.5vw, 8px)',
+        }}>
+          {prets.slice(0, 12).map(v => (
+            <CartePret key={v.id} v={v} inGarage={!!itemByInvId[v.id]?.slotId}
+              onClick={() => onClick(v.id)} />
+          ))}
+          {prets.length > 12 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#86efac', fontWeight: 700, fontSize: 'clamp(11px, 1vw, 13px)',
+              background: 'rgba(34,197,94,0.1)',
+              border: '1px solid rgba(34,197,94,0.3)',
+              borderRadius: 8,
+            }}>
+              +{prets.length - 12}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CartePret({ v, inGarage, onClick }: {
+  v: VehiculeInventaire;
+  inGarage: boolean;
+  onClick: () => void;
+}) {
+  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+  const j = joursAvant(v.dateLivraisonPlanifiee);
+  const dateLabel = j === null ? '—'
+    : j < 0  ? `🚨 ${Math.abs(j)}j`
+    : j === 0 ? "Auj."
+    : j === 1 ? 'Demain'
+    : `${j}j`;
+  const client = v.clientAcheteur || v.nomClient;
+
+  return (
+    <div onClick={onClick} className="livr-card"
+      style={{
+        background: 'linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.05) 100%)',
+        border: '1px solid rgba(34,197,94,0.4)',
+        borderLeft: `3px solid ${typeColor}`,
+        borderRadius: 8,
+        padding: '6px 8px',
+        cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 4,
+        minHeight: 0, overflow: 'hidden',
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(34,197,94,0.3)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <PhotoOuIcone v={v} taille={28} />
+        <span style={{
+          fontFamily: 'monospace', fontWeight: 900,
+          fontSize: 'clamp(11px, 1vw, 14px)', color: typeColor,
+          lineHeight: 1,
+        }}>
+          #{v.numero}
+        </span>
+      </div>
+      {client && (
+        <div style={{
+          fontSize: 'clamp(9px, 0.8vw, 11px)', color: 'white', fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2,
+        }}>
+          {client}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 'clamp(9px, 0.8vw, 11px)', fontWeight: 800,
+          color: j !== null && j < 0 ? '#fca5a5' : j !== null && j <= 7 ? '#fdba74' : '#86efac',
+        }}>
+          📅 {dateLabel}
+        </span>
+        {inGarage && (
+          <span style={{ fontSize: 9, padding: '1px 4px', borderRadius: 3, background: 'rgba(59,130,246,0.3)', color: '#93c5fd', fontWeight: 800 }}>
+            Garage
           </span>
         )}
       </div>
