@@ -61,6 +61,12 @@ function getStation(stationId: string) {
   return ROAD_MAP_STATIONS.find(s => s.id === stationId);
 }
 
+function tronquerNomPdf(nom: string): string {
+  // Retire l'extension .pdf et tronque à 10 chars
+  const sansExt = nom.replace(/\.pdf$/i, '');
+  return sansExt.length > 10 ? sansExt.slice(0, 9) + '…' : sansExt;
+}
+
 function isEngagé(v: VehiculeInventaire): boolean {
   return v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location';
 }
@@ -615,26 +621,33 @@ function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpen
           )}
         </div>
         {documents.length > 0 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: documents[0].nom, base64: documents[0].base64 }); }}
-            title={documents.length === 1 ? `Ouvrir : ${documents[0].nom}` : `${documents.length} PDFs · ouvre le premier`}
-            style={{
-              flexShrink: 0,
-              background: 'rgba(220,38,38,0.18)',
-              border: '1px solid rgba(220,38,38,0.5)',
-              color: '#fca5a5', fontWeight: 800,
-              borderRadius: 6,
-              padding: 'clamp(4px, 0.5vw, 7px) clamp(6px, 0.7vw, 9px)',
-              cursor: 'pointer',
-              fontSize: 'clamp(11px, 1vw, 14px)',
-              display: 'flex', alignItems: 'center', gap: 4,
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.35)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
-          >
-            📄 {documents.length > 1 && <span>{documents.length}</span>}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
+            {documents.map((doc, i) => (
+              <button key={doc.id ?? i}
+                onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: doc.nom, base64: doc.base64 }); }}
+                title={`Ouvrir : ${doc.nom}`}
+                style={{
+                  background: 'rgba(220,38,38,0.18)',
+                  border: '1px solid rgba(220,38,38,0.5)',
+                  color: '#fca5a5', fontWeight: 800,
+                  borderRadius: 6,
+                  padding: 'clamp(3px, 0.4vw, 5px) clamp(5px, 0.6vw, 8px)',
+                  cursor: 'pointer',
+                  fontSize: 'clamp(10px, 0.9vw, 12px)',
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  maxWidth: 'clamp(70px, 8vw, 110px)',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.35)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
+              >
+                <span style={{ flexShrink: 0 }}>📄</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tronquerNomPdf(doc.nom)}
+                </span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
