@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { inventaireService } from '../services/inventaireService';
 import type { RoadMapEtape } from '../types/inventaireTypes';
 
-const GarageContext = createContext<GarageContextType | null>(null);
+export const GarageContext = createContext<GarageContextType | null>(null);
 
 export const GarageProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<Item[]>([]);

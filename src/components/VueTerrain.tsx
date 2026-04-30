@@ -9,6 +9,7 @@ import type { Document } from '../types/item.types';
 import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
 import { ROAD_MAP_STATIONS, RETOUCHE_ID, CHECKLIST_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
+import { VueLivraisons } from './VueLivraisons';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 
 type FiltreType   = 'tous' | 'eau' | 'detail';
@@ -972,6 +973,7 @@ function VueTerrainMain() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [showCreation, setShowCreation] = useState(false);
   const [showReservoirs, setShowReservoirs] = useState(false);
+  const [showLivraisons, setShowLivraisons] = useState(false);
 
   const charger = async () => {
     const { data } = await supabase
@@ -1035,6 +1037,10 @@ function VueTerrainMain() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowLivraisons(true)} title="Suivi livraisons"
+              style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#dc2626', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              🚚
+            </button>
             <button onClick={() => setShowReservoirs(true)}
               style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#0ea5e9', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
               🛢
@@ -1159,6 +1165,13 @@ function VueTerrainMain() {
       )}
       {showReservoirs && (
         <PanneauReservoirs onClose={() => setShowReservoirs(false)} />
+      )}
+      {showLivraisons && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#f8fafc' }}>
+          <VueLivraisons mobile
+            onClose={() => setShowLivraisons(false)}
+            onSelectVehicule={(id) => { setSelectedId(id); setShowLivraisons(false); }} />
+        </div>
       )}
     </div>
   );
