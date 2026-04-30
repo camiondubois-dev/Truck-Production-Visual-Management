@@ -89,11 +89,31 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
   const { items } = useGarageOptional();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [tvMode, setTvMode] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  // Sync l'état tvMode quand l'utilisateur sort du fullscreen avec ESC
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setTvMode(false);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const toggleTvMode = async () => {
+    if (!tvMode) {
+      try { await document.documentElement.requestFullscreen(); } catch { /* navigateur peut refuser */ }
+      setTvMode(true);
+    } else {
+      try { if (document.fullscreenElement) await document.exitFullscreen(); } catch { /* ignore */ }
+      setTvMode(false);
+    }
+  };
 
   const itemByInvId = useMemo(() => {
     const map: Record<string, Item> = {};
@@ -164,7 +184,9 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
 
   return (
     <div style={{
-      width: '100%', height: '100%',
+      ...(tvMode
+        ? { position: 'fixed' as const, inset: 0, zIndex: 9999, width: '100vw', height: '100dvh' }
+        : { width: '100%', height: '100%' }),
       background: 'radial-gradient(ellipse at top, #1a1814 0%, #0f0e0b 100%)',
       color: 'white', display: 'flex', flexDirection: 'column',
       overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -217,17 +239,37 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           <KPIBlock value={prets.length}  label="Prêts à livrer" color="#22c55e" />
         </div>
 
-        {/* Horloge */}
-        <div style={{ textAlign: 'right' }}>
-          <div style={{
-            fontFamily: 'monospace', fontSize: 'clamp(18px, 1.8vw, 26px)',
-            fontWeight: 700, lineHeight: 1, letterSpacing: '0.04em',
-          }}>
-            {now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+        {/* Horloge + bouton TV */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{
+              fontFamily: 'monospace', fontSize: 'clamp(18px, 1.8vw, 26px)',
+              fontWeight: 700, lineHeight: 1, letterSpacing: '0.04em',
+            }}>
+              {now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+            <div style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
+              {now.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
           </div>
-          <div style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
-            {now.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </div>
+          <button onClick={toggleTvMode}
+            title={tvMode ? 'Quitter le mode TV (ESC)' : 'Plein écran TV'}
+            style={{
+              background: tvMode ? '#dc2626' : 'rgba(255,255,255,0.08)',
+              border: `1px solid ${tvMode ? '#fca5a5' : 'rgba(255,255,255,0.15)'}`,
+              color: 'white',
+              padding: 'clamp(8px, 0.8vw, 12px) clamp(10px, 1vw, 14px)',
+              borderRadius: 8, cursor: 'pointer',
+              fontSize: 'clamp(13px, 1.2vw, 16px)', fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 6,
+              transition: 'all 0.15s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => { if (!tvMode) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.16)'; }}
+            onMouseLeave={e => { if (!tvMode) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)'; }}
+          >
+            {tvMode ? '✕ Quitter' : '🖥 Mode TV'}
+          </button>
         </div>
       </div>
 
