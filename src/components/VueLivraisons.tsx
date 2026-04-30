@@ -4,7 +4,7 @@ import { GarageContext } from '../contexts/GarageContext';
 import type { Item } from '../types/item.types';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
-import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
 import { EauIcon } from './EauIcon';
 
 /** useGarage qui ne crash pas si pas de provider (cas VueTerrain mobile). */
@@ -90,6 +90,8 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
+  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [photoOuverte, setPhotoOuverte] = useState<{ url: string; numero: string } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -280,6 +282,8 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         couleur="#ea580c"
         vehicules={aLivrerOrdonnés}
         onClick={handleClick}
+        onOpenPdf={setPdfOuvert}
+        onOpenPhoto={setPhotoOuverte}
         itemByInvId={itemByInvId}
         flexBasis={prets.length > 0 ? 0.68 : 1}
       />
@@ -292,6 +296,8 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           couleur="#22c55e"
           vehicules={prets}
           onClick={handleClick}
+          onOpenPdf={setPdfOuvert}
+          onOpenPhoto={setPhotoOuverte}
           itemByInvId={itemByInvId}
           flexBasis={0.32}
           variantPret
@@ -305,6 +311,43 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           item={selectedItem}
           onClose={() => setSelectedId(null)} />
       )}
+
+      {/* Modal PDF (ouvert directement depuis la carte) */}
+      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
+
+      {/* Modal photo plein écran */}
+      {photoOuverte && <ModalPhoto photo={photoOuverte} onClose={() => setPhotoOuverte(null)} />}
+    </div>
+  );
+}
+
+// ── Modal photo plein écran ─────────────────────────────────────
+function ModalPhoto({ photo, onClose }: { photo: { url: string; numero: string }; onClose: () => void }) {
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.92)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }}>
+      <div style={{
+        position: 'absolute', top: 16, left: 24, color: 'white',
+        fontFamily: 'monospace', fontSize: 22, fontWeight: 800,
+      }}>
+        #{photo.numero}
+      </div>
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 16, right: 16,
+        padding: '8px 16px', borderRadius: 8, border: 'none',
+        background: '#ef4444', color: 'white', fontWeight: 700, fontSize: 14,
+        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        ✕ Fermer
+      </button>
+      <img src={photo.url} alt={`#${photo.numero}`}
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: '92vw', maxHeight: '88vh', objectFit: 'contain',
+          borderRadius: 8, boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+        }} />
     </div>
   );
 }
@@ -370,12 +413,14 @@ function KPIBlock({ value, label, color, pulse }: { value: number; label: string
 
 
 // ── Section grille (À LIVRER ou PRÊTS) ──────────────────────────
-function SectionGrille({ titre, icone, couleur, vehicules, onClick, itemByInvId, flexBasis, variantPret }: {
+function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, onOpenPhoto, itemByInvId, flexBasis, variantPret }: {
   titre: string;
   icone: string;
   couleur: string;
   vehicules: VehiculeInventaire[];
   onClick: (id: string) => void;
+  onOpenPdf: (doc: { nom: string; base64: string }) => void;
+  onOpenPhoto: (photo: { url: string; numero: string }) => void;
   itemByInvId: Record<string, Item>;
   flexBasis: number;
   variantPret?: boolean;
@@ -445,14 +490,20 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, itemByInvId,
           gap: 'clamp(6px, 0.6vw, 10px)',
           alignContent: 'start',
         }}>
-          {vehicules.map((v, idx) => (
-            <CarteRiche key={v.id} v={v}
-              inGarage={!!itemByInvId[v.id]?.slotId}
-              slotId={itemByInvId[v.id]?.slotId}
-              onClick={() => onClick(v.id)}
-              delay={Math.min(idx * 25, 600)}
-              variantPret={variantPret} />
-          ))}
+          {vehicules.map((v, idx) => {
+            const item = itemByInvId[v.id];
+            return (
+              <CarteRiche key={v.id} v={v}
+                documents={item?.documents ?? []}
+                inGarage={!!item?.slotId}
+                slotId={item?.slotId}
+                onClick={() => onClick(v.id)}
+                onOpenPdf={onOpenPdf}
+                onOpenPhoto={onOpenPhoto}
+                delay={Math.min(idx * 25, 600)}
+                variantPret={variantPret} />
+            );
+          })}
         </div>
       )}
     </div>
@@ -460,11 +511,14 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, itemByInvId,
 }
 
 // ── Carte camion riche (info complète, lisible TV) ──────────────
-function CarteRiche({ v, inGarage, slotId, onClick, delay, variantPret }: {
+function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpenPhoto, delay, variantPret }: {
   v: VehiculeInventaire;
+  documents: { id: string; nom: string; base64: string }[];
   inGarage: boolean;
   slotId?: string;
   onClick: () => void;
+  onOpenPdf: (doc: { nom: string; base64: string }) => void;
+  onOpenPhoto: (photo: { url: string; numero: string }) => void;
   delay: number;
   variantPret?: boolean;
 }) {
@@ -518,9 +572,29 @@ function CarteRiche({ v, inGarage, slotId, onClick, delay, variantPret }: {
       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = hoverBg; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 6px 20px rgba(0,0,0,0.4)`; }}
       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = baseBg; (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
     >
-      {/* Ligne 1 : photo + numéro + badge commercial */}
+      {/* Ligne 1 : photo (cliquable) + numéro + badge + PDF */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(7px, 0.7vw, 10px)', flexShrink: 0 }}>
-        <PhotoOuIcone v={v} taille="clamp(46px, 4.5vw, 64px)" />
+        <div
+          onClick={(e) => {
+            if (v.photoUrl) { e.stopPropagation(); onOpenPhoto({ url: v.photoUrl, numero: v.numero }); }
+          }}
+          title={v.photoUrl ? 'Agrandir la photo' : undefined}
+          style={{
+            cursor: v.photoUrl ? 'zoom-in' : 'default',
+            position: 'relative', flexShrink: 0,
+          }}
+        >
+          <PhotoOuIcone v={v} taille="clamp(46px, 4.5vw, 64px)" />
+          {v.photoUrl && (
+            <span style={{
+              position: 'absolute', bottom: -4, right: -4,
+              background: 'rgba(0,0,0,0.7)', color: 'white',
+              borderRadius: '50%', width: 18, height: 18,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, border: '1px solid rgba(255,255,255,0.4)',
+            }}>🔍</span>
+          )}
+        </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{
             fontFamily: 'monospace', fontWeight: 900,
@@ -540,6 +614,28 @@ function CarteRiche({ v, inGarage, slotId, onClick, delay, variantPret }: {
             </span>
           )}
         </div>
+        {documents.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: documents[0].nom, base64: documents[0].base64 }); }}
+            title={documents.length === 1 ? `Ouvrir : ${documents[0].nom}` : `${documents.length} PDFs · ouvre le premier`}
+            style={{
+              flexShrink: 0,
+              background: 'rgba(220,38,38,0.18)',
+              border: '1px solid rgba(220,38,38,0.5)',
+              color: '#fca5a5', fontWeight: 800,
+              borderRadius: 6,
+              padding: 'clamp(4px, 0.5vw, 7px) clamp(6px, 0.7vw, 9px)',
+              cursor: 'pointer',
+              fontSize: 'clamp(11px, 1vw, 14px)',
+              display: 'flex', alignItems: 'center', gap: 4,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.35)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
+          >
+            📄 {documents.length > 1 && <span>{documents.length}</span>}
+          </button>
+        )}
       </div>
 
       {/* Ligne 2 : pill date GROS */}

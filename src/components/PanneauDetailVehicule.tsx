@@ -68,7 +68,7 @@ export function BadgeCommercial({ etat, client }: { etat?: EtatCommercial; clien
 
 // ── Modal PDF ───────────────────────────────────────────────────
 
-function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onClose: () => void }) {
+export function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '90vw', height: '90vh', background: '#1a1814', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
