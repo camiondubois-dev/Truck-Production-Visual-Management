@@ -620,35 +620,6 @@ function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpen
             </span>
           )}
         </div>
-        {documents.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
-            {documents.map((doc, i) => (
-              <button key={doc.id ?? i}
-                onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: doc.nom, base64: doc.base64 }); }}
-                title={`Ouvrir : ${doc.nom}`}
-                style={{
-                  background: 'rgba(220,38,38,0.18)',
-                  border: '1px solid rgba(220,38,38,0.5)',
-                  color: '#fca5a5', fontWeight: 800,
-                  borderRadius: 6,
-                  padding: 'clamp(3px, 0.4vw, 5px) clamp(5px, 0.6vw, 8px)',
-                  cursor: 'pointer',
-                  fontSize: 'clamp(10px, 0.9vw, 12px)',
-                  display: 'flex', alignItems: 'center', gap: 3,
-                  transition: 'all 0.15s', whiteSpace: 'nowrap',
-                  maxWidth: 'clamp(70px, 8vw, 110px)',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.35)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
-              >
-                <span style={{ flexShrink: 0 }}>📄</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {tronquerNomPdf(doc.nom)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Ligne 2 : pill date GROS */}
@@ -747,6 +718,43 @@ function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpen
           </div>
         )}
       </div>
+
+      {/* Ligne PDFs (en bas, horizontale, auto-fit) */}
+      {documents.length > 0 && (
+        <div style={{
+          marginTop: 'auto',
+          display: 'flex', flexWrap: 'wrap', gap: 4,
+          paddingTop: 4,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          {documents.map((doc, i) => (
+            <button key={doc.id ?? i}
+              onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: doc.nom, base64: doc.base64 }); }}
+              title={`Ouvrir : ${doc.nom}`}
+              style={{
+                flex: '1 1 0',
+                minWidth: 0,
+                background: 'rgba(220,38,38,0.18)',
+                border: '1px solid rgba(220,38,38,0.5)',
+                color: '#fca5a5', fontWeight: 800,
+                borderRadius: 5,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                fontSize: 'clamp(10px, 0.85vw, 12px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                transition: 'all 0.15s', whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.4)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
+            >
+              <span style={{ flexShrink: 0 }}>📄</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {tronquerNomPdf(doc.nom)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
