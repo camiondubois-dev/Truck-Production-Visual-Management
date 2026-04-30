@@ -81,26 +81,8 @@ export function VueLivraisons(props: VueLivraisonsProps) {
 
 // ════════════════════════════════════════════════════════════════
 // DASHBOARD TV / WINDOWS
-// Layout: Header KPI strip + Kanban 5 colonnes par urgence livraison
+// Layout: Header KPIs + grille auto-fit À LIVRER + grille PRÊTS
 // ════════════════════════════════════════════════════════════════
-
-interface BucketDef {
-  id: 'retard' | 'aujourdhui' | 'semaine' | 'mois' | 'plus-tard' | 'sans-date';
-  label: string;
-  sublabel: string;
-  emoji: string;
-  bg: string;          // gradient
-  accent: string;      // border + accent
-  pulse: boolean;
-}
-
-const BUCKETS: BucketDef[] = [
-  { id: 'retard',     label: 'EN RETARD',     sublabel: 'Date dépassée',    emoji: '🚨', bg: 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%)', accent: '#fca5a5', pulse: true  },
-  { id: 'aujourdhui', label: "AUJOURD'HUI",  sublabel: 'Demain inclus',     emoji: '🔥', bg: 'linear-gradient(135deg, #9a3412 0%, #ea580c 100%)', accent: '#fdba74', pulse: false },
-  { id: 'semaine',    label: 'CETTE SEMAINE', sublabel: '2 à 7 jours',       emoji: '⏰', bg: 'linear-gradient(135deg, #92400e 0%, #f59e0b 100%)', accent: '#fcd34d', pulse: false },
-  { id: 'mois',       label: 'CE MOIS',       sublabel: '8 à 30 jours',      emoji: '📅', bg: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', accent: '#93c5fd', pulse: false },
-  { id: 'plus-tard',  label: 'PLUS TARD',     sublabel: '30j+ ou sans date', emoji: '📆', bg: 'linear-gradient(135deg, #334155 0%, #64748b 100%)', accent: '#cbd5e1', pulse: false },
-];
 
 function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: string) => void }) {
   const { vehicules } = useInventaire();
@@ -145,27 +127,31 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
     return list;
   }, [tousEngagés]);
 
-  const buckets = useMemo(() => {
-    const result: Record<BucketDef['id'], VehiculeInventaire[]> = {
-      'retard': [], 'aujourdhui': [], 'semaine': [], 'mois': [], 'plus-tard': [], 'sans-date': [],
-    };
-    for (const v of aLivrer) {
-      const j = joursAvant(v.dateLivraisonPlanifiee);
-      if (j === null)      result['plus-tard'].push(v);
-      else if (j < 0)      result['retard'].push(v);
-      else if (j <= 1)     result['aujourdhui'].push(v);
-      else if (j <= 7)     result['semaine'].push(v);
-      else if (j <= 30)    result['mois'].push(v);
-      else                 result['plus-tard'].push(v);
-    }
-    for (const k of Object.keys(result) as BucketDef['id'][]) {
-      result[k].sort(cmpDate);
-    }
-    return result;
+  // Tri intelligent : retard > date proche > sans date par progression desc
+  const aLivrerOrdonnés = useMemo(() => {
+    const list = [...aLivrer];
+    list.sort((a, b) => {
+      const ja = joursAvant(a.dateLivraisonPlanifiee);
+      const jb = joursAvant(b.dateLivraisonPlanifiee);
+      // Avec date d'abord (les plus urgents en haut)
+      if (ja !== null && jb !== null) return ja - jb;
+      if (ja !== null) return -1;
+      if (jb !== null) return 1;
+      // Sans date : par progression descendante (les plus avancés en haut)
+      return getProgressionPct(b) - getProgressionPct(a);
+    });
+    return list;
   }, [aLivrer]);
 
+  const enRetard = aLivrer.filter(v => {
+    const j = joursAvant(v.dateLivraisonPlanifiee);
+    return j !== null && j < 0;
+  }).length;
+  const aujourdhui = aLivrer.filter(v => {
+    const j = joursAvant(v.dateLivraisonPlanifiee);
+    return j !== null && j >= 0 && j <= 1;
+  }).length;
   const total = tousEngagés.length;
-  const enRetard = buckets['retard'].length;
   const sansReservoir = aLivrer.filter(v => v.type === 'eau' && !v.aUnReservoir).length;
 
   const selected = selectedId ? vehicules.find(v => v.id === selectedId) ?? null : null;
@@ -226,7 +212,7 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         }}>
           <KPIBlock value={total}         label="Engagés" color="#3b82f6" />
           <KPIBlock value={enRetard}      label="En retard" color="#dc2626" pulse={enRetard > 0} />
-          <KPIBlock value={buckets['aujourdhui'].length} label="Aujourd'hui / Demain" color="#ea580c" />
+          <KPIBlock value={aujourdhui} label="Aujourd'hui / Demain" color="#ea580c" />
           <KPIBlock value={sansReservoir} label="Sans réservoir" color="#f59e0b" />
           <KPIBlock value={prets.length}  label="Prêts à livrer" color="#22c55e" />
         </div>
@@ -245,26 +231,30 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         </div>
       </div>
 
-      {/* ── Kanban 5 colonnes (À LIVRER) ───────────────────────── */}
-      <div style={{
-        flex: 1, minHeight: 0,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: 'clamp(8px, 0.9vw, 14px)',
-        padding: 'clamp(8px, 1vw, 14px) clamp(10px, 1.2vw, 18px) 0',
-      }}>
-        {BUCKETS.map(b => {
-          const list = b.id === 'plus-tard'
-            ? [...buckets['plus-tard'], ...buckets['sans-date']]
-            : buckets[b.id];
-          return (
-            <Colonne key={b.id} bucket={b} vehicules={list} onClick={handleClick} itemByInvId={itemByInvId} />
-          );
-        })}
-      </div>
+      {/* ── À LIVRER (grille auto-fit) ─────────────────────────── */}
+      <SectionGrille
+        titre="À LIVRER"
+        icone="🔥"
+        couleur="#ea580c"
+        vehicules={aLivrerOrdonnés}
+        onClick={handleClick}
+        itemByInvId={itemByInvId}
+        flexBasis={prets.length > 0 ? 0.68 : 1}
+      />
 
-      {/* ── Bandeau PRÊTS À LIVRER ─────────────────────────────── */}
-      <BandeauPrets prets={prets} onClick={handleClick} itemByInvId={itemByInvId} />
+      {/* ── PRÊTS À LIVRER (grille séparée verte) ──────────────── */}
+      {prets.length > 0 && (
+        <SectionGrille
+          titre="PRÊTS À LIVRER"
+          icone="✅"
+          couleur="#22c55e"
+          vehicules={prets}
+          onClick={handleClick}
+          itemByInvId={itemByInvId}
+          flexBasis={0.32}
+          variantPret
+        />
+      )}
 
       {/* Panneau détail (se positionne lui-même en fixed) */}
       {selected && !onSelectVehicule && (
@@ -336,391 +326,274 @@ function KPIBlock({ value, label, color, pulse }: { value: number; label: string
   );
 }
 
-// ── Colonne kanban ──────────────────────────────────────────────
-function Colonne({ bucket, vehicules, onClick, itemByInvId }: {
-  bucket: BucketDef;
+
+// ── Section grille (À LIVRER ou PRÊTS) ──────────────────────────
+function SectionGrille({ titre, icone, couleur, vehicules, onClick, itemByInvId, flexBasis, variantPret }: {
+  titre: string;
+  icone: string;
+  couleur: string;
   vehicules: VehiculeInventaire[];
   onClick: (id: string) => void;
   itemByInvId: Record<string, Item>;
+  flexBasis: number;
+  variantPret?: boolean;
 }) {
+  // Largeur min calculée en fonction du nombre — plus il y en a, plus on est dense
+  const count = vehicules.length;
+  const minW =
+    count === 0       ? 240 :
+    count <= 4        ? 320 :
+    count <= 8        ? 270 :
+    count <= 14       ? 230 :
+    count <= 24       ? 195 :
+    count <= 36       ? 170 :
+    150;
+
   return (
     <div style={{
+      flex: `${flexBasis} 1 0`, minHeight: 0,
       display: 'flex', flexDirection: 'column',
-      background: 'rgba(255,255,255,0.02)',
-      borderRadius: 12,
-      border: `1px solid ${bucket.accent}25`,
-      overflow: 'hidden',
-      minHeight: 0,
+      padding: 'clamp(8px, 1vh, 14px) clamp(10px, 1.2vw, 18px)',
+      borderTop: variantPret ? `2px solid ${couleur}40` : 'none',
+      background: variantPret
+        ? 'linear-gradient(180deg, rgba(20,83,45,0.35) 0%, rgba(20,83,45,0.05) 100%)'
+        : 'transparent',
     }}>
-      {/* Header */}
+      {/* Header de section */}
       <div style={{
         flexShrink: 0,
-        background: bucket.bg,
-        padding: 'clamp(8px, 1vw, 14px) clamp(10px, 1.2vw, 16px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-        animation: bucket.pulse && vehicules.length > 0 ? 'pulseRed 2s infinite' : undefined,
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 'clamp(6px, 0.8vh, 10px)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 'clamp(16px, 1.6vw, 22px)', flexShrink: 0 }}>{bucket.emoji}</span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{
-              fontSize: 'clamp(10px, 1vw, 14px)', fontWeight: 800,
-              letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              {bucket.label}
-            </div>
-            <div style={{ fontSize: 'clamp(8px, 0.7vw, 10px)', color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginTop: 1 }}>
-              {bucket.sublabel}
-            </div>
-          </div>
-        </div>
-        <div style={{
-          fontSize: 'clamp(20px, 2vw, 32px)', fontWeight: 900, lineHeight: 1,
-          color: 'white', textShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          fontFamily: 'system-ui',
+        <span style={{ fontSize: 'clamp(16px, 1.5vw, 22px)' }}>{icone}</span>
+        <span style={{
+          fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 900,
+          color: couleur, letterSpacing: '0.05em',
         }}>
-          {vehicules.length}
-        </div>
+          {titre}
+        </span>
+        <span style={{
+          fontSize: 'clamp(20px, 2vw, 30px)', fontWeight: 900,
+          color: couleur, lineHeight: 1, fontFamily: 'system-ui',
+        }}>
+          {count}
+        </span>
+        <div style={{ flex: 1, height: 1, background: `${couleur}30` }} />
+        {!variantPret && count > 0 && (
+          <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.45)', fontStyle: 'italic' }}>
+            Plus urgents en haut · Sans date triés par avancement
+          </span>
+        )}
       </div>
 
-      {/* Body — no-scroll, distribue l'espace en parts égales */}
-      <div className="livr-col-body" style={{
-        flex: 1, minHeight: 0, overflow: 'hidden',
-        padding: 'clamp(5px, 0.5vw, 8px)',
-        display: 'grid',
-        gridTemplateRows: vehicules.length > 0 ? `repeat(${vehicules.length}, minmax(0, 1fr))` : '1fr',
-        gap: 'clamp(3px, 0.4vw, 6px)',
-      }}>
-        {vehicules.length === 0 ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'rgba(255,255,255,0.2)',
-            fontSize: 'clamp(10px, 0.9vw, 12px)', fontStyle: 'italic',
-          }}>
-            —
-          </div>
-        ) : vehicules.map((v, idx) => (
-          <CarteCamionDashboard key={v.id} v={v} accent={bucket.accent}
-            inGarage={!!itemByInvId[v.id]?.slotId}
-            slotId={itemByInvId[v.id]?.slotId}
-            onClick={() => onClick(v.id)}
-            delay={idx * 30}
-            compact={vehicules.length > 4} />
-        ))}
-      </div>
+      {/* Grille auto-fit */}
+      {count === 0 ? (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.25)', fontSize: 'clamp(12px, 1vw, 14px)', fontStyle: 'italic',
+        }}>
+          Aucun camion
+        </div>
+      ) : (
+        <div style={{
+          flex: 1, minHeight: 0, overflow: 'hidden',
+          display: 'grid',
+          gridTemplateColumns: `repeat(auto-fit, minmax(${minW}px, 1fr))`,
+          gridAutoRows: '1fr',
+          gap: 'clamp(6px, 0.6vw, 10px)',
+          alignContent: 'start',
+        }}>
+          {vehicules.map((v, idx) => (
+            <CarteRiche key={v.id} v={v}
+              inGarage={!!itemByInvId[v.id]?.slotId}
+              slotId={itemByInvId[v.id]?.slotId}
+              onClick={() => onClick(v.id)}
+              delay={Math.min(idx * 25, 600)}
+              variantPret={variantPret} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Carte camion (compacte, dense, visuelle) ────────────────────
-function CarteCamionDashboard({ v, accent, inGarage, slotId, onClick, delay, compact }: {
+// ── Carte camion riche (info complète, lisible TV) ──────────────
+function CarteRiche({ v, inGarage, slotId, onClick, delay, variantPret }: {
   v: VehiculeInventaire;
-  accent: string;
   inGarage: boolean;
   slotId?: string;
   onClick: () => void;
   delay: number;
-  /** Mode condensé quand beaucoup de cartes dans la colonne */
-  compact?: boolean;
+  variantPret?: boolean;
 }) {
-  const j = joursAvant(v.dateLivraisonPlanifiee);
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
+  const j = joursAvant(v.dateLivraisonPlanifiee);
   const restantes = getEtapesRestantes(v);
   const pct = getProgressionPct(v);
   const enCours = (v.roadMap ?? []).find(s => s.statut === 'en-cours');
   const prochaine = (v.roadMap ?? []).find(s => s.statut === 'en-attente') ?? restantes[0];
   const station = enCours ? getStation(enCours.stationId) : prochaine ? getStation(prochaine.stationId) : null;
   const stationStatut = enCours ? 'en-cours' : prochaine?.statut === 'en-attente' ? 'en-attente' : 'planifie';
-
-  const dateLabel = j === null
-    ? 'Pas de date'
-    : j < 0   ? `🚨 ${Math.abs(j)}j retard`
-    : j === 0 ? "Aujourd'hui"
-    : j === 1 ? 'Demain'
-    : `Dans ${j}j`;
-
-  const cBadgeBg =
-    v.etatCommercial === 'vendu'    ? '#22c55e' :
-    v.etatCommercial === 'reserve'  ? '#f59e0b' :
-    v.etatCommercial === 'location' ? '#7c3aed' :
-    '#6b7280';
-
-  const cBadgeIcon =
-    v.etatCommercial === 'vendu'    ? '✓' :
-    v.etatCommercial === 'reserve'  ? '🔒' :
-    v.etatCommercial === 'location' ? '🔑' :
-    '○';
-
   const client = v.clientAcheteur || v.nomClient;
+
+  // Couleur urgence (utilisée pour bordure haut + pill date)
+  const urgence =
+    j === null ? { color: '#94a3b8', bg: 'rgba(148,163,184,0.18)', label: 'Pas de date', pulse: false }
+    : j < 0    ? { color: '#fca5a5', bg: 'rgba(220,38,38,0.4)',    label: `🚨 ${Math.abs(j)}j retard`, pulse: true }
+    : j === 0  ? { color: '#fca5a5', bg: 'rgba(220,38,38,0.4)',    label: "Aujourd'hui", pulse: true }
+    : j === 1  ? { color: '#fdba74', bg: 'rgba(234,88,12,0.35)',   label: 'Demain', pulse: false }
+    : j <= 7   ? { color: '#fdba74', bg: 'rgba(234,88,12,0.3)',    label: `Dans ${j}j`, pulse: false }
+    : j <= 30  ? { color: '#fcd34d', bg: 'rgba(245,158,11,0.25)',  label: `Dans ${j}j`, pulse: false }
+                : { color: '#93c5fd', bg: 'rgba(59,130,246,0.2)',  label: `Dans ${j}j`, pulse: false };
+
+  const cBadgeBg = v.etatCommercial === 'vendu' ? '#22c55e' : v.etatCommercial === 'reserve' ? '#f59e0b' : v.etatCommercial === 'location' ? '#7c3aed' : '#6b7280';
+  const cBadgeLabel = v.etatCommercial === 'vendu' ? '✓ VENDU' : v.etatCommercial === 'reserve' ? '🔒 RÉSERVÉ' : v.etatCommercial === 'location' ? '🔑 LOCATION' : '';
+
+  const baseBg = variantPret
+    ? 'linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.04) 100%)'
+    : 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)';
+  const hoverBg = variantPret
+    ? 'linear-gradient(135deg, rgba(34,197,94,0.28) 0%, rgba(34,197,94,0.08) 100%)'
+    : 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%)';
 
   return (
     <div className="livr-card" onClick={onClick}
       style={{
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-        border: `1px solid ${accent}40`,
+        background: baseBg,
+        border: `1px solid ${urgence.color}50`,
+        borderTop: `3px solid ${urgence.color}`,
         borderLeft: `3px solid ${typeColor}`,
-        borderRadius: 8,
-        padding: compact ? '5px 8px' : 'clamp(6px, 0.6vw, 9px) clamp(7px, 0.7vw, 10px)',
+        borderRadius: 10,
+        padding: 'clamp(8px, 0.7vw, 11px)',
         cursor: 'pointer',
         transition: 'all 0.15s',
         display: 'flex', flexDirection: 'column',
-        gap: compact ? 3 : 'clamp(3px, 0.35vw, 5px)',
+        gap: 'clamp(4px, 0.4vh, 7px)',
         animationDelay: `${delay}ms`,
         minHeight: 0, overflow: 'hidden',
+        boxShadow: urgence.pulse ? `0 0 0 0 ${urgence.color}40` : 'none',
       }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)';
-        el.style.transform = 'translateX(2px)';
-        el.style.borderColor = `${accent}80`;
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)';
-        el.style.transform = 'none';
-        el.style.borderColor = `${accent}40`;
-      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = hoverBg; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 6px 20px rgba(0,0,0,0.4)`; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = baseBg; (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
     >
-      {/* Ligne 1 : photo/icône · numéro · commercial · date */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 6 : 8, flexShrink: 0 }}>
-        <PhotoOuIcone v={v} taille={compact ? 28 : 'clamp(34px, 3.4vw, 48px)'} />
-        <span style={{
-          fontFamily: 'monospace', fontWeight: 900,
-          fontSize: compact ? 13 : 'clamp(13px, 1.25vw, 17px)', color: typeColor,
-          lineHeight: 1,
-        }}>
-          #{v.numero}
-        </span>
-        <span title={v.etatCommercial} style={{
-          fontSize: 'clamp(9px, 0.8vw, 11px)',
-          background: cBadgeBg, color: 'white',
-          padding: '1px 5px', borderRadius: 3, fontWeight: 800,
-          flexShrink: 0,
-        }}>
-          {cBadgeIcon}
-        </span>
-        <div style={{ flex: 1 }} />
-        <span style={{
-          fontSize: 'clamp(9px, 0.85vw, 11px)', fontWeight: 800,
-          color: j !== null && j < 0 ? '#fca5a5' : j !== null && j <= 7 ? '#fdba74' : 'rgba(255,255,255,0.85)',
-          whiteSpace: 'nowrap',
-        }}>
-          {dateLabel}
-        </span>
+      {/* Ligne 1 : photo + numéro + badge commercial */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(7px, 0.7vw, 10px)', flexShrink: 0 }}>
+        <PhotoOuIcone v={v} taille="clamp(46px, 4.5vw, 64px)" />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{
+            fontFamily: 'monospace', fontWeight: 900,
+            fontSize: 'clamp(18px, 1.7vw, 24px)', color: typeColor,
+            lineHeight: 1, letterSpacing: '0.02em',
+          }}>
+            #{v.numero}
+          </span>
+          {cBadgeLabel && (
+            <span style={{
+              fontSize: 'clamp(9px, 0.78vw, 10.5px)',
+              background: cBadgeBg, color: 'white',
+              padding: '2px 6px', borderRadius: 3, fontWeight: 800,
+              alignSelf: 'flex-start', letterSpacing: '0.05em',
+            }}>
+              {cBadgeLabel}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Ligne 2 : client + label véhicule (caché en mode compact) */}
-      {!compact && (
-        <div style={{
-          fontSize: 'clamp(10px, 0.9vw, 12px)',
-          color: 'rgba(255,255,255,0.75)', fontWeight: 600,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.25,
-        }}>
-          {client && <span style={{ color: 'white' }}>{client}</span>}
-          {client && ' · '}
-          <span style={{ color: 'rgba(255,255,255,0.5)' }}>{getLabelVehicule(v)}</span>
-        </div>
-      )}
-      {compact && client && (
-        <div style={{
-          fontSize: 11, color: 'white', fontWeight: 600,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.2,
-        }}>
-          {client}
-        </div>
-      )}
+      {/* Ligne 2 : pill date GROS */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: urgence.bg, color: urgence.color,
+        padding: 'clamp(4px, 0.4vh, 7px) 8px', borderRadius: 6,
+        fontSize: 'clamp(11px, 1vw, 13px)', fontWeight: 800,
+        border: `1px solid ${urgence.color}40`,
+        whiteSpace: 'nowrap',
+      }}>
+        📅 {urgence.label}
+      </div>
 
-      {/* Ligne 3 : barre de progression + pct */}
+      {/* Ligne 3 : client (BIG) + véhicule */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0, overflow: 'hidden' }}>
+        {client ? (
+          <div style={{
+            fontSize: 'clamp(12px, 1.1vw, 15px)', color: 'white', fontWeight: 700,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2,
+          }}>
+            {client}
+          </div>
+        ) : null}
+        <div style={{
+          fontSize: 'clamp(10px, 0.85vw, 12px)', color: 'rgba(255,255,255,0.55)', fontWeight: 500,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2,
+        }}>
+          {getLabelVehicule(v)}{v.variante ? ` · ${v.variante}` : ''}
+        </div>
+      </div>
+
+      {/* Ligne 4 : barre de progression */}
       {(v.roadMap ?? []).length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
             <div style={{
-              height: '100%', borderRadius: 2,
-              width: `${pct}%`,
+              height: '100%', borderRadius: 3, width: `${pct}%`,
               background: pct === 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#f59e0b',
               transition: 'width 0.3s',
             }} />
           </div>
           <span style={{
-            fontSize: 'clamp(9px, 0.8vw, 11px)', fontWeight: 800,
-            color: pct >= 50 ? '#86efac' : 'rgba(255,255,255,0.65)',
-            minWidth: 30, textAlign: 'right', fontFamily: 'monospace',
+            fontSize: 'clamp(11px, 0.95vw, 13px)', fontWeight: 800,
+            color: pct >= 50 ? '#86efac' : 'rgba(255,255,255,0.85)',
+            minWidth: 36, textAlign: 'right', fontFamily: 'monospace',
           }}>
             {pct}%
           </span>
         </div>
       )}
 
-      {/* Ligne 4 : étape en cours/prochaine + alertes (caché si compact) */}
-      {!compact && <div style={{
-        display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
-        fontSize: 'clamp(9px, 0.8vw, 11px)',
-      }}>
+      {/* Ligne 5 : étape en cours/prochaine + étapes restantes */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
         {station && (
-          <span style={{
-            padding: '1px 6px', borderRadius: 3, fontWeight: 700,
-            background: stationStatut === 'en-cours' ? 'rgba(59,130,246,0.25)' :
-                        stationStatut === 'en-attente' ? 'rgba(245,158,11,0.22)' :
-                        'rgba(255,255,255,0.06)',
+          <div style={{
+            fontSize: 'clamp(10px, 0.9vw, 12px)', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 5,
             color: stationStatut === 'en-cours' ? '#93c5fd' :
                    stationStatut === 'en-attente' ? '#fcd34d' :
-                   'rgba(255,255,255,0.55)',
+                   'rgba(255,255,255,0.6)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {stationStatut === 'en-cours' ? '🚛' : stationStatut === 'en-attente' ? '⏳' : '⏸'}
-            {' '}{station.icon} {station.label}
-          </span>
+            <span style={{ flexShrink: 0 }}>
+              {variantPret ? '✅' : stationStatut === 'en-cours' ? '🚛 EN COURS:' : stationStatut === 'en-attente' ? '⏳ EN ATTENTE:' : '⏸ PROCHAINE:'}
+            </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {variantPret ? 'Toutes étapes complétées' : `${station.icon} ${station.label}`}
+            </span>
+          </div>
         )}
-        {inGarage && slotId && (
-          <span style={{ padding: '1px 5px', borderRadius: 3, background: 'rgba(59,130,246,0.25)', color: '#93c5fd', fontWeight: 800, fontFamily: 'monospace' }}>
-            Slot {slotId}
-          </span>
+        {!variantPret && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 'clamp(10px, 0.85vw, 11.5px)' }}>
+            {restantes.length > 0 && (
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
+                <strong style={{ color: '#fbbf24' }}>{restantes.length}</strong> étape{restantes.length > 1 ? 's' : ''} restante{restantes.length > 1 ? 's' : ''}
+              </span>
+            )}
+            {inGarage && slotId && (
+              <span style={{ padding: '1px 6px', borderRadius: 3, background: 'rgba(59,130,246,0.3)', color: '#93c5fd', fontWeight: 800, fontFamily: 'monospace' }}>
+                Slot {slotId}
+              </span>
+            )}
+            {v.type === 'eau' && !v.aUnReservoir && (
+              <span style={{ padding: '1px 6px', borderRadius: 3, background: 'rgba(220,38,38,0.3)', color: '#fca5a5', fontWeight: 800 }}>
+                ⚠️ Sans rés.
+              </span>
+            )}
+          </div>
         )}
-        {v.type === 'eau' && !v.aUnReservoir && (
-          <span style={{ padding: '1px 5px', borderRadius: 3, background: 'rgba(220,38,38,0.25)', color: '#fca5a5', fontWeight: 800 }}>
-            ⚠️ Sans rés.
-          </span>
-        )}
-        {restantes.length > 0 && (
-          <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>
-            {restantes.length} restante{restantes.length > 1 ? 's' : ''}
-          </span>
-        )}
-      </div>}
-    </div>
-  );
-}
-
-// ── Bandeau Prêts à livrer (en bas) ─────────────────────────────
-function BandeauPrets({ prets, onClick, itemByInvId }: {
-  prets: VehiculeInventaire[];
-  onClick: (id: string) => void;
-  itemByInvId: Record<string, Item>;
-}) {
-  return (
-    <div style={{
-      flexShrink: 0,
-      borderTop: '2px solid rgba(34,197,94,0.4)',
-      background: 'linear-gradient(180deg, rgba(20,83,45,0.45) 0%, rgba(20,83,45,0.15) 100%)',
-      padding: 'clamp(8px, 0.9vw, 12px) clamp(10px, 1.2vw, 18px)',
-      display: 'flex', flexDirection: 'column', gap: 8,
-      maxHeight: '24%',
-      minHeight: 'clamp(110px, 14vh, 170px)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{
-          fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 900,
-          color: '#86efac', letterSpacing: '0.05em',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          ✅ PRÊTS À LIVRER
-        </span>
-        <span style={{
-          fontSize: 'clamp(18px, 1.8vw, 26px)', fontWeight: 900, color: '#22c55e', lineHeight: 1,
-        }}>
-          {prets.length}
-        </span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(34,197,94,0.25)' }} />
-        <span style={{ fontSize: 'clamp(9px, 0.8vw, 11px)', color: 'rgba(134,239,172,0.7)', fontStyle: 'italic' }}>
-          Toutes étapes complétées · Plus rapprochés à gauche
-        </span>
-      </div>
-
-      {prets.length === 0 ? (
-        <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'rgba(255,255,255,0.25)', fontSize: 'clamp(11px, 1vw, 13px)', fontStyle: 'italic',
-        }}>
-          Aucun camion prêt à livrer pour le moment
-        </div>
-      ) : (
-        <div style={{
-          flex: 1, minHeight: 0, overflow: 'hidden',
-          display: 'grid',
-          gridTemplateColumns: `repeat(${Math.min(prets.length, 12)}, minmax(0, 1fr))`,
-          gap: 'clamp(5px, 0.5vw, 8px)',
-        }}>
-          {prets.slice(0, 12).map(v => (
-            <CartePret key={v.id} v={v} inGarage={!!itemByInvId[v.id]?.slotId}
-              onClick={() => onClick(v.id)} />
-          ))}
-          {prets.length > 12 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#86efac', fontWeight: 700, fontSize: 'clamp(11px, 1vw, 13px)',
-              background: 'rgba(34,197,94,0.1)',
-              border: '1px solid rgba(34,197,94,0.3)',
-              borderRadius: 8,
-            }}>
-              +{prets.length - 12}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CartePret({ v, inGarage, onClick }: {
-  v: VehiculeInventaire;
-  inGarage: boolean;
-  onClick: () => void;
-}) {
-  const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
-  const j = joursAvant(v.dateLivraisonPlanifiee);
-  const dateLabel = j === null ? '—'
-    : j < 0  ? `🚨 ${Math.abs(j)}j`
-    : j === 0 ? "Auj."
-    : j === 1 ? 'Demain'
-    : `${j}j`;
-  const client = v.clientAcheteur || v.nomClient;
-
-  return (
-    <div onClick={onClick} className="livr-card"
-      style={{
-        background: 'linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.05) 100%)',
-        border: '1px solid rgba(34,197,94,0.4)',
-        borderLeft: `3px solid ${typeColor}`,
-        borderRadius: 8,
-        padding: '6px 8px',
-        cursor: 'pointer',
-        display: 'flex', flexDirection: 'column', gap: 4,
-        minHeight: 0, overflow: 'hidden',
-        transition: 'all 0.15s',
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(34,197,94,0.3)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <PhotoOuIcone v={v} taille={28} />
-        <span style={{
-          fontFamily: 'monospace', fontWeight: 900,
-          fontSize: 'clamp(11px, 1vw, 14px)', color: typeColor,
-          lineHeight: 1,
-        }}>
-          #{v.numero}
-        </span>
-      </div>
-      {client && (
-        <div style={{
-          fontSize: 'clamp(9px, 0.8vw, 11px)', color: 'white', fontWeight: 600,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2,
-        }}>
-          {client}
-        </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-        <span style={{
-          fontSize: 'clamp(9px, 0.8vw, 11px)', fontWeight: 800,
-          color: j !== null && j < 0 ? '#fca5a5' : j !== null && j <= 7 ? '#fdba74' : '#86efac',
-        }}>
-          📅 {dateLabel}
-        </span>
-        {inGarage && (
-          <span style={{ fontSize: 9, padding: '1px 4px', borderRadius: 3, background: 'rgba(59,130,246,0.3)', color: '#93c5fd', fontWeight: 800 }}>
-            Garage
-          </span>
+        {variantPret && inGarage && slotId && (
+          <div>
+            <span style={{ padding: '1px 6px', borderRadius: 3, background: 'rgba(59,130,246,0.3)', color: '#93c5fd', fontWeight: 800, fontFamily: 'monospace', fontSize: 'clamp(10px, 0.85vw, 11.5px)' }}>
+              Slot {slotId}
+            </span>
+          </div>
         )}
       </div>
     </div>
