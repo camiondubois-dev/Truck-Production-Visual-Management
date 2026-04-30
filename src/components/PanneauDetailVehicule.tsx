@@ -207,6 +207,8 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
         position: 'fixed', right: 0, top: 0, width: 460, height: '100dvh',
         background: 'white', borderLeft: '1px solid #e5e7eb',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', overflowY: 'auto', zIndex: 150,
+        color: '#111827', // explicite : ne pas hériter d'un parent dark (ex: dashboard livraisons)
+        fontFamily: 'system-ui, -apple-system, sans-serif',
       }}>
         <div style={{ padding: 20 }}>
           <button onClick={onClose}
