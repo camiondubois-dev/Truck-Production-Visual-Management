@@ -38,17 +38,27 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  // Charger employés mécanique-moteur
+  // Charger employés : mécanos moteur en priorité, gestion ensuite
   useEffect(() => {
     supabase
       .from('profiles')
       .select('id, nom, departement, role, actif')
       .eq('actif', true)
       .then(({ data }) => {
-        const list = (data ?? [])
+        const all = (data ?? [])
           .filter(p => p.role === 'employe' || p.role === 'gestion')
-          .map(p => ({ id: p.id, nom: p.nom ?? 'Sans nom', departement: p.departement ?? undefined }));
-        setEmployes(list);
+          .map(p => ({ id: p.id, nom: p.nom ?? 'Sans nom', departement: p.departement ?? undefined, role: p.role }));
+        // Tri : mécanos moteur d'abord (alpha), puis autres employés (alpha), puis gestion (alpha)
+        all.sort((a, b) => {
+          const prio = (p: typeof a) =>
+            p.departement === 'mecanique-moteur' ? 0 :
+            p.role === 'employe'                 ? 1 :
+            p.role === 'gestion'                 ? 2 : 3;
+          const pa = prio(a), pb = prio(b);
+          if (pa !== pb) return pa - pb;
+          return a.nom.localeCompare(b.nom);
+        });
+        setEmployes(all);
       });
   }, []);
 
@@ -332,11 +342,30 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
                 }}
               >
                 <option value="">— Aucun employé assigné —</option>
-                {employes.map(e => (
-                  <option key={e.id} value={e.id}>
-                    {e.nom}{e.departement ? ` (${e.departement})` : ''}
-                  </option>
-                ))}
+                {(() => {
+                  const mecanos = employes.filter(e => e.departement === 'mecanique-moteur');
+                  const autresEmployes = employes.filter(e => e.role === 'employe' && e.departement !== 'mecanique-moteur');
+                  const gestion = employes.filter(e => e.role === 'gestion');
+                  return (
+                    <>
+                      {mecanos.length > 0 && (
+                        <optgroup label="Mécanos moteur">
+                          {mecanos.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
+                        </optgroup>
+                      )}
+                      {autresEmployes.length > 0 && (
+                        <optgroup label="Autres employés">
+                          {autresEmployes.map(e => <option key={e.id} value={e.id}>{e.nom}{e.departement ? ` (${e.departement})` : ''}</option>)}
+                        </optgroup>
+                      )}
+                      {gestion.length > 0 && (
+                        <optgroup label="Gestion">
+                          {gestion.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
+                        </optgroup>
+                      )}
+                    </>
+                  );
+                })()}
               </select>
               {moteur.employeCourant && (
                 <button onClick={() => changerEmployeMoteur(null)}
@@ -551,11 +580,24 @@ function EtapeCard({ etape, employes, estAssigning, employeChoisi, setEmployeCho
             <select value={employeChoisi} onChange={e => setEmployeChoisi(e.target.value)}
               style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}>
               <option value="">— Choisir un mécano —</option>
-              {employes.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.nom}{e.departement ? ` (${e.departement})` : ''}
-                </option>
-              ))}
+              {(() => {
+                const mecanos = employes.filter(e => e.departement === 'mecanique-moteur');
+                const autres = employes.filter(e => e.departement !== 'mecanique-moteur');
+                return (
+                  <>
+                    {mecanos.length > 0 && (
+                      <optgroup label="Mécanos moteur">
+                        {mecanos.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
+                      </optgroup>
+                    )}
+                    {autres.length > 0 && (
+                      <optgroup label="Autres">
+                        {autres.map(e => <option key={e.id} value={e.id}>{e.nom}{e.departement ? ` (${e.departement})` : ''}</option>)}
+                      </optgroup>
+                    )}
+                  </>
+                );
+              })()}
             </select>
             <button onClick={onCancelAssign} style={btnAction('#9ca3af', true)}>Annuler</button>
             <button onClick={onDemarrer} disabled={!employeChoisi} style={{ ...btnAction('#22c55e'), opacity: employeChoisi ? 1 : 0.5, cursor: employeChoisi ? 'pointer' : 'not-allowed' }}>
