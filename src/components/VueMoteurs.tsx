@@ -39,6 +39,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
   const [recherche, setRecherche] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [showFiltresMobile, setShowFiltresMobile] = useState(false);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -164,34 +165,63 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
         <KPI value={kpis.enAttente}  label="En attente" color="#f59e0b" />
         <KPI value={kpis.enCours}    label="En cours"   color="#3b82f6" />
         <KPI value={kpis.prets}      label="Prêts"      color="#22c55e" highlight />
-        <KPI value={kpis.archives}   label="Archivés"   color="#6b7280" />
+        {!mobile && <KPI value={kpis.archives} label="Archivés" color="#6b7280" />}
 
         <button onClick={() => setShowWizard(true)}
           style={{
-            background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10,
-            padding: '10px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-          + Nouveau moteur
+            background: '#7c3aed', color: 'white', border: 'none', borderRadius: mobile ? '50%' : 10,
+            padding: mobile ? 0 : '10px 18px',
+            width: mobile ? 40 : 'auto', height: mobile ? 40 : 'auto',
+            fontWeight: 700, fontSize: mobile ? 22 : 14, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            flexShrink: 0,
+          }}
+          title={mobile ? 'Nouveau moteur' : ''}>
+          {mobile ? '+' : '+ Nouveau moteur'}
         </button>
       </div>
 
       {/* ── Filtres ───────────────────────────────────── */}
+      {/* Sur mobile : recherche + bouton "Filtres" toujours visibles ; le reste est repliable */}
       <div style={{
-        flexShrink: 0, background: 'white', borderBottom: '1px solid #e5e7eb',
-        padding: '10px 24px', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center',
+        flexShrink: 0, background: 'white', borderBottom: mobile && !showFiltresMobile ? '1px solid #e5e7eb' : 'none',
+        padding: mobile ? '10px 14px' : '10px 24px',
+        display: 'flex', flexWrap: 'wrap', gap: mobile ? 6 : 12, alignItems: 'center',
       }}>
-        {/* Recherche */}
-        <div style={{ position: 'relative', minWidth: 240, flex: '1 1 240px', maxWidth: 360 }}>
+        {/* Recherche (toujours visible) */}
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: mobile ? 160 : 240, maxWidth: mobile ? '100%' : 360 }}>
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}>🔍</span>
           <input value={recherche} onChange={e => setRecherche(e.target.value)}
-            placeholder="STK# / W/O / description / client / notes..."
+            placeholder={mobile ? '🔍 Rechercher...' : 'STK# / W/O / description / client / notes...'}
             style={{
               width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8,
               border: '1px solid #e5e7eb', fontSize: 13, outline: 'none', boxSizing: 'border-box',
               background: '#f8fafc',
             }} />
         </div>
+
+        {/* Mobile : bouton toggle filtres */}
+        {mobile && (
+          <button onClick={() => setShowFiltresMobile(s => !s)}
+            style={{
+              padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+              border: '1px solid #e5e7eb',
+              background: showFiltresMobile ? '#7c3aed' : 'white',
+              color: showFiltresMobile ? 'white' : '#7c3aed',
+              cursor: 'pointer', flexShrink: 0,
+            }}>
+            {showFiltresMobile ? '✕ Fermer' : '⚙ Filtres'}
+          </button>
+        )}
+      </div>
+
+      {/* Bloc filtres avancés — masqué sur mobile par défaut */}
+      {(!mobile || showFiltresMobile) && (
+      <div style={{
+        flexShrink: 0, background: 'white', borderBottom: '1px solid #e5e7eb',
+        padding: mobile ? '10px 14px' : '10px 24px 10px 24px',
+        display: 'flex', flexWrap: 'wrap', gap: mobile ? 8 : 12, alignItems: 'center',
+      }}>
 
         {/* Statut */}
         <SelectFiltre label="Statut" value={filtreStatut} onChange={v => setFiltreStatut(v as FiltreStatut)}
@@ -294,6 +324,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
           </button>
         )}
       </div>
+      )}
 
       {/* ── Liste ──────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>

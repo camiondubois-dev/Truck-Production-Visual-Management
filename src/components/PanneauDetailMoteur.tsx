@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useMoteurs } from '../contexts/MoteurContext';
-import { useAuth } from '../contexts/AuthContext';
+import { AuthContext } from '../contexts/AuthContext';
 import { ENGINE_ETAPES, ENGINE_SLOTS, ENGINE_ZONES, getEngineEtape, getEngineSlot } from '../data/engineStations';
 import { progressionMoteur } from '../types/engineTypes';
 import type { Moteur, ProprietaireMoteur, EtapeMoteur, StatutEtapeMoteur } from '../types/engineTypes';
@@ -11,7 +11,9 @@ interface ProfileLite { id: string; nom: string; departement?: string; }
 
 export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClose: () => void }) {
   const { mettreAJour, demarrerEtape, terminerEtape, sauterEtape, replanifierEtape, deplacer, archiver, supprimer } = useMoteurs();
-  const { profile } = useAuth();
+  // useAuth optionnel : pas crasher si pas d'AuthProvider (cas /terrain mobile)
+  const auth = useContext(AuthContext);
+  const profile = auth?.profile ?? null;
 
   const [editing, setEditing] = useState(false);
   const [stkNumero, setStkNumero] = useState(moteur.stkNumero);
