@@ -10,6 +10,14 @@ export function fromDB(row: any): Moteur {
     id: row.id,
     stkNumero: row.stk_numero,
     workOrder: row.work_order ?? undefined,
+    marque: row.marque ?? undefined,
+    modele: row.modele ?? undefined,
+    serie: row.serie ?? undefined,
+    annee: row.annee ?? undefined,
+    epa: row.epa ?? undefined,
+    ghg: row.ghg ?? undefined,
+    puissanceHp: row.puissance_hp ?? undefined,
+    codeMoteur: row.code_moteur ?? undefined,
     descriptionMoteur: row.description_moteur ?? undefined,
     proprietaire: (row.proprietaire ?? 'interne') as ProprietaireMoteur,
     nomClient: row.nom_client ?? undefined,
@@ -45,6 +53,14 @@ function toDB(m: Partial<Moteur>): any {
   const out: any = {};
   if (m.stkNumero         !== undefined) out.stk_numero          = m.stkNumero;
   if (m.workOrder         !== undefined) out.work_order          = m.workOrder ?? null;
+  if (m.marque            !== undefined) out.marque               = m.marque ?? null;
+  if (m.modele            !== undefined) out.modele               = m.modele ?? null;
+  if (m.serie             !== undefined) out.serie                = m.serie ?? null;
+  if (m.annee             !== undefined) out.annee                = m.annee ?? null;
+  if (m.epa               !== undefined) out.epa                  = m.epa ?? null;
+  if (m.ghg               !== undefined) out.ghg                  = m.ghg ?? null;
+  if (m.puissanceHp       !== undefined) out.puissance_hp         = m.puissanceHp ?? null;
+  if (m.codeMoteur        !== undefined) out.code_moteur          = m.codeMoteur ?? null;
   if (m.descriptionMoteur !== undefined) out.description_moteur  = m.descriptionMoteur ?? null;
   if (m.proprietaire      !== undefined) out.proprietaire        = m.proprietaire;
   if (m.nomClient         !== undefined) out.nom_client          = m.nomClient ?? null;

@@ -9,7 +9,14 @@ export function WizardMoteur({ onClose, onCree }: { onClose: () => void; onCree:
 
   const [stkNumero, setStkNumero] = useState('');
   const [workOrder, setWorkOrder] = useState('');
-  const [descriptionMoteur, setDescriptionMoteur] = useState('');
+  const [marque, setMarque] = useState('');
+  const [modele, setModele] = useState('');
+  const [serie, setSerie] = useState('');
+  const [annee, setAnnee] = useState('');
+  const [epa, setEpa] = useState('');
+  const [ghg, setGhg] = useState('');
+  const [puissanceHp, setPuissanceHp] = useState('');
+  const [codeMoteur, setCodeMoteur] = useState('');
   const [proprietaire, setProprietaire] = useState<ProprietaireMoteur>('interne');
   const [nomClient, setNomClient] = useState('');
   const [etatCommercial, setEtatCommercial] = useState('');
@@ -47,10 +54,30 @@ export function WizardMoteur({ onClose, onCree }: { onClose: () => void; onCree:
           statut: 'planifie' as const,
         }));
 
+      // Construire description_moteur auto-générée à partir des champs
+      const descParts = [
+        marque.trim().toUpperCase(),
+        modele.trim(),
+        serie.trim(),
+        epa.trim().toUpperCase(),
+        ghg.trim().toUpperCase(),
+        puissanceHp.trim() ? `${puissanceHp.trim()}HP` : '',
+        codeMoteur.trim() ? `(${codeMoteur.trim()})` : '',
+      ].filter(Boolean);
+      const descriptionAuto = descParts.join(' ');
+
       const m = await creer({
         stkNumero: stkNumero.trim(),
         workOrder: workOrder.trim() || undefined,
-        descriptionMoteur: descriptionMoteur.trim() || undefined,
+        marque: marque.trim() ? marque.trim().toUpperCase() : undefined,
+        modele: modele.trim() || undefined,
+        serie: serie.trim() || undefined,
+        annee: annee.trim() ? parseInt(annee.trim()) : undefined,
+        epa: epa.trim() ? epa.trim().toUpperCase() : undefined,
+        ghg: ghg.trim() ? ghg.trim().toUpperCase() : undefined,
+        puissanceHp: puissanceHp.trim() ? parseInt(puissanceHp.trim()) : undefined,
+        codeMoteur: codeMoteur.trim() || undefined,
+        descriptionMoteur: descriptionAuto || undefined,
         proprietaire,
         nomClient: proprietaire === 'client' ? (nomClient.trim() || undefined) : undefined,
         etatCommercial: etatCommercial.trim() || undefined,
@@ -110,10 +137,83 @@ export function WizardMoteur({ onClose, onCree }: { onClose: () => void; onCree:
             </Field>
           </div>
 
-          {/* Description moteur */}
-          <Field label="Description moteur">
-            <input value={descriptionMoteur} onChange={e => setDescriptionMoteur(e.target.value)}
-              placeholder="ex: PACCAR MX-13 EPA17 510 HP"
+          {/* Marque + Modèle */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Marque">
+              <input value={marque} onChange={e => setMarque(e.target.value)}
+                placeholder="PACCAR, CUMMINS, DETROIT..."
+                list="moteur-marques"
+                style={inputStyle} />
+              <datalist id="moteur-marques">
+                <option value="PACCAR" />
+                <option value="CUMMINS" />
+                <option value="DETROIT" />
+                <option value="CATERPILLAR" />
+                <option value="INTER" />
+                <option value="MACK" />
+                <option value="VOLVO" />
+              </datalist>
+            </Field>
+            <Field label="Modèle">
+              <input value={modele} onChange={e => setModele(e.target.value)}
+                placeholder="MX-13, ISX, DD16..."
+                style={inputStyle} />
+            </Field>
+          </div>
+
+          {/* Série + Année */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Série">
+              <input value={serie} onChange={e => setSerie(e.target.value)}
+                placeholder="CM2350, CM871..."
+                style={inputStyle} />
+            </Field>
+            <Field label="Année">
+              <input type="number" value={annee} onChange={e => setAnnee(e.target.value)}
+                placeholder="ex 2018"
+                min={1980} max={2030}
+                style={inputStyle} />
+            </Field>
+          </div>
+
+          {/* EPA + GHG + HP */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <Field label="EPA">
+              <input value={epa} onChange={e => setEpa(e.target.value)}
+                placeholder="EPA10, EPA17..."
+                list="moteur-epa"
+                style={inputStyle} />
+              <datalist id="moteur-epa">
+                <option value="EPA04" />
+                <option value="EPA07" />
+                <option value="EPA10" />
+                <option value="EPA13" />
+                <option value="EPA17" />
+              </datalist>
+            </Field>
+            <Field label="GHG">
+              <input value={ghg} onChange={e => setGhg(e.target.value)}
+                placeholder="GHG17..."
+                list="moteur-ghg"
+                style={inputStyle} />
+              <datalist id="moteur-ghg">
+                <option value="GHG14" />
+                <option value="GHG17" />
+                <option value="GHG21" />
+              </datalist>
+            </Field>
+            <Field label="Force (HP)">
+              <input type="number" value={puissanceHp} onChange={e => setPuissanceHp(e.target.value)}
+                placeholder="ex 510"
+                min={0} max={2000}
+                style={inputStyle} />
+            </Field>
+          </div>
+
+          {/* Code moteur */}
+          <Field label="Code moteur (CAT)">
+            <input value={codeMoteur} onChange={e => setCodeMoteur(e.target.value)}
+              placeholder="ex CMK, HEP, KBC, 6TS — laisser vide si non applicable"
               style={inputStyle} />
           </Field>
 

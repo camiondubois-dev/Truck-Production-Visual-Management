@@ -27,8 +27,17 @@ export interface Moteur {
   stkNumero: string;          // unique, saisi (ex. '35030')
   workOrder?: string;         // unique, saisi (ex. '1-32491')
 
-  // Description
-  descriptionMoteur?: string; // texte libre 'PACCAR MX-13 EPA17 510 HP'
+  // Description (champs structurés)
+  marque?: string;            // ex 'PACCAR', 'CUMMINS', 'DETROIT'
+  modele?: string;            // ex 'MX-13', 'ISX', 'DD16'
+  serie?: string;             // ex 'CM2350', 'CM871' (souvent Cummins/Paccar)
+  annee?: number;             // ex 2000
+  epa?: string;               // ex 'EPA10', 'EPA13', 'EPA17'
+  ghg?: string;               // ex 'GHG17' (surtout Detroit)
+  puissanceHp?: number;       // ex 510, 300
+  codeMoteur?: string;        // ex 'CMK', 'HEP', 'KBC' (codes CAT)
+  descriptionMoteur?: string; // texte libre / fallback / auto-généré
+
   proprietaire: ProprietaireMoteur;
   nomClient?: string;
   etatCommercial?: string;    // libre 'VENDU URGENT', etc.

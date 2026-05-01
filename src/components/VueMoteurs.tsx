@@ -29,6 +29,13 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
   const [filtreProprietaire, setFiltreProprietaire] = useState<FiltreProprietaire>('tous');
   const [filtreEtapeRequise, setFiltreEtapeRequise] = useState<string>('tous');
   const [filtreSlot, setFiltreSlot] = useState<string>('tous');
+  const [filtreMarque, setFiltreMarque] = useState<string>('tous');
+  const [filtreModele, setFiltreModele] = useState<string>('tous');
+  const [filtreEpa, setFiltreEpa] = useState<string>('tous');
+  const [filtreGhg, setFiltreGhg] = useState<string>('tous');
+  const [filtreAnnee, setFiltreAnnee] = useState<string>('tous');
+  const [hpMin, setHpMin] = useState<string>('');
+  const [hpMax, setHpMax] = useState<string>('');
   const [recherche, setRecherche] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -45,6 +52,29 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     };
   }, [moteurs]);
 
+  // Listes uniques auto-remplies pour les dropdowns
+  const valeursDistinctes = useMemo(() => {
+    const marques = new Set<string>();
+    const modeles = new Set<string>();
+    const epas = new Set<string>();
+    const ghgs = new Set<string>();
+    const annees = new Set<number>();
+    for (const m of moteurs) {
+      if (m.marque) marques.add(m.marque);
+      if (m.modele) modeles.add(m.modele);
+      if (m.epa)    epas.add(m.epa);
+      if (m.ghg)    ghgs.add(m.ghg);
+      if (m.annee)  annees.add(m.annee);
+    }
+    return {
+      marques: [...marques].sort(),
+      modeles: [...modeles].sort(),
+      epas: [...epas].sort(),
+      ghgs: [...ghgs].sort(),
+      annees: [...annees].sort((a, b) => b - a), // plus récent en haut
+    };
+  }, [moteurs]);
+
   // Filtrage
   const filtres = useMemo(() => {
     let result = [...moteurs];
@@ -55,7 +85,20 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
         m.roadMap.some(e => e.etapeId === filtreEtapeRequise && e.statut !== 'termine' && e.statut !== 'saute')
       );
     }
-    if (filtreSlot !== 'tous') result = result.filter(m => m.posteCourant === filtreSlot);
+    if (filtreSlot !== 'tous') {
+      if (filtreSlot === 'aucun') result = result.filter(m => !m.posteCourant);
+      else result = result.filter(m => m.posteCourant === filtreSlot);
+    }
+    if (filtreMarque !== 'tous') result = result.filter(m => m.marque === filtreMarque);
+    if (filtreModele !== 'tous') result = result.filter(m => m.modele === filtreModele);
+    if (filtreEpa !== 'tous')    result = result.filter(m => m.epa === filtreEpa);
+    if (filtreGhg !== 'tous')    result = result.filter(m => m.ghg === filtreGhg);
+    if (filtreAnnee !== 'tous')  result = result.filter(m => String(m.annee) === filtreAnnee);
+
+    const hpMinNum = hpMin.trim() ? parseInt(hpMin) : null;
+    const hpMaxNum = hpMax.trim() ? parseInt(hpMax) : null;
+    if (hpMinNum !== null) result = result.filter(m => (m.puissanceHp ?? 0) >= hpMinNum);
+    if (hpMaxNum !== null) result = result.filter(m => (m.puissanceHp ?? Number.MAX_SAFE_INTEGER) <= hpMaxNum);
 
     if (recherche.trim()) {
       const q = recherche.trim().toLowerCase();
@@ -63,6 +106,10 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
         m.stkNumero?.toLowerCase().includes(q) ||
         m.workOrder?.toLowerCase().includes(q) ||
         m.descriptionMoteur?.toLowerCase().includes(q) ||
+        m.marque?.toLowerCase().includes(q) ||
+        m.modele?.toLowerCase().includes(q) ||
+        m.serie?.toLowerCase().includes(q) ||
+        m.codeMoteur?.toLowerCase().includes(q) ||
         m.nomClient?.toLowerCase().includes(q) ||
         m.notes?.toLowerCase().includes(q) ||
         m.etatCommercial?.toLowerCase().includes(q)
@@ -78,7 +125,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     });
 
     return result;
-  }, [moteurs, filtreStatut, filtreProprietaire, filtreEtapeRequise, filtreSlot, recherche]);
+  }, [moteurs, filtreStatut, filtreProprietaire, filtreEtapeRequise, filtreSlot, filtreMarque, filtreModele, filtreEpa, filtreGhg, filtreAnnee, hpMin, hpMax, recherche]);
 
   const selected = selectedId ? moteurs.find(m => m.id === selectedId) ?? null : null;
 
@@ -176,14 +223,74 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
         {/* Emplacement */}
         <SelectFiltre label="Emplacement" value={filtreSlot} onChange={setFiltreSlot}
           options={[
-            ['tous', 'Tous'],
-            ...ENGINE_SLOTS.map(s => [s.id, s.label] as [string, string]),
+            ['tous', 'Tous emplacements'],
+            ['aucun', '— Aucun (à placer) —'],
+            ...ENGINE_SLOTS.map(s => [s.id, `${s.label} (cap. ${s.capacite})`] as [string, string]),
           ]} />
 
-        {(filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || recherche) && (
-          <button onClick={() => { setFiltreStatut('tous'); setFiltreProprietaire('tous'); setFiltreEtapeRequise('tous'); setFiltreSlot('tous'); setRecherche(''); }}
-            style={{ background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#6b7280', cursor: 'pointer' }}>
-            ✕ Effacer filtres
+        {/* Marque (auto-rempli) */}
+        {valeursDistinctes.marques.length > 0 && (
+          <SelectFiltre label="Marque" value={filtreMarque} onChange={setFiltreMarque}
+            options={[
+              ['tous', `Toutes (${valeursDistinctes.marques.length})`],
+              ...valeursDistinctes.marques.map(m => [m, m] as [string, string]),
+            ]} />
+        )}
+
+        {/* Modèle (auto-rempli) */}
+        {valeursDistinctes.modeles.length > 0 && (
+          <SelectFiltre label="Modèle" value={filtreModele} onChange={setFiltreModele}
+            options={[
+              ['tous', `Tous (${valeursDistinctes.modeles.length})`],
+              ...valeursDistinctes.modeles.map(m => [m, m] as [string, string]),
+            ]} />
+        )}
+
+        {/* EPA */}
+        {valeursDistinctes.epas.length > 0 && (
+          <SelectFiltre label="EPA" value={filtreEpa} onChange={setFiltreEpa}
+            options={[
+              ['tous', 'Tous'],
+              ...valeursDistinctes.epas.map(e => [e, e] as [string, string]),
+            ]} />
+        )}
+
+        {/* GHG */}
+        {valeursDistinctes.ghgs.length > 0 && (
+          <SelectFiltre label="GHG" value={filtreGhg} onChange={setFiltreGhg}
+            options={[
+              ['tous', 'Tous'],
+              ...valeursDistinctes.ghgs.map(g => [g, g] as [string, string]),
+            ]} />
+        )}
+
+        {/* Année */}
+        {valeursDistinctes.annees.length > 0 && (
+          <SelectFiltre label="Année" value={filtreAnnee} onChange={setFiltreAnnee}
+            options={[
+              ['tous', 'Toutes'],
+              ...valeursDistinctes.annees.map(a => [String(a), String(a)] as [string, string]),
+            ]} />
+        )}
+
+        {/* HP min/max */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>HP:</span>
+          <input type="number" value={hpMin} onChange={e => setHpMin(e.target.value)} placeholder="min"
+            style={{ width: 60, padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
+          <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>
+          <input type="number" value={hpMax} onChange={e => setHpMax(e.target.value)} placeholder="max"
+            style={{ width: 60, padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
+        </div>
+
+        {(filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || filtreMarque !== 'tous' || filtreModele !== 'tous' || filtreEpa !== 'tous' || filtreGhg !== 'tous' || filtreAnnee !== 'tous' || hpMin || hpMax || recherche) && (
+          <button onClick={() => {
+            setFiltreStatut('tous'); setFiltreProprietaire('tous'); setFiltreEtapeRequise('tous'); setFiltreSlot('tous');
+            setFiltreMarque('tous'); setFiltreModele('tous'); setFiltreEpa('tous'); setFiltreGhg('tous'); setFiltreAnnee('tous');
+            setHpMin(''); setHpMax(''); setRecherche('');
+          }}
+            style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#991b1b', fontWeight: 600, cursor: 'pointer' }}>
+            ✕ Effacer tous les filtres
           </button>
         )}
       </div>
@@ -305,8 +412,17 @@ function CarteMoteur({ m, onClick, mobile }: { m: Moteur; onClick: () => void; m
             </span>
           )}
         </div>
-        <div style={{ fontSize: 13, color: '#374151', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {m.descriptionMoteur || <em style={{ color: '#9ca3af' }}>Pas de description</em>}
+        <div style={{ fontSize: 13, color: '#374151', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {m.marque && <span style={{ color: '#7c3aed', fontWeight: 800 }}>{m.marque}</span>}
+          {m.modele && <span>{m.modele}</span>}
+          {m.serie && <span style={{ color: '#6b7280', fontSize: 11, fontFamily: 'monospace' }}>{m.serie}</span>}
+          {m.annee && <span style={{ color: '#6b7280', fontSize: 11 }}>({m.annee})</span>}
+          {m.epa && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af', fontWeight: 700 }}>{m.epa}</span>}
+          {m.ghg && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{m.ghg}</span>}
+          {m.puissanceHp && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, fontFamily: 'monospace' }}>{m.puissanceHp} HP</span>}
+          {m.codeMoteur && <span style={{ fontSize: 10, color: '#9ca3af' }}>· {m.codeMoteur}</span>}
+          {!m.marque && !m.modele && !m.descriptionMoteur && <em style={{ color: '#9ca3af' }}>Pas de description</em>}
+          {!m.marque && !m.modele && m.descriptionMoteur && <span>{m.descriptionMoteur}</span>}
         </div>
         <div style={{ fontSize: 11, color: '#9ca3af', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <span>{PROPRIO_LABEL[m.proprietaire]}{m.nomClient ? ` · ${m.nomClient}` : ''}</span>

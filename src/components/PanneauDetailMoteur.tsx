@@ -16,7 +16,14 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const [editing, setEditing] = useState(false);
   const [stkNumero, setStkNumero] = useState(moteur.stkNumero);
   const [workOrder, setWorkOrder] = useState(moteur.workOrder ?? '');
-  const [descriptionMoteur, setDescriptionMoteur] = useState(moteur.descriptionMoteur ?? '');
+  const [marque, setMarque] = useState(moteur.marque ?? '');
+  const [modele, setModele] = useState(moteur.modele ?? '');
+  const [serie, setSerie] = useState(moteur.serie ?? '');
+  const [annee, setAnnee] = useState(moteur.annee ? String(moteur.annee) : '');
+  const [epa, setEpa] = useState(moteur.epa ?? '');
+  const [ghg, setGhg] = useState(moteur.ghg ?? '');
+  const [puissanceHp, setPuissanceHp] = useState(moteur.puissanceHp ? String(moteur.puissanceHp) : '');
+  const [codeMoteur, setCodeMoteur] = useState(moteur.codeMoteur ?? '');
   const [proprietaire, setProprietaire] = useState<ProprietaireMoteur>(moteur.proprietaire);
   const [nomClient, setNomClient] = useState(moteur.nomClient ?? '');
   const [etatCommercial, setEtatCommercial] = useState(moteur.etatCommercial ?? '');
@@ -50,10 +57,25 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const saveEdits = async () => {
     setErreur(null);
     try {
+      const descParts = [
+        marque.trim().toUpperCase(), modele.trim(), serie.trim(),
+        epa.trim().toUpperCase(), ghg.trim().toUpperCase(),
+        puissanceHp.trim() ? `${puissanceHp.trim()}HP` : '',
+        codeMoteur.trim() ? `(${codeMoteur.trim()})` : '',
+      ].filter(Boolean);
+
       await mettreAJour(moteur.id, {
         stkNumero: stkNumero.trim(),
         workOrder: workOrder.trim() || undefined,
-        descriptionMoteur: descriptionMoteur.trim() || undefined,
+        marque: marque.trim() ? marque.trim().toUpperCase() : undefined,
+        modele: modele.trim() || undefined,
+        serie: serie.trim() || undefined,
+        annee: annee.trim() ? parseInt(annee.trim()) : undefined,
+        epa: epa.trim() ? epa.trim().toUpperCase() : undefined,
+        ghg: ghg.trim() ? ghg.trim().toUpperCase() : undefined,
+        puissanceHp: puissanceHp.trim() ? parseInt(puissanceHp.trim()) : undefined,
+        codeMoteur: codeMoteur.trim() || undefined,
+        descriptionMoteur: descParts.join(' ') || undefined,
         proprietaire,
         nomClient: proprietaire === 'client' ? (nomClient.trim() || undefined) : undefined,
         etatCommercial: etatCommercial.trim() || undefined,
@@ -68,7 +90,14 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const cancelEdits = () => {
     setStkNumero(moteur.stkNumero);
     setWorkOrder(moteur.workOrder ?? '');
-    setDescriptionMoteur(moteur.descriptionMoteur ?? '');
+    setMarque(moteur.marque ?? '');
+    setModele(moteur.modele ?? '');
+    setSerie(moteur.serie ?? '');
+    setAnnee(moteur.annee ? String(moteur.annee) : '');
+    setEpa(moteur.epa ?? '');
+    setGhg(moteur.ghg ?? '');
+    setPuissanceHp(moteur.puissanceHp ? String(moteur.puissanceHp) : '');
+    setCodeMoteur(moteur.codeMoteur ?? '');
     setProprietaire(moteur.proprietaire);
     setNomClient(moteur.nomClient ?? '');
     setEtatCommercial(moteur.etatCommercial ?? '');
@@ -206,16 +235,41 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
                 <KV label="STK #" value={moteur.stkNumero} />
                 <KV label="W/O" value={moteur.workOrder ?? '—'} />
-                <KV label="Description" value={moteur.descriptionMoteur ?? '—'} />
+                <KV label="Marque" value={moteur.marque ?? '—'} />
+                <KV label="Modèle" value={moteur.modele ?? '—'} />
+                <KV label="Série" value={moteur.serie ?? '—'} />
+                <KV label="Année" value={moteur.annee ? String(moteur.annee) : '—'} />
+                <KV label="EPA" value={moteur.epa ?? '—'} />
+                <KV label="GHG" value={moteur.ghg ?? '—'} />
+                <KV label="Force" value={moteur.puissanceHp ? `${moteur.puissanceHp} HP` : '—'} />
+                <KV label="Code" value={moteur.codeMoteur ?? '—'} />
                 <KV label="Propriétaire" value={moteur.proprietaire + (moteur.nomClient ? ` · ${moteur.nomClient}` : '')} />
                 <KV label="État" value={moteur.etatCommercial ?? '—'} />
                 <KV label="Notes" value={moteur.notes ?? '—'} multiline />
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input value={stkNumero} onChange={e => setStkNumero(e.target.value)} placeholder="STK #" style={inputStyle} />
-                <input value={workOrder} onChange={e => setWorkOrder(e.target.value)} placeholder="W/O" style={inputStyle} />
-                <input value={descriptionMoteur} onChange={e => setDescriptionMoteur(e.target.value)} placeholder="Description moteur" style={inputStyle} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={stkNumero} onChange={e => setStkNumero(e.target.value)} placeholder="STK #" style={inputStyle} />
+                  <input value={workOrder} onChange={e => setWorkOrder(e.target.value)} placeholder="W/O" style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={marque} onChange={e => setMarque(e.target.value)} placeholder="Marque" list="moteur-marques" style={inputStyle} />
+                  <input value={modele} onChange={e => setModele(e.target.value)} placeholder="Modèle" style={inputStyle} />
+                </div>
+                <datalist id="moteur-marques">
+                  <option value="PACCAR" /><option value="CUMMINS" /><option value="DETROIT" /><option value="CATERPILLAR" /><option value="INTER" /><option value="MACK" /><option value="VOLVO" />
+                </datalist>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={serie} onChange={e => setSerie(e.target.value)} placeholder="Série (CM2350...)" style={inputStyle} />
+                  <input type="number" value={annee} onChange={e => setAnnee(e.target.value)} placeholder="Année" min={1980} max={2030} style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  <input value={epa} onChange={e => setEpa(e.target.value)} placeholder="EPA" style={inputStyle} />
+                  <input value={ghg} onChange={e => setGhg(e.target.value)} placeholder="GHG" style={inputStyle} />
+                  <input type="number" value={puissanceHp} onChange={e => setPuissanceHp(e.target.value)} placeholder="HP" style={inputStyle} />
+                </div>
+                <input value={codeMoteur} onChange={e => setCodeMoteur(e.target.value)} placeholder="Code moteur (CMK, HEP...)" style={inputStyle} />
                 <select value={proprietaire} onChange={e => setProprietaire(e.target.value as ProprietaireMoteur)} style={inputStyle}>
                   <option value="interne">Interne</option>
                   <option value="client">Client</option>
