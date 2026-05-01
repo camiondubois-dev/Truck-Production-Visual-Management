@@ -125,6 +125,24 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     }
   };
 
+  /**
+   * Change l'employé attitré au moteur. Met aussi à jour l'employé de l'étape
+   * en-cours si applicable, pour rester cohérent.
+   */
+  const changerEmployeMoteur = async (newEmployeId: string | null) => {
+    const updates: Partial<typeof moteur> = { employeCourant: newEmployeId ?? undefined };
+
+    // Si une étape est en-cours, on met aussi à jour son employe_id
+    const aEtapeEnCours = moteur.roadMap.some(e => e.statut === 'en-cours');
+    if (aEtapeEnCours) {
+      updates.roadMap = moteur.roadMap.map(e =>
+        e.statut === 'en-cours' ? { ...e, employeId: newEmployeId ?? undefined } : e
+      );
+    }
+
+    await mettreAJour(moteur.id, updates);
+  };
+
   const handleSupprimerPhoto = async () => {
     if (!moteur.photoUrl) return;
     await photoService.supprimerPhoto(moteur.photoUrl);
@@ -289,6 +307,54 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
           </Section>
 
           {/* Emplacement */}
+          {/* Employé assigné — éditable, sauvegarde immédiate */}
+          <Section title="Employé assigné" right={
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>
+              {employeCourant ? '✓ Sauvé' : 'Aucun'}
+            </span>
+          }>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 22 }}>👤</span>
+              <select
+                value={moteur.employeCourant ?? ''}
+                onChange={async (e) => {
+                  const v = e.target.value || null;
+                  await changerEmployeMoteur(v);
+                }}
+                style={{
+                  flex: 1, minWidth: 200,
+                  padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${moteur.employeCourant ? '#7c3aed' : '#e5e7eb'}`,
+                  background: moteur.employeCourant ? '#ede9fe' : 'white',
+                  color: moteur.employeCourant ? '#6d28d9' : '#6b7280',
+                  fontSize: 14, fontWeight: moteur.employeCourant ? 700 : 500,
+                  outline: 'none', cursor: 'pointer',
+                }}
+              >
+                <option value="">— Aucun employé assigné —</option>
+                {employes.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.nom}{e.departement ? ` (${e.departement})` : ''}
+                  </option>
+                ))}
+              </select>
+              {moteur.employeCourant && (
+                <button onClick={() => changerEmployeMoteur(null)}
+                  style={{
+                    padding: '8px 12px', borderRadius: 6, border: '1px solid #fca5a5',
+                    background: 'white', color: '#dc2626', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                  }}>
+                  ✕ Désassigner
+                </button>
+              )}
+            </div>
+            {moteur.roadMap.some(e => e.statut === 'en-cours') && (
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                ℹ Le changement s'applique aussi à l'étape en cours.
+              </div>
+            )}
+          </Section>
+
           <Section title="Emplacement actuel">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <span style={{ fontSize: 18 }}>📍</span>
