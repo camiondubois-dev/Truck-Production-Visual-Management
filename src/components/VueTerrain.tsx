@@ -10,6 +10,7 @@ import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoir
 import { ROAD_MAP_STATIONS, RETOUCHE_ID, CHECKLIST_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
 import { VueLivraisons } from './VueLivraisons';
+import { VueMoteurs } from './VueMoteurs';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
 
 type FiltreType   = 'tous' | 'eau' | 'detail';
@@ -974,6 +975,7 @@ function VueTerrainMain() {
   const [showCreation, setShowCreation] = useState(false);
   const [showReservoirs, setShowReservoirs] = useState(false);
   const [showLivraisons, setShowLivraisons] = useState(false);
+  const [showMoteurs, setShowMoteurs]       = useState(false);
 
   const charger = async () => {
     const { data } = await supabase
@@ -1040,6 +1042,10 @@ function VueTerrainMain() {
             <button onClick={() => setShowLivraisons(true)} title="Suivi livraisons"
               style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#dc2626', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
               🚚
+            </button>
+            <button onClick={() => setShowMoteurs(true)} title="Moteurs"
+              style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#7c3aed', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              🛠️
             </button>
             <button onClick={() => setShowReservoirs(true)}
               style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#0ea5e9', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
@@ -1171,6 +1177,11 @@ function VueTerrainMain() {
           <VueLivraisons mobile
             onClose={() => setShowLivraisons(false)}
             onSelectVehicule={(id) => { setSelectedId(id); setShowLivraisons(false); }} />
+        </div>
+      )}
+      {showMoteurs && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#f8fafc' }}>
+          <VueMoteurs mobile onClose={() => setShowMoteurs(false)} />
         </div>
       )}
     </div>

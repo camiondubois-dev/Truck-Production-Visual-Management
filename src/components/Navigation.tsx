@@ -18,6 +18,7 @@ const TABS = [
   { id: 'detail',      label: 'Camions détail', icon: '🏷️',       color: '#22c55e' },
   { id: 'prets',       label: 'Prêts',          icon: '✅',        color: '#22c55e' },
   { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',     color: '#dc2626' },
+  { id: 'moteurs',     label: 'Moteurs',        icon: '🛠️',      color: '#7c3aed' },
   { id: 'inventaire',  label: 'Inventaire',     icon: '📋',       color: '#1e293b' },
   { id: 'reservoirs',  label: 'Réservoirs',     icon: '🛢',       color: '#0ea5e9' },
   { id: 'baseclients', label: 'Clients',        icon: '👤',       color: '#6366f1' },
