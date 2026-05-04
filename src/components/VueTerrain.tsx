@@ -977,7 +977,8 @@ function VueTerrainMain() {
   const [showReservoirs, setShowReservoirs] = useState(false);
   const [showLivraisons, setShowLivraisons] = useState(false);
   const [showMoteurs, setShowMoteurs]       = useState(false);
-  const [showSuiviVente, setShowSuiviVente] = useState(false);
+  // Suivi Vente s'ouvre par défaut au chargement de /terrain (demande équipe)
+  const [showSuiviVente, setShowSuiviVente] = useState(true);
 
   const charger = async () => {
     const { data } = await supabase

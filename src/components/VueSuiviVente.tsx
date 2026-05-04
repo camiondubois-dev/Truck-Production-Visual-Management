@@ -874,20 +874,34 @@ function CarteSuiviVenteMobile({ v, vendeur, onClick }: {
         </div>
       )}
 
-      {/* Stations grid */}
+      {/* Stations grid (noms à la place des icônes) */}
       <div>
         <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
           Stations
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           {STATIONS_SUIVI.map(s => {
             const etat = etatStationOrFinale(v, s.id);
             return (
-              <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <div style={{ fontSize: 16 }}>{s.icon}</div>
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 8px',
+                background: '#f8fafc',
+                border: `1px solid ${s.color}40`,
+                borderLeft: `3px solid ${s.color}`,
+                borderRadius: 6,
+                minWidth: 0,
+              }}>
                 <EtapeIcon etat={etat} />
-                <div style={{ fontSize: 8, fontWeight: 600, color: '#9ca3af', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-                  {s.short.replace(/[.\s]/g, '').slice(0, 6)}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.label}
+                  </div>
+                  {s.responsable && (
+                    <div style={{ fontSize: 8, color: '#9ca3af', fontWeight: 600, lineHeight: 1.1, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.responsable}
+                    </div>
+                  )}
                 </div>
               </div>
             );
