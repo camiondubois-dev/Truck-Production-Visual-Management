@@ -8,6 +8,7 @@ import { ClientProvider } from './contexts/ClientContext';
 import { MoteurProvider } from './contexts/MoteurContext';
 import { AchatProvider } from './contexts/AchatContext';
 import App from './App.tsx';
+import AchatsApp from './AchatsApp';
 import { VueTerrain } from './components/VueTerrain';
 import './index.css';
 
@@ -30,11 +31,14 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-const isTerrainRoute = window.location.pathname.startsWith('/terrain');
+const path = window.location.pathname;
+const isTerrainRoute = path.startsWith('/terrain');
+const isAchatsRoute  = path.startsWith('/achats');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isTerrainRoute ? (
+      // ── Route /terrain : app mobile mécanos ────────────────
       <ErrorBoundary>
         <InventaireProvider>
           <MoteurProvider>
@@ -42,7 +46,19 @@ createRoot(document.getElementById('root')!).render(
           </MoteurProvider>
         </InventaireProvider>
       </ErrorBoundary>
+    ) : isAchatsRoute ? (
+      // ── Route /achats : module Achats standalone ────────────
+      <ErrorBoundary>
+        <AuthProvider>
+          <InventaireProvider>
+            <AchatProvider>
+              <AchatsApp />
+            </AchatProvider>
+          </InventaireProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     ) : (
+      // ── App principale : production ─────────────────────────
       <ErrorBoundary>
         <AuthProvider>
           <RoleProvider>
@@ -50,9 +66,7 @@ createRoot(document.getElementById('root')!).render(
               <InventaireProvider>
                 <ClientProvider>
                   <MoteurProvider>
-                    <AchatProvider>
-                      <App />
-                    </AchatProvider>
+                    <App />
                   </MoteurProvider>
                 </ClientProvider>
               </InventaireProvider>
