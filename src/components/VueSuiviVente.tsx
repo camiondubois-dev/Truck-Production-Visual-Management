@@ -319,6 +319,88 @@ function CellHeader({ children, align, style }: { children: React.ReactNode; ali
   );
 }
 
+// ── Cellule PDF (1 doc → ouvre direct, 2+ docs → popover liste) ──
+function PdfCell({ documents, onClickPdf }: {
+  documents: { nom: string; base64: string }[];
+  onClickPdf: (doc: { nom: string; base64: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open]);
+
+  if (documents.length === 0) {
+    return <span style={{ color: '#cbd5e1', fontSize: 'clamp(12px, 1.1vw, 16px)' }}>—</span>;
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (documents.length === 1) {
+      onClickPdf(documents[0]);
+    } else {
+      setOpen(o => !o);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button onClick={handleClick}
+        title={documents.map(d => d.nom).join(' · ')}
+        style={{
+          background: '#fee2e2', border: '1px solid #fca5a5',
+          color: '#dc2626', borderRadius: 6,
+          padding: 'clamp(4px, 0.6vw, 8px) clamp(6px, 0.7vw, 10px)',
+          cursor: 'pointer', fontWeight: 700,
+          fontSize: 'clamp(11px, 1.1vw, 16px)',
+          display: 'flex', alignItems: 'center', gap: 3,
+          whiteSpace: 'nowrap',
+        }}>
+        📄{documents.length > 1 && <span>{documents.length}</span>}
+      </button>
+
+      {open && documents.length > 1 && (
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+          marginTop: 4, zIndex: 50,
+          background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          minWidth: 220, maxWidth: 360,
+          overflow: 'hidden',
+        }}>
+          {documents.map((doc, i) => (
+            <button key={i}
+              onClick={() => { setOpen(false); onClickPdf(doc); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', textAlign: 'left',
+                padding: '10px 12px',
+                background: 'white', border: 'none',
+                borderBottom: i < documents.length - 1 ? '1px solid #f1f5f9' : 'none',
+                cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, color: '#1e293b',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#fef2f2'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}>
+              <span style={{ fontSize: 16 }}>📄</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {doc.nom}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Ligne d'un véhicule vendu ────────────────────────────────────
 function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected }: {
   v: VehiculeInventaire;
@@ -438,23 +520,7 @@ function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected
 
       {/* PDF (compact) */}
       <Cell align="center">
-        {documents.length > 0 ? (
-          <button onClick={(e) => { e.stopPropagation(); onClickPdf({ nom: documents[0].nom, base64: documents[0].base64 }); }}
-            title={documents.map(d => d.nom).join(' · ')}
-            style={{
-              background: '#fee2e2', border: '1px solid #fca5a5',
-              color: '#dc2626', borderRadius: 6,
-              padding: 'clamp(4px, 0.6vw, 8px) clamp(6px, 0.7vw, 10px)',
-              cursor: 'pointer', fontWeight: 700,
-              fontSize: 'clamp(11px, 1.1vw, 16px)',
-              display: 'flex', alignItems: 'center', gap: 3,
-              whiteSpace: 'nowrap',
-            }}>
-            📄{documents.length > 1 && <span>{documents.length}</span>}
-          </button>
-        ) : (
-          <span style={{ color: '#cbd5e1', fontSize: 'clamp(12px, 1.1vw, 16px)' }}>—</span>
-        )}
+        <PdfCell documents={documents} onClickPdf={onClickPdf} />
       </Cell>
 
       {/* Stations */}
