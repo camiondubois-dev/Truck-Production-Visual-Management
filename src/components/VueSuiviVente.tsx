@@ -15,12 +15,12 @@ function useGarageOptional(): { items: Item[] } {
 // ── Stations affichées dans le tableau ────────────────────────────
 // Dans cet ordre : 6 stations + colonne "Prêt livraison"
 const STATIONS_SUIVI = [
-  { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   color: '#f97316', icon: '🔧' },
-  { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    color: '#3b82f6', icon: '⚙️' },
-  { id: 'mecanique-moteur',     label: 'Mécanique moteur',     short: 'MÉC. MOT.',    color: '#3b82f6', icon: '🔩' },
-  { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   color: '#3b82f6', icon: '💡' },
-  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  color: '#f97316', icon: '⚡' },
-  { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  color: '#a855f7', icon: '🏭' },
+  { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   responsable: 'Daniel D.',    color: '#f97316', icon: '🔧' },
+  { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    responsable: 'Régis D.',     color: '#3b82f6', icon: '⚙️' },
+  { id: 'mecanique-moteur',     label: 'Mécanique moteur',     short: 'MÉC. MOT.',    responsable: 'Joel C.',      color: '#3b82f6', icon: '🔩' },
+  { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   responsable: 'Joel C.',      color: '#3b82f6', icon: '💡' },
+  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  responsable: 'Sébastien H.', color: '#f97316', icon: '⚡' },
+  { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
 ] as const;
 
 export function VueSuiviVente() {
@@ -241,6 +241,17 @@ function HeaderRow() {
         <CellHeader key={s.id} align="center">
           <div style={{ fontSize: 'clamp(13px, 1.2vw, 18px)', marginBottom: 2 }}>{s.icon}</div>
           <div style={{ fontSize: 'clamp(8px, 0.8vw, 10px)', whiteSpace: 'nowrap' }}>{s.short}</div>
+          <div style={{
+            fontSize: 'clamp(8px, 0.75vw, 10px)',
+            fontWeight: 600,
+            color: '#94a3b8',
+            textTransform: 'none',
+            letterSpacing: 0,
+            marginTop: 2,
+            whiteSpace: 'nowrap',
+          }}>
+            {s.responsable}
+          </div>
         </CellHeader>
       ))}
       <CellHeader align="center" style={{ background: '#166534' }}>
