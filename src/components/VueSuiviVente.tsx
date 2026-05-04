@@ -251,7 +251,7 @@ function HeaderRow() {
   );
 }
 
-const COL_TEMPLATE = '120px minmax(260px, 3fr) 100px 120px repeat(6, minmax(70px, 1fr)) 100px';
+const COL_TEMPLATE = '120px minmax(260px, 3fr) 100px 140px repeat(6, minmax(70px, 1fr)) 100px';
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
@@ -315,12 +315,12 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
 
       {/* Date prévue livraison */}
       <Cell>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <div style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: dateUrgence.color }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+          <div style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: dateUrgence.color, whiteSpace: 'nowrap' }}>
             {dateStr}
           </div>
           {dateUrgence.note && (
-            <div style={{ fontSize: 'clamp(10px, 0.9vw, 12px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2 }}>
+            <div style={{ fontSize: 'clamp(10px, 0.9vw, 12px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
               {dateUrgence.note}
             </div>
           )}
