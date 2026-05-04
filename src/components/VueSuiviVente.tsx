@@ -518,30 +518,27 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
   }
 
   if (etat === 'absente') {
-    // Rond barré rouge — étape pas dans le road_map = pas à faire
+    // Étape pas dans le road_map = pas à faire → petit point noir discret
     return (
       <div style={{
-        width: size, height: size, borderRadius: '50%',
-        border: 'clamp(2px, 0.25vw, 4px) solid #dc2626',
-        background: 'white',
-        position: 'relative',
+        width: size, height: size,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{
-          position: 'absolute', width: '70%',
-          height: 'clamp(2px, 0.25vw, 4px)',
-          background: '#dc2626',
-          transform: 'rotate(-45deg)',
+          width: 'clamp(6px, 0.6vw, 10px)',
+          height: 'clamp(6px, 0.6vw, 10px)',
+          borderRadius: '50%',
+          background: '#1f2937',
         }} />
       </div>
     );
   }
 
-  // planifie / en-attente / saute → case vide
+  // planifie / en-attente / saute → case vide bordée rouge (reste à faire)
   return (
     <div style={{
       width: size, height: size, borderRadius: 'clamp(4px, 0.5vw, 8px)',
-      border: 'clamp(2px, 0.25vw, 3px) solid #cbd5e1', background: 'white',
+      border: 'clamp(2px, 0.25vw, 3px) solid #dc2626', background: 'white',
     }} />
   );
 }
