@@ -6,6 +6,7 @@ import { GarageProvider } from './contexts/GarageContext';
 import { InventaireProvider } from './contexts/InventaireContext';
 import { ClientProvider } from './contexts/ClientContext';
 import { MoteurProvider } from './contexts/MoteurContext';
+import { AchatProvider } from './contexts/AchatContext';
 import App from './App.tsx';
 import { VueTerrain } from './components/VueTerrain';
 import './index.css';
@@ -49,7 +50,9 @@ createRoot(document.getElementById('root')!).render(
               <InventaireProvider>
                 <ClientProvider>
                   <MoteurProvider>
-                    <App />
+                    <AchatProvider>
+                      <App />
+                    </AchatProvider>
                   </MoteurProvider>
                 </ClientProvider>
               </InventaireProvider>

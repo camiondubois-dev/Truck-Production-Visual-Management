@@ -15,6 +15,7 @@ import { VuePrets } from './components/VuePrets';
 import { VueLivraisons } from './components/VueLivraisons';
 import { VueSuiviVente } from './components/VueSuiviVente';
 import { VueMoteurs } from './components/VueMoteurs';
+import { VueAchats } from './components/VueAchats';
 import { VueAnalyse } from './components/VueAnalyse';
 import { VueTV } from './components/VueTV';
 import { TVConnexion } from './components/TVConnexion';
@@ -22,7 +23,7 @@ import { VueAdminTV } from './components/VueAdminTV';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive' | 'tv-admin';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'achats' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive' | 'tv-admin';
 
 export default function App() {
   const { profile, loading } = useAuth();
@@ -87,6 +88,7 @@ export default function App() {
         {currentTab === 'livraisons'  && <VueLivraisons />}
         {currentTab === 'suivi-vente' && <VueSuiviVente />}
         {currentTab === 'moteurs'     && <VueMoteurs />}
+        {currentTab === 'achats'      && <VueAchats />}
         {currentTab === 'inventaire'  && <VueInventaire />}
         {currentTab === 'reservoirs'  && <VueReservoirs />}
         {currentTab === 'baseclients' && <VueClients />}

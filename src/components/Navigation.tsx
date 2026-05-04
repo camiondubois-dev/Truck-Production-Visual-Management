@@ -20,6 +20,7 @@ const TABS = [
   { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',     color: '#dc2626' },
   { id: 'suivi-vente', label: 'Suivi vente',    icon: '🛒',       color: '#0ea5e9' },
   { id: 'moteurs',     label: 'Moteurs',        icon: '🛠️',      color: '#7c3aed' },
+  { id: 'achats',      label: 'Achats',         icon: '🛒',       color: '#10b981' },
   { id: 'inventaire',  label: 'Inventaire',     icon: '📋',       color: '#1e293b' },
   { id: 'reservoirs',  label: 'Réservoirs',     icon: '🛢',       color: '#0ea5e9' },
   { id: 'baseclients', label: 'Clients',        icon: '👤',       color: '#6366f1' },

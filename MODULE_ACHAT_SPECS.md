@@ -517,13 +517,44 @@ CREATE TABLE prod_conducteurs (
 
 ---
 
-## 9. Notes / À questionner plus tard
+## 9. Décisions complémentaires (validées 2026-05-04)
 
-- **Vendeurs récurrents** : devrait-on créer une table `prod_vendeurs_externes` pour pré-remplir les infos quand on rachète chez un même vendeur ? (Phase 2+)
-- **Permissions exactes par rôle** : à finaliser dans la migration SQL avec RLS policies précises (whitelist par UUID si simple, ou champ `role_achat` sur profiles)
-- **Notification Michael/Christina** : email automatique via Supabase Edge Function ou simple badge dans l'app ? (à valider en Phase 1)
-- **Délai contre-offre** : doit-on tracker combien de temps Joel/Jason mettent à accepter une contre-offre ? (analytics phase 3)
-- **Annulation après achat** : que se passe-t-il si une fois acheté, on veut annuler (vendeur change d'avis) ? Statut `annulee` dédié ?
+### 9.1 Vendeurs récurrents ✅ OUI
+- Nouvelle table **`prod_vendeurs_externes`** (à ne pas confondre avec `prod_vendeurs` = équipe interne de vente Camions Dubois)
+- Lors de la création d'une opportunité :
+  - Dropdown "Vendeur connu" → préfille les infos
+  - Ou option "+ Nouveau vendeur" → crée et sauvegarde automatiquement
+- Compteur `fois_utilise` + `derniere_utilisation` pour stats / suggestions
+
+### 9.2 Permissions ✅ Champ `roles_achat` sur profiles
+- Colonne `roles_achat text[]` (tableau de rôles, multi-rôles possible)
+- Valeurs possibles :
+  - `'acheteur-principal'` (Stéphane, Roger)
+  - `'acheteur-secondaire'` (Régis, Jason, Joel, Dany)
+  - `'evaluateur-final'` (Joel, Jason, Régis)
+  - `'approbateur-pieces'` (Joel)
+  - `'approbateur-vente'` (Jason)
+  - `'paiement-admin'` (Michael, Christina)
+  - `'inventaire-admin'` (Christina + employés autorisés)
+  - `'conducteur'` (référence à `prod_conducteurs`)
+
+> Une personne peut avoir plusieurs rôles. Ex: Joel = `['acheteur-secondaire','evaluateur-final','approbateur-pieces']`
+
+### 9.3 Notifications Michael / Christina ✅ Email + futur chat
+- **Phase 1** : badge in-app + email simple (via Supabase Edge Function + Resend ou similaire)
+- **Phase 3** : remplacé par le système de chat intégré
+- Table `prod_achats_notifications` (in-app badges, prête pour les deux modes)
+
+### 9.4 Délai contre-offre ✅ Pas de tracking strict
+- Pas de SLA / rappel automatique
+- Décision : "rapidement" = best effort humain
+- Pas d'analytics sur le délai en Phase 1
+
+### 9.5 Annulation après achat ✅ Statut dédié
+- Nouveau statut `annulee` (motif obligatoire en texte libre)
+- Possible à n'importe quelle étape (avant transfert inventaire)
+- Trace dans `prod_achats_decisions` (type = `'annulation'`)
+- Fiche reste consultable mais marquée annulée pour analyses
 
 ---
 
