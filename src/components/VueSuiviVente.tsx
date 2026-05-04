@@ -13,7 +13,8 @@ function useGarageOptional(): { items: Item[] } {
 }
 
 // ── Stations affichées dans le tableau ────────────────────────────
-// 6 stations road_map + 2 étapes finales (lavage / retouche)
+// 6 stations road_map. Lavage + Retouche sont gérés dans le panneau
+// détail du camion mais NE sont PAS affichés sur la TV (demande équipe).
 const STATIONS_SUIVI = [
   { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   responsable: 'Daniel D.',    color: '#f97316', icon: '🔧' },
   { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    responsable: 'Régis D.',     color: '#3b82f6', icon: '⚙️' },
@@ -21,9 +22,6 @@ const STATIONS_SUIVI = [
   { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   responsable: 'Joel C.',      color: '#3b82f6', icon: '💡' },
   { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  responsable: 'Sébastien H.', color: '#f97316', icon: '⚡' },
   { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
-  // Étapes finales (booléens sur prod_inventaire, pas dans road_map)
-  { id: 'lavage',               label: 'Lavage',               short: 'LAVAGE',       responsable: '',             color: '#06b6d4', icon: '🧽' },
-  { id: 'retouche',             label: 'Retouche finale',      short: 'RETOUCHE',     responsable: '',             color: '#a855f7', icon: '✨' },
 ] as const;
 
 export function VueSuiviVente() {
@@ -299,8 +297,8 @@ function HeaderRow() {
 }
 
 // Toutes les colonnes en fr → s'adaptent à la largeur disponible (TV/4K friendly)
-// Stock | Équipement | Vendeur | Date | PDF | 6 stations + 2 finales = 8 stations
-const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr 0.6fr repeat(8, minmax(0, 1fr))';
+// Stock | Équipement | Vendeur | Date | PDF | 6 stations road_map
+const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr 0.6fr repeat(6, minmax(0, 1fr))';
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
