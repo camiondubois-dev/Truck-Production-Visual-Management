@@ -201,8 +201,9 @@ export function VueSuiviVente() {
                 <div style={{ fontSize: 14 }}><strong>{pretsCount}</strong> prêt{pretsCount > 1 ? 's' : ''} à livrer (compteur en haut)</div>
               )}
             </div>
-          ) : aLivrer.map(v => (
+          ) : aLivrer.map((v, idx) => (
             <LigneVente key={v.id} v={v}
+              idx={idx}
               vendeur={v.vendeurId ? vendeurById[v.vendeurId] : undefined}
               onClickNumero={() => setSelectedId(v.id === selectedId ? null : v.id)}
               selected={selectedId === v.id} />
@@ -283,8 +284,9 @@ function CellHeader({ children, align, style }: { children: React.ReactNode; ali
 }
 
 // ── Ligne d'un véhicule vendu ────────────────────────────────────
-function LigneVente({ v, vendeur, onClickNumero, selected }: {
+function LigneVente({ v, idx, vendeur, onClickNumero, selected }: {
   v: VehiculeInventaire;
+  idx: number;
   vendeur?: Vendeur;
   onClickNumero: () => void;
   selected: boolean;
@@ -293,17 +295,23 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
   const dateUrgence = urgenceDate(v.dateLivraisonPlanifiee);
   const equipement = formatEquipement(v);
 
+  // Zebra : alterner blanc / gris très pâle
+  const zebraBg = idx % 2 === 0 ? 'white' : '#f3f4f6';
+
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: COL_TEMPLATE,
       borderBottom: '1px solid #e5e7eb',
-      background: selected ? '#fef3c7' : 'white',
+      background: selected ? '#fef3c7' : zebraBg,
       transition: 'background 0.15s',
       minHeight: 0,
     }}>
       {/* Stock — cliquable, gros pour TV (auto-fit jusqu'à 40px en 4K) */}
-      <Cell onClick={onClickNumero} style={{ cursor: 'pointer', background: selected ? '#fde68a' : '#f8fafc' }}>
+      <Cell onClick={onClickNumero} style={{
+        cursor: 'pointer',
+        background: selected ? '#fde68a' : (idx % 2 === 0 ? '#f1f5f9' : '#e2e8f0'),
+      }}>
         <span style={{
           fontFamily: 'monospace', fontWeight: 900,
           fontSize: 'clamp(18px, 2vw, 40px)',
