@@ -71,12 +71,12 @@ export function VueSuiviVente() {
     return m;
   }, [vendeurs]);
 
-  // Filtre : VENDU seulement, types eau + détail, non archivés
+  // Filtre : VENDU + RÉSERVÉ + LOCATION, types eau + détail, non archivés
   const camionsVendus = useMemo(() =>
     vehicules.filter(v =>
       v.statut !== 'archive' &&
       (v.type === 'eau' || v.type === 'detail') &&
-      v.etatCommercial === 'vendu'
+      (v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location')
     ),
   [vehicules]);
 
@@ -228,7 +228,7 @@ function HeaderRow() {
       background: '#1e293b',
       color: 'white',
       borderBottom: '2px solid #334155',
-      fontSize: 'clamp(9px, 0.9vw, 12px)',
+      fontSize: 'clamp(10px, 1vw, 16px)',
       fontWeight: 800,
       letterSpacing: '0.05em',
       textTransform: 'uppercase',
@@ -239,10 +239,10 @@ function HeaderRow() {
       <CellHeader>Date prévue<br/>livraison</CellHeader>
       {STATIONS_SUIVI.map(s => (
         <CellHeader key={s.id} align="center">
-          <div style={{ fontSize: 'clamp(13px, 1.2vw, 18px)', marginBottom: 2 }}>{s.icon}</div>
-          <div style={{ fontSize: 'clamp(8px, 0.8vw, 10px)', whiteSpace: 'nowrap' }}>{s.short}</div>
+          <div style={{ fontSize: 'clamp(14px, 1.5vw, 26px)', marginBottom: 2 }}>{s.icon}</div>
+          <div style={{ fontSize: 'clamp(8px, 0.85vw, 13px)', whiteSpace: 'nowrap', textAlign: 'center' }}>{s.short}</div>
           <div style={{
-            fontSize: 'clamp(8px, 0.75vw, 10px)',
+            fontSize: 'clamp(8px, 0.75vw, 12px)',
             fontWeight: 600,
             color: '#94a3b8',
             textTransform: 'none',
@@ -255,14 +255,18 @@ function HeaderRow() {
         </CellHeader>
       ))}
       <CellHeader align="center" style={{ background: '#166534' }}>
-        <div style={{ fontSize: 'clamp(13px, 1.2vw, 18px)', marginBottom: 2 }}>🚚</div>
-        <div style={{ fontSize: 'clamp(8px, 0.8vw, 10px)' }}>Prêt<br/>livraison</div>
+        <div style={{ fontSize: 'clamp(14px, 1.5vw, 26px)', marginBottom: 2 }}>🚚</div>
+        <div style={{ fontSize: 'clamp(8px, 0.85vw, 13px)', textAlign: 'center', whiteSpace: 'nowrap' }}>Prêt<br/>livraison</div>
       </CellHeader>
     </div>
   );
 }
 
-const COL_TEMPLATE = '120px minmax(260px, 3fr) 100px 140px repeat(6, minmax(70px, 1fr)) 100px';
+// Toutes les colonnes en fr → s'adaptent à la largeur disponible (TV/4K friendly)
+// Stock, Vendeur, Date, Prêt = colonnes étroites mais visibles
+// Équipement = la plus large (4fr, prend tout l'espace restant)
+// 6 stations = 1fr chacune (égales)
+const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr repeat(6, minmax(0, 1fr)) 1.2fr';
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
@@ -298,28 +302,49 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
       transition: 'background 0.15s',
       minHeight: 0,
     }}>
-      {/* Stock — cliquable, gros pour TV */}
+      {/* Stock — cliquable, gros pour TV (auto-fit jusqu'à 40px en 4K) */}
       <Cell onClick={onClickNumero} style={{ cursor: 'pointer', background: selected ? '#fde68a' : '#f8fafc' }}>
         <span style={{
-          fontFamily: 'monospace', fontWeight: 900, fontSize: 'clamp(20px, 2vw, 30px)',
+          fontFamily: 'monospace', fontWeight: 900,
+          fontSize: 'clamp(18px, 2vw, 40px)',
           color: selected ? '#92400e' : '#0f172a',
           textDecoration: 'underline', textDecorationColor: '#cbd5e1',
           letterSpacing: '0.02em',
+          whiteSpace: 'nowrap',
         }}>
           {v.numero}**
         </span>
       </Cell>
 
-      {/* Équipement — gros pour TV */}
+      {/* Équipement — icône type + texte + badge commercial */}
       <Cell align="left">
-        <span style={{ fontSize: 'clamp(15px, 1.5vw, 22px)', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
-          {equipement}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(6px, 0.7vw, 12px)', width: '100%', minWidth: 0 }}>
+          {/* Icône type (eau / detail) */}
+          <TypeIcon type={v.type} />
+
+          {/* Texte équipement */}
+          <span style={{
+            flex: 1, minWidth: 0,
+            fontSize: 'clamp(15px, 1.5vw, 26px)',
+            fontWeight: 800, color: '#0f172a',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {equipement}
+          </span>
+
+          {/* Badge commercial */}
+          <CommercialBadge etat={v.etatCommercial} />
+        </div>
       </Cell>
 
       {/* Vendeur */}
       <Cell>
-        <span style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: vendeur ? '#7c3aed' : '#9ca3af', textTransform: 'uppercase' }}>
+        <span style={{
+          fontSize: 'clamp(13px, 1.3vw, 24px)',
+          fontWeight: 800, color: vendeur ? '#7c3aed' : '#9ca3af',
+          textTransform: 'uppercase', whiteSpace: 'nowrap',
+          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+        }}>
           {vendeur?.nom ?? '—'}
         </span>
       </Cell>
@@ -327,11 +352,11 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
       {/* Date prévue livraison */}
       <Cell>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-          <div style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: dateUrgence.color, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 'clamp(13px, 1.3vw, 22px)', fontWeight: 800, color: dateUrgence.color, whiteSpace: 'nowrap' }}>
             {dateStr}
           </div>
           {dateUrgence.note && (
-            <div style={{ fontSize: 'clamp(10px, 0.9vw, 12px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 'clamp(10px, 0.95vw, 16px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
               {dateUrgence.note}
             </div>
           )}
@@ -372,16 +397,17 @@ function Cell({ children, align, onClick, style }: { children: React.ReactNode; 
 type EtatEtape = 'termine' | 'en-cours' | 'planifie' | 'absente';
 
 function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
-  const size = large ? 'clamp(28px, 2.6vw, 38px)' : 'clamp(22px, 2vw, 30px)';
+  // Taille adaptative TV-friendly (auto-fit jusqu'à 4K)
+  const size = large ? 'clamp(30px, 3vw, 56px)' : 'clamp(24px, 2.4vw, 44px)';
+  const fontSize = large ? 'clamp(20px, 2vw, 36px)' : 'clamp(16px, 1.6vw, 28px)';
 
   if (etat === 'termine') {
     return (
       <div style={{
-        width: size, height: size, borderRadius: 6,
+        width: size, height: size, borderRadius: 'clamp(4px, 0.5vw, 8px)',
         background: '#22c55e', color: 'white',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: large ? 'clamp(20px, 1.9vw, 26px)' : 'clamp(15px, 1.4vw, 20px)',
-        fontWeight: 900, boxShadow: '0 2px 4px rgba(34,197,94,0.3)',
+        fontSize, fontWeight: 900, boxShadow: '0 2px 6px rgba(34,197,94,0.35)',
       }}>
         ✓
       </div>
@@ -391,11 +417,11 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
   if (etat === 'en-cours') {
     return (
       <div style={{
-        width: size, height: size, borderRadius: 6,
+        width: size, height: size, borderRadius: 'clamp(4px, 0.5vw, 8px)',
         background: '#dbeafe', color: '#1e40af',
         border: '2px solid #3b82f6',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: large ? 'clamp(18px, 1.7vw, 24px)' : 'clamp(14px, 1.3vw, 18px)',
+        fontSize,
       }}>
         ⏳
       </div>
@@ -407,13 +433,15 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
     return (
       <div style={{
         width: size, height: size, borderRadius: '50%',
-        border: '2.5px solid #dc2626',
+        border: 'clamp(2px, 0.25vw, 4px) solid #dc2626',
         background: 'white',
         position: 'relative',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{
-          position: 'absolute', width: '70%', height: 2.5, background: '#dc2626',
+          position: 'absolute', width: '70%',
+          height: 'clamp(2px, 0.25vw, 4px)',
+          background: '#dc2626',
           transform: 'rotate(-45deg)',
         }} />
       </div>
@@ -423,9 +451,56 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
   // planifie / en-attente / saute → case vide
   return (
     <div style={{
-      width: size, height: size, borderRadius: 6,
-      border: '2px solid #cbd5e1', background: 'white',
+      width: size, height: size, borderRadius: 'clamp(4px, 0.5vw, 8px)',
+      border: 'clamp(2px, 0.25vw, 3px) solid #cbd5e1', background: 'white',
     }} />
+  );
+}
+
+// ── Icône type (eau = goutte bleue / detail = tag vert) ──────────
+function TypeIcon({ type }: { type: 'eau' | 'client' | 'detail' }) {
+  const cfg = type === 'eau'
+    ? { bg: '#dbeafe', color: '#1e40af', emoji: '💧', label: 'Eau' }
+    : { bg: '#dcfce7', color: '#166534', emoji: '🏷️', label: 'Détail' };
+  return (
+    <div title={cfg.label} style={{
+      width:  'clamp(28px, 2.6vw, 44px)',
+      height: 'clamp(28px, 2.6vw, 44px)',
+      borderRadius: '50%',
+      background: cfg.bg,
+      border: `2px solid ${cfg.color}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+      fontSize: 'clamp(14px, 1.3vw, 22px)',
+    }}>
+      {cfg.emoji}
+    </div>
+  );
+}
+
+// ── Badge commercial ─────────────────────────────────────────────
+function CommercialBadge({ etat }: { etat?: string }) {
+  if (etat === 'vendu')    return <Badge bg="#22c55e" label="VENDU" />;
+  if (etat === 'reserve')  return <Badge bg="#f59e0b" label="RÉSERVÉ" />;
+  if (etat === 'location') return <Badge bg="#7c3aed" label="LOCATION" />;
+  return null;
+}
+
+function Badge({ bg, label }: { bg: string; label: string }) {
+  return (
+    <span style={{
+      flexShrink: 0,
+      fontSize: 'clamp(9px, 0.8vw, 13px)',
+      fontWeight: 800,
+      color: 'white',
+      background: bg,
+      padding: 'clamp(2px, 0.3vh, 4px) clamp(6px, 0.6vw, 10px)',
+      borderRadius: 4,
+      letterSpacing: '0.05em',
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
   );
 }
 
@@ -442,22 +517,10 @@ function etatStation(roadMap: RoadMapEtape[], stationId: string): EtatEtape {
 
 function formatEquipement(v: VehiculeInventaire): string {
   const parts = [];
-  if (v.type === 'eau') parts.push('WT');
-  // type detail : pas de préfixe (comme dans le PDF)
-
   if (v.annee) parts.push(String(v.annee));
   if (v.marque) parts.push(v.marque.toUpperCase());
   if (v.modele) parts.push(v.modele);
-
-  if (v.etatCommercial === 'location') parts.push('(LOCATION)');
-
-  const result = parts.join(parts[0] === 'WT' ? ' - ' : ' ').replace(/^WT - WT/, 'WT');
-  // si commence par "WT" et qu'il y a une année juste après, format "WT - 2018 ..."
-  if (parts[0] === 'WT') {
-    const rest = parts.slice(1).join(' ');
-    return `WT - ${rest}`;
-  }
-  return result || (v.descriptionTravail ?? v.numero);
+  return parts.join(' ') || (v.descriptionTravail ?? v.numero);
 }
 
 function formatDate(dateStr?: string): string {
