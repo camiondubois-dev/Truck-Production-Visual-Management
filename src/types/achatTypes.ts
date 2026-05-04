@@ -77,6 +77,40 @@ export interface Achat {
   etatGeneral?: EtatGeneral;
   defautsConnus?: string;
 
+  // Specs détaillées — Moteur
+  moteurMarque?: string;
+  moteurModele?: string;
+  moteurHp?: number;
+  moteurCouple?: number;     // lb-ft
+  moteurEpa?: string;
+  moteurSerie?: string;      // ex CM2350, CM871
+
+  // Transmission
+  transType?: string;        // Manuelle / Auto / AMT
+  transMarque?: string;
+  transModele?: string;
+  transVitesses?: string;
+
+  // Différentiel + châssis
+  differentielRatio?: string;
+  suspension?: string;
+  configEssieux?: string;
+  empattement?: number;      // pouces
+  gvwr?: string;
+
+  // Cabine
+  typeCabine?: string;
+  tailleCouchette?: string;
+  equipementsCabine?: string[];
+
+  // Pneus
+  pneusAvant?: string;
+  pneusArriere?: string;
+  pneusEtat?: string;
+
+  // Localisation manuelle
+  lieuLocalisation?: string;
+
   // Vendeur (snapshot)
   vendeurExterneId?: string;
   vendeurNom: string;

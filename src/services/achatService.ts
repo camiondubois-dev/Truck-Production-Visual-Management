@@ -19,6 +19,40 @@ export function fromDB(row: any): Achat {
     specs: row.specs ?? {},
     etatGeneral: row.etat_general ?? undefined,
     defautsConnus: row.defauts_connus ?? undefined,
+
+    // Specs moteur
+    moteurMarque:        row.moteur_marque ?? undefined,
+    moteurModele:        row.moteur_modele ?? undefined,
+    moteurHp:            row.moteur_hp ?? undefined,
+    moteurCouple:        row.moteur_couple ?? undefined,
+    moteurEpa:           row.moteur_epa ?? undefined,
+    moteurSerie:         row.moteur_serie ?? undefined,
+
+    // Transmission
+    transType:           row.trans_type ?? undefined,
+    transMarque:         row.trans_marque ?? undefined,
+    transModele:         row.trans_modele ?? undefined,
+    transVitesses:       row.trans_vitesses ?? undefined,
+
+    // Châssis
+    differentielRatio:   row.differentiel_ratio ?? undefined,
+    suspension:          row.suspension ?? undefined,
+    configEssieux:       row.config_essieux ?? undefined,
+    empattement:         row.empattement ?? undefined,
+    gvwr:                row.gvwr ?? undefined,
+
+    // Cabine
+    typeCabine:          row.type_cabine ?? undefined,
+    tailleCouchette:     row.taille_couchette ?? undefined,
+    equipementsCabine:   row.equipements_cabine ?? undefined,
+
+    // Pneus
+    pneusAvant:          row.pneus_avant ?? undefined,
+    pneusArriere:        row.pneus_arriere ?? undefined,
+    pneusEtat:           row.pneus_etat ?? undefined,
+
+    // Localisation
+    lieuLocalisation:    row.lieu_localisation ?? undefined,
     vendeurExterneId: row.vendeur_externe_id ?? undefined,
     vendeurNom: row.vendeur_nom,
     vendeurTelephone: row.vendeur_telephone,
@@ -61,6 +95,40 @@ function toDB(a: Partial<Achat>): any {
   if (a.specs               !== undefined) out.specs                   = a.specs ?? {};
   if (a.etatGeneral         !== undefined) out.etat_general            = a.etatGeneral ?? null;
   if (a.defautsConnus       !== undefined) out.defauts_connus          = a.defautsConnus ?? null;
+
+  // Specs moteur
+  if (a.moteurMarque        !== undefined) out.moteur_marque           = a.moteurMarque ?? null;
+  if (a.moteurModele        !== undefined) out.moteur_modele           = a.moteurModele ?? null;
+  if (a.moteurHp            !== undefined) out.moteur_hp               = a.moteurHp ?? null;
+  if (a.moteurCouple        !== undefined) out.moteur_couple           = a.moteurCouple ?? null;
+  if (a.moteurEpa           !== undefined) out.moteur_epa              = a.moteurEpa ?? null;
+  if (a.moteurSerie         !== undefined) out.moteur_serie            = a.moteurSerie ?? null;
+
+  // Transmission
+  if (a.transType           !== undefined) out.trans_type              = a.transType ?? null;
+  if (a.transMarque         !== undefined) out.trans_marque            = a.transMarque ?? null;
+  if (a.transModele         !== undefined) out.trans_modele            = a.transModele ?? null;
+  if (a.transVitesses       !== undefined) out.trans_vitesses          = a.transVitesses ?? null;
+
+  // Châssis
+  if (a.differentielRatio   !== undefined) out.differentiel_ratio      = a.differentielRatio ?? null;
+  if (a.suspension          !== undefined) out.suspension              = a.suspension ?? null;
+  if (a.configEssieux       !== undefined) out.config_essieux          = a.configEssieux ?? null;
+  if (a.empattement         !== undefined) out.empattement             = a.empattement ?? null;
+  if (a.gvwr                !== undefined) out.gvwr                    = a.gvwr ?? null;
+
+  // Cabine
+  if (a.typeCabine          !== undefined) out.type_cabine             = a.typeCabine ?? null;
+  if (a.tailleCouchette     !== undefined) out.taille_couchette        = a.tailleCouchette ?? null;
+  if (a.equipementsCabine   !== undefined) out.equipements_cabine      = a.equipementsCabine ?? null;
+
+  // Pneus
+  if (a.pneusAvant          !== undefined) out.pneus_avant             = a.pneusAvant ?? null;
+  if (a.pneusArriere        !== undefined) out.pneus_arriere           = a.pneusArriere ?? null;
+  if (a.pneusEtat           !== undefined) out.pneus_etat              = a.pneusEtat ?? null;
+
+  // Localisation
+  if (a.lieuLocalisation    !== undefined) out.lieu_localisation       = a.lieuLocalisation ?? null;
   if (a.vendeurExterneId    !== undefined) out.vendeur_externe_id      = a.vendeurExterneId ?? null;
   if (a.vendeurNom          !== undefined) out.vendeur_nom             = a.vendeurNom;
   if (a.vendeurTelephone    !== undefined) out.vendeur_telephone       = a.vendeurTelephone;
