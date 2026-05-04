@@ -330,12 +330,15 @@ function LigneVente({ v, idx, vendeur, onClickNumero, selected }: {
           {/* Icône type (eau / detail) */}
           <TypeIcon type={v.type} />
 
-          {/* Texte équipement */}
+          {/* Texte équipement — wrap multi-lignes pour lecture complète */}
           <span style={{
             flex: 1, minWidth: 0,
-            fontSize: 'clamp(15px, 1.5vw, 26px)',
+            fontSize: 'clamp(13px, 1.4vw, 24px)',
             fontWeight: 800, color: '#0f172a',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            lineHeight: 1.2,
           }}>
             {equipement}
           </span>
