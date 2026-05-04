@@ -25,7 +25,7 @@ type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'livraisons' | 
 
 export default function App() {
   const { profile, loading } = useAuth();
-  const [currentTab, setCurrentTab] = useState<Tab>('plancher');
+  const [currentTab, setCurrentTab] = useState<Tab>('livraisons');
   const [showWizard, setShowWizard] = useState(false);
 
   if (loading) {
