@@ -16,12 +16,12 @@ function useGarageOptional(): { items: Item[] } {
 // 6 stations road_map. Lavage + Retouche sont gérés dans le panneau
 // détail du camion mais NE sont PAS affichés sur la TV (demande équipe).
 const STATIONS_SUIVI = [
-  { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   responsable: 'Daniel D.',    color: '#f97316', icon: '🔧' },
-  { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    responsable: 'Régis D.',     color: '#3b82f6', icon: '⚙️' },
-  { id: 'mecanique-moteur',     label: 'Mécanique moteur',     short: 'MÉC. MOT.',    responsable: 'Joel C.',      color: '#3b82f6', icon: '🔩' },
-  { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   responsable: 'Joel C.',      color: '#3b82f6', icon: '💡' },
-  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  responsable: 'Sébastien H.', color: '#f97316', icon: '⚡' },
-  { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
+  { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   mobileLabel: 'Soud. général.',  responsable: 'Daniel D.',    color: '#f97316', icon: '🔧' },
+  { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    mobileLabel: 'Méc. général.',   responsable: 'Régis D.',     color: '#3b82f6', icon: '⚙️' },
+  { id: 'mecanique-moteur',     label: 'Mécanique moteur',     short: 'MÉC. MOT.',    mobileLabel: 'Méc. moteur',     responsable: 'Joel C.',      color: '#3b82f6', icon: '🔩' },
+  { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   mobileLabel: 'Méc. électrique', responsable: 'Joel C.',      color: '#3b82f6', icon: '💡' },
+  { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  mobileLabel: 'Soud. spécial.',  responsable: 'Sébastien H.', color: '#f97316', icon: '⚡' },
+  { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  mobileLabel: 'Sous-traitance',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
 ] as const;
 
 export function VueSuiviVente(props: { mobile?: boolean; onClose?: () => void; onSelectVehicule?: (id: string) => void } = {}) {
@@ -895,7 +895,7 @@ function CarteSuiviVenteMobile({ v, vendeur, onClick }: {
                 <EtapeIcon etat={etat} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 10, fontWeight: 800, color: '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.label}
+                    {s.mobileLabel}
                   </div>
                   {s.responsable && (
                     <div style={{ fontSize: 8, color: '#9ca3af', fontWeight: 600, lineHeight: 1.1, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

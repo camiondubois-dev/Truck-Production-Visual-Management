@@ -979,6 +979,7 @@ function VueTerrainMain() {
   const [showMoteurs, setShowMoteurs]       = useState(false);
   // Suivi Vente s'ouvre par défaut au chargement de /terrain (demande équipe)
   const [showSuiviVente, setShowSuiviVente] = useState(true);
+  const [previousModule, setPreviousModule] = useState<'livraisons' | 'suivi-vente' | 'moteurs' | null>(null);
 
   const charger = async () => {
     const { data } = await supabase
@@ -1166,7 +1167,13 @@ function VueTerrainMain() {
       {selected && (
         <FicheCamion
           vehicule={selected}
-          onClose={() => setSelectedId(null)}
+          onClose={() => {
+            setSelectedId(null);
+            if (previousModule === 'suivi-vente') setShowSuiviVente(true);
+            else if (previousModule === 'livraisons') setShowLivraisons(true);
+            else if (previousModule === 'moteurs') setShowMoteurs(true);
+            setPreviousModule(null);
+          }}
           onMisAJour={updated => { handleMisAJour(updated); }}
         />
       )}
@@ -1183,7 +1190,7 @@ function VueTerrainMain() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#f8fafc' }}>
           <VueLivraisons mobile
             onClose={() => setShowLivraisons(false)}
-            onSelectVehicule={(id) => { setSelectedId(id); setShowLivraisons(false); }} />
+            onSelectVehicule={(id) => { setPreviousModule('livraisons'); setSelectedId(id); setShowLivraisons(false); }} />
         </div>
       )}
       {showMoteurs && (
@@ -1195,7 +1202,7 @@ function VueTerrainMain() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#f8fafc' }}>
           <VueSuiviVente mobile
             onClose={() => setShowSuiviVente(false)}
-            onSelectVehicule={(id) => { setSelectedId(id); setShowSuiviVente(false); }} />
+            onSelectVehicule={(id) => { setPreviousModule('suivi-vente'); setSelectedId(id); setShowSuiviVente(false); }} />
         </div>
       )}
     </div>
