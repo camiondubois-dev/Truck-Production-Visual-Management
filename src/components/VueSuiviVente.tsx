@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useContext } from 'react';
+import { useState, useEffect, useMemo, useContext, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useInventaire } from '../contexts/InventaireContext';
 import { GarageContext } from '../contexts/GarageContext';
 import type { Item } from '../types/item.types';
@@ -325,15 +326,19 @@ function PdfCell({ documents, onClickPdf }: {
   onClickPdf: (doc: { nom: string; base64: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
     window.addEventListener('click', close);
     window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('click', close);
       window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
     };
   }, [open]);
 
@@ -345,14 +350,19 @@ function PdfCell({ documents, onClickPdf }: {
     e.stopPropagation();
     if (documents.length === 1) {
       onClickPdf(documents[0]);
-    } else {
-      setOpen(o => !o);
+      return;
     }
+    if (open) { setOpen(false); return; }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 });
+    }
+    setOpen(true);
   };
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <button onClick={handleClick}
+    <>
+      <button ref={btnRef} onClick={handleClick}
         title={documents.map(d => d.nom).join(' · ')}
         style={{
           background: '#fee2e2', border: '1px solid #fca5a5',
@@ -360,19 +370,20 @@ function PdfCell({ documents, onClickPdf }: {
           padding: 'clamp(4px, 0.6vw, 8px) clamp(6px, 0.7vw, 10px)',
           cursor: 'pointer', fontWeight: 700,
           fontSize: 'clamp(11px, 1.1vw, 16px)',
-          display: 'flex', alignItems: 'center', gap: 3,
+          display: 'inline-flex', alignItems: 'center', gap: 3,
           whiteSpace: 'nowrap',
         }}>
         📄{documents.length > 1 && <span>{documents.length}</span>}
       </button>
 
-      {open && documents.length > 1 && (
+      {open && pos && documents.length > 1 && createPortal(
         <div onClick={(e) => e.stopPropagation()} style={{
-          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-          marginTop: 4, zIndex: 50,
+          position: 'fixed',
+          top: pos.top, left: pos.left, transform: 'translateX(-50%)',
+          zIndex: 9999,
           background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          minWidth: 220, maxWidth: 360,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          minWidth: 240, maxWidth: 380,
           overflow: 'hidden',
         }}>
           {documents.map((doc, i) => (
@@ -395,9 +406,10 @@ function PdfCell({ documents, onClickPdf }: {
               </span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
