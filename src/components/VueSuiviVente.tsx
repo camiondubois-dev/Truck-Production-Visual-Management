@@ -24,7 +24,12 @@ const STATIONS_SUIVI = [
   { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
 ] as const;
 
-export function VueSuiviVente() {
+export function VueSuiviVente(props: { mobile?: boolean; onClose?: () => void; onSelectVehicule?: (id: string) => void } = {}) {
+  if (props.mobile) return <VueSuiviVenteMobile onClose={props.onClose} onSelectVehicule={props.onSelectVehicule} />;
+  return <VueSuiviVenteDesktop />;
+}
+
+function VueSuiviVenteDesktop() {
   const { vehicules } = useInventaire();
   const { items } = useGarageOptional();
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
@@ -655,4 +660,240 @@ function urgenceDate(dateStr?: string): { color: string; note?: string } {
   if (j <= 7)  return { color: '#ea580c', note: `Dans ${j}j` };
   if (j <= 30) return { color: '#f59e0b', note: `Dans ${j}j` };
   return { color: '#0f172a' };
+}
+
+// ════════════════════════════════════════════════════════════════
+// MOBILE — Vue Suivi Vente en cards verticales (VueTerrain)
+// ════════════════════════════════════════════════════════════════
+
+function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
+  onClose?: () => void;
+  onSelectVehicule?: (id: string) => void;
+}) {
+  const { vehicules } = useInventaire();
+  const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
+  const [recherche, setRecherche] = useState('');
+  const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
+
+  useEffect(() => {
+    vendeurService.getAll().then(setVendeurs).catch(console.error);
+  }, []);
+
+  const vendeurById = useMemo(() => {
+    const m: Record<string, Vendeur> = {};
+    for (const v of vendeurs) m[v.id] = v;
+    return m;
+  }, [vendeurs]);
+
+  const camionsVendus = useMemo(() =>
+    vehicules.filter(v =>
+      v.statut !== 'archive' &&
+      (v.type === 'eau' || v.type === 'detail') &&
+      (v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location')
+    ),
+  [vehicules]);
+
+  const trier = (list: VehiculeInventaire[]) => {
+    list.sort((a, b) => {
+      if (a.livraisonAsap && !b.livraisonAsap) return -1;
+      if (!a.livraisonAsap && b.livraisonAsap) return 1;
+      const da = a.dateLivraisonPlanifiee ? new Date(a.dateLivraisonPlanifiee).getTime() : Number.MAX_SAFE_INTEGER;
+      const db = b.dateLivraisonPlanifiee ? new Date(b.dateLivraisonPlanifiee).getTime() : Number.MAX_SAFE_INTEGER;
+      return da - db;
+    });
+    return list;
+  };
+
+  const aLivrer = useMemo(() => trier(camionsVendus.filter(v => !estVehiculePret(v))), [camionsVendus]);
+  const pretsList = useMemo(() => trier(camionsVendus.filter(estVehiculePret)), [camionsVendus]);
+  const baseList = viewMode === 'prets' ? pretsList : aLivrer;
+
+  const liste = useMemo(() => {
+    if (!recherche.trim()) return baseList;
+    const q = recherche.trim().toLowerCase();
+    return baseList.filter(v =>
+      v.numero.toLowerCase().includes(q) ||
+      v.marque?.toLowerCase().includes(q) ||
+      v.modele?.toLowerCase().includes(q) ||
+      v.clientAcheteur?.toLowerCase().includes(q)
+    );
+  }, [baseList, recherche]);
+
+  return (
+    <div style={{
+      width: '100vw', height: '100dvh',
+      background: '#f8fafc',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+    }}>
+      {/* Header sticky */}
+      <div style={{
+        flexShrink: 0,
+        background: '#0f172a',
+        color: 'white',
+        padding: '12px 14px env(safe-area-inset-top, 12px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          {onClose && (
+            <button onClick={onClose}
+              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: 36, height: 36, borderRadius: 8, color: 'white', fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>
+              ←
+            </button>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+              🛒 SUIVI VENTE
+            </div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>
+              {liste.length} camion{liste.length > 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+
+        {/* Toggle À livrer / Prêts */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <button onClick={() => setViewMode('a-livrer')}
+            style={{
+              flex: 1, padding: '10px', borderRadius: 8,
+              border: 'none',
+              background: viewMode === 'a-livrer' ? '#ea580c' : 'rgba(255,255,255,0.08)',
+              color: 'white',
+              fontWeight: viewMode === 'a-livrer' ? 800 : 500,
+              fontSize: 13, cursor: 'pointer',
+            }}>
+            🔥 À livrer ({aLivrer.length})
+          </button>
+          <button onClick={() => setViewMode('prets')}
+            style={{
+              flex: 1, padding: '10px', borderRadius: 8,
+              border: 'none',
+              background: viewMode === 'prets' ? '#22c55e' : 'rgba(255,255,255,0.08)',
+              color: 'white',
+              fontWeight: viewMode === 'prets' ? 800 : 500,
+              fontSize: 13, cursor: 'pointer',
+            }}>
+            ✅ Prêts ({pretsList.length})
+          </button>
+        </div>
+
+        {/* Recherche */}
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>🔍</span>
+          <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher #, marque, client..."
+            style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', fontSize: 14, background: 'rgba(255,255,255,0.06)', color: 'white', outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+
+      {/* Liste cards */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px env(safe-area-inset-bottom, 12px)', WebkitOverflowScrolling: 'touch' }}>
+        {liste.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>{viewMode === 'prets' ? '🚚' : '✅'}</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {viewMode === 'prets' ? 'Aucun camion prêt' : 'Aucun camion en attente'}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {liste.map(v => (
+              <CarteSuiviVenteMobile key={v.id} v={v}
+                vendeur={v.vendeurId ? vendeurById[v.vendeurId] : undefined}
+                onClick={() => onSelectVehicule?.(v.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CarteSuiviVenteMobile({ v, vendeur, onClick }: {
+  v: VehiculeInventaire;
+  vendeur?: Vendeur;
+  onClick: () => void;
+}) {
+  const dateStr = formatDate(v.dateLivraisonPlanifiee);
+  const dateUrgence = urgenceDate(v.dateLivraisonPlanifiee);
+  const equipement = formatEquipement(v);
+
+  return (
+    <div onClick={onClick}
+      style={{
+        background: 'white',
+        borderRadius: 12,
+        border: '1px solid #e5e7eb',
+        borderLeft: `4px solid ${v.type === 'eau' ? '#1e40af' : '#166534'}`,
+        padding: 12,
+        cursor: 'pointer',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}>
+      {/* Top : icône type + numéro + badge commercial + date */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+        <TypeIcon type={v.type} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 18, color: '#0f172a', lineHeight: 1.1 }}>
+            #{v.numero}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+            {equipement}
+          </div>
+        </div>
+        <CommercialBadge etat={v.etatCommercial} />
+      </div>
+
+      {/* Vendeur + Date */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase' }}>Vendeur</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: vendeur ? '#7c3aed' : '#9ca3af' }}>
+            {vendeur?.nom ?? '—'}
+          </span>
+        </div>
+        <div>
+          {v.livraisonAsap ? (
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'white', background: '#dc2626', padding: '3px 10px', borderRadius: 4 }}>
+              🔥 ASAP
+            </span>
+          ) : (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: dateUrgence.color }}>{dateStr}</div>
+              {dateUrgence.note && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: dateUrgence.color }}>{dateUrgence.note}</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mini-badges paiement */}
+      {(v.paiementDepot || v.paiementComplet || v.paiementPo) && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
+          {v.paiementDepot   && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#fef3c7', color: '#92400e' }}>💵 Dépôt</span>}
+          {v.paiementComplet && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#dcfce7', color: '#166534' }}>✅ Payé</span>}
+          {v.paiementPo      && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#dbeafe', color: '#1e40af' }}>📋 PO</span>}
+        </div>
+      )}
+
+      {/* Stations grid */}
+      <div>
+        <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          Stations
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+          {STATIONS_SUIVI.map(s => {
+            const etat = etatStationOrFinale(v, s.id);
+            return (
+              <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ fontSize: 16 }}>{s.icon}</div>
+                <EtapeIcon etat={etat} />
+                <div style={{ fontSize: 8, fontWeight: 600, color: '#9ca3af', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                  {s.short.replace(/[.\s]/g, '').slice(0, 6)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
