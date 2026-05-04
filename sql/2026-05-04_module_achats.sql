@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS prod_achats (
 
   -- Liens
   acheteur_id              uuid NOT NULL REFERENCES profiles(id),
-  inventaire_id            uuid REFERENCES prod_inventaire(id),
+  inventaire_id            text REFERENCES prod_inventaire(id),  -- text car prod_inventaire.id est text (ex: 'veh-1775591795275-n7xyr')
 
   -- Méta
   created_at               timestamptz NOT NULL DEFAULT now(),
