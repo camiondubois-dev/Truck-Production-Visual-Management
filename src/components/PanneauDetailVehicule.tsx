@@ -4,6 +4,7 @@ import { useInventaire } from '../contexts/InventaireContext';
 import { useAuth } from '../contexts/AuthContext';
 import { photoService } from '../services/photoService';
 import { reservoirService } from '../services/reservoirService';
+import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { RoadMapEditor } from './RoadMapEditor';
 import { PopupAssignationSlot } from './PopupAssignationSlot';
 import { useClients } from '../contexts/ClientContext';
@@ -111,6 +112,9 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const [reservoirsDisponibles, setReservoirsDisponibles] = useState<{id: string; numero: string; type: string}[]>([]);
   const [reservoirInstalle, setReservoirInstalle] = useState<{numero: string; type: string} | null>(null);
   const [reservoirSelectionne, setReservoirSelectionne] = useState('');
+  const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
+  const [showAddVendeur, setShowAddVendeur] = useState(false);
+  const [nouveauVendeurNom, setNouveauVendeurNom] = useState('');
   const [savingReservoir, setSavingReservoir] = useState(false);
 
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
@@ -118,6 +122,31 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const montrerCommercial = v.type === 'eau' || v.type === 'detail';
   const etatCommercial = v.etatCommercial ?? 'non-vendu';
   const clientLie = v.clientId ? clients.find(c => c.id === v.clientId) : null;
+
+  // Charger vendeurs (pour le dropdown si vendu/réservé/location)
+  useEffect(() => {
+    vendeurService.getAll().then(setVendeurs).catch(console.error);
+  }, []);
+
+  const changerVendeur = async (vendeurId: string | null) => {
+    await supabase
+      .from('prod_inventaire')
+      .update({ vendeur_id: vendeurId, updated_at: new Date().toISOString() })
+      .eq('id', v.id);
+  };
+
+  const ajouterVendeur = async () => {
+    if (!nouveauVendeurNom.trim()) return;
+    try {
+      const nouveau = await vendeurService.creer(nouveauVendeurNom.trim());
+      setVendeurs(prev => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
+      await changerVendeur(nouveau.id);
+      setNouveauVendeurNom('');
+      setShowAddVendeur(false);
+    } catch (err) {
+      alert('Erreur ajout vendeur : ' + String((err as any)?.message ?? err));
+    }
+  };
 
   // Charger réservoir
   useEffect(() => {
@@ -348,6 +377,36 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                   <input type="text" defaultValue={v.clientAcheteur ?? ''} onBlur={e => changerClientAcheteur(e.target.value)}
                     placeholder="Nom du client (optionnel)"
                     style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+
+                  {/* Vendeur */}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select value={v.vendeurId ?? ''} onChange={e => changerVendeur(e.target.value || null)}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', background: 'white', cursor: 'pointer' }}>
+                      <option value="">— Vendeur (aucun) —</option>
+                      {vendeurs.filter(vd => vd.actif || vd.id === v.vendeurId).map(vd => (
+                        <option key={vd.id} value={vd.id}>{vd.nom}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setShowAddVendeur(s => !s)}
+                      title="Ajouter un nouveau vendeur"
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: showAddVendeur ? '#7c3aed' : 'white', color: showAddVendeur ? 'white' : '#7c3aed', fontWeight: 700, fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
+                      {showAddVendeur ? '✕' : '+'}
+                    </button>
+                  </div>
+                  {showAddVendeur && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input type="text" value={nouveauVendeurNom} onChange={e => setNouveauVendeurNom(e.target.value.toUpperCase())}
+                        placeholder="Nouveau vendeur (nom)"
+                        onKeyDown={e => { if (e.key === 'Enter') ajouterVendeur(); }}
+                        style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px solid #c4b5fd', fontSize: 12, outline: 'none', boxSizing: 'border-box', background: '#f5f3ff' }} />
+                      <button type="button" onClick={ajouterVendeur}
+                        disabled={!nouveauVendeurNom.trim()}
+                        style={{ padding: '7px 12px', borderRadius: 6, border: 'none', background: nouveauVendeurNom.trim() ? '#7c3aed' : '#e5e7eb', color: 'white', fontWeight: 700, fontSize: 12, cursor: nouveauVendeurNom.trim() ? 'pointer' : 'not-allowed' }}>
+                        ✓ Créer
+                      </button>
+                    </div>
+                  )}
+
                   <input type="date" defaultValue={v.dateLivraisonPlanifiee ?? ''} onBlur={e => changerDateLivraison(e.target.value)}
                     style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
                 </div>

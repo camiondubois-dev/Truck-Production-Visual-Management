@@ -44,6 +44,7 @@ export interface VehiculeInventaire {
   typeReservoirRequis?: '2500g' | '3750g' | '4000g' | '5000g';
   estPret?: boolean;
   etatCommercial?: 'non-vendu' | 'reserve' | 'vendu' | 'location';
+  vendeurId?: string;          // ref prod_vendeurs.id
   dateLivraisonPlanifiee?: string;
   roadMap?: RoadMapEtape[];
 }

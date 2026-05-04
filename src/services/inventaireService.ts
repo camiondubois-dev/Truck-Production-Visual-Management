@@ -38,6 +38,7 @@ export function fromDB(row: any): VehiculeInventaire {
     typeReservoirRequis: row.type_reservoir_requis ?? undefined,
     estPret: row.est_pret ?? false,
     etatCommercial: row.etat_commercial ?? 'non-vendu',
+    vendeurId: row.vendeur_id ?? undefined,
     dateLivraisonPlanifiee: row.date_livraison_planifiee ?? undefined,
   };
 }
@@ -70,6 +71,7 @@ function toDB(v: VehiculeInventaire): any {
     type_reservoir_requis: v.typeReservoirRequis ?? null,
     est_pret: v.estPret ?? false,
     etat_commercial: v.etatCommercial ?? 'non-vendu',
+    vendeur_id: v.vendeurId ?? null,
     date_livraison_planifiee: v.dateLivraisonPlanifiee ?? null,
   };
 }
