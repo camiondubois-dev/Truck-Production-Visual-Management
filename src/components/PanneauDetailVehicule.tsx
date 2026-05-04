@@ -86,6 +86,61 @@ export function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string 
   );
 }
 
+// ── Helpers Suivi Vente : checkbox paiement + 3-states lavage/retouche ──
+function CheckPaiement({ label, actif, color, onChange }: {
+  label: string; actif: boolean; color: string; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label style={{
+      display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+      borderRadius: 6, cursor: 'pointer',
+      border: actif ? `2px solid ${color}` : '1px solid #e5e7eb',
+      background: actif ? `${color}15` : 'white',
+      color: actif ? color : '#6b7280',
+      fontSize: 12, fontWeight: actif ? 700 : 500,
+    }}>
+      <input type="checkbox" checked={actif} onChange={e => onChange(e.target.checked)}
+        style={{ width: 14, height: 14, cursor: 'pointer', accentColor: color }} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function EtapeFinaleRow({ label, etat, onChange }: {
+  label: string;
+  etat: 'pas-requis' | 'a-faire' | 'fait';
+  onChange: (v: 'pas-requis' | 'a-faire' | 'fait') => void;
+}) {
+  const options = [
+    { val: 'pas-requis' as const, label: '🚫 Pas requis', color: '#dc2626' },
+    { val: 'a-faire'    as const, label: '☐ À faire',     color: '#9ca3af' },
+    { val: 'fait'       as const, label: '✓ Fait',         color: '#22c55e' },
+  ];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', minWidth: 100 }}>{label}</span>
+      <div style={{ display: 'flex', gap: 4, flex: 1 }}>
+        {options.map(o => {
+          const actif = etat === o.val;
+          return (
+            <button key={o.val} type="button" onClick={() => onChange(o.val)}
+              style={{
+                flex: 1, padding: '5px 6px', borderRadius: 5, fontSize: 11,
+                fontWeight: actif ? 700 : 500,
+                border: actif ? `2px solid ${o.color}` : '1px solid #e5e7eb',
+                background: actif ? `${o.color}15` : 'white',
+                color: actif ? o.color : '#6b7280',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Panneau principal ───────────────────────────────────────────
 
 export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
@@ -134,6 +189,20 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
       .update({ vendeur_id: vendeurId, updated_at: new Date().toISOString() })
       .eq('id', v.id);
   };
+
+  // ── Helpers Suivi Vente ──────────────────────────────────────
+  const updateChamp = async (col: string, value: any) => {
+    await supabase
+      .from('prod_inventaire')
+      .update({ [col]: value, updated_at: new Date().toISOString() })
+      .eq('id', v.id);
+  };
+  const toggleAsap         = (val: boolean)                                       => updateChamp('livraison_asap',  val);
+  const setLavageEtat      = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('lavage_etat',     val);
+  const setRetoucheEtat    = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('retouche_etat',   val);
+  const togglePaiementDepot   = (val: boolean) => updateChamp('paiement_depot',   val);
+  const togglePaiementComplet = (val: boolean) => updateChamp('paiement_complet', val);
+  const togglePaiementPo      = (val: boolean) => updateChamp('paiement_po',      val);
 
   const ajouterVendeur = async () => {
     if (!nouveauVendeurNom.trim()) return;
@@ -407,8 +476,51 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                     </div>
                   )}
 
+                  {/* Date livraison + toggle ASAP */}
                   <input type="date" defaultValue={v.dateLivraisonPlanifiee ?? ''} onBlur={e => changerDateLivraison(e.target.value)}
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+                    disabled={v.livraisonAsap}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box', opacity: v.livraisonAsap ? 0.4 : 1 }} />
+
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                    borderRadius: 6,
+                    border: `1px solid ${v.livraisonAsap ? '#dc2626' : '#d1d5db'}`,
+                    background: v.livraisonAsap ? '#fee2e2' : 'white',
+                    cursor: 'pointer',
+                  }}>
+                    <input type="checkbox" checked={v.livraisonAsap ?? false} onChange={e => toggleAsap(e.target.checked)}
+                      style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#dc2626' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: v.livraisonAsap ? '#991b1b' : '#374151' }}>
+                      🔥 Dès que possible (priorité 1)
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* État paiement (multi-cochable) */}
+              {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 6, background: 'white', border: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    État paiement
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <CheckPaiement label="💵 Dépôt reçu" actif={v.paiementDepot ?? false}    color="#f59e0b" onChange={togglePaiementDepot} />
+                    <CheckPaiement label="✅ Payé complet" actif={v.paiementComplet ?? false} color="#22c55e" onChange={togglePaiementComplet} />
+                    <CheckPaiement label="📋 PO reçu" actif={v.paiementPo ?? false}          color="#3b82f6" onChange={togglePaiementPo} />
+                  </div>
+                </div>
+              )}
+
+              {/* Lavage / Retouche finale */}
+              {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 6, background: 'white', border: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Étapes finales (Suivi vente)
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <EtapeFinaleRow label="🧽 Lavage"   etat={v.lavageEtat ?? 'a-faire'}   onChange={setLavageEtat} />
+                    <EtapeFinaleRow label="✨ Retouche" etat={v.retoucheEtat ?? 'a-faire'} onChange={setRetoucheEtat} />
+                  </div>
                 </div>
               )}
             </div>
@@ -473,6 +585,10 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                 // Rafraîchir les items GarageContext immédiatement pour refléter
                 // les changements de slot faits par mettreAJourRoadMap (auto-free etc.)
                 await rechargerItems();
+                // Fermer le panneau après sauvegarde — sauf si un popup est ouvert
+                if (!popupStation && (!enCoursStep || !item || item.slotId)) {
+                  onClose();
+                }
               }}
               compact={false}
             />

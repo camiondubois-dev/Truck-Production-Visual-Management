@@ -40,6 +40,12 @@ export function fromDB(row: any): VehiculeInventaire {
     etatCommercial: row.etat_commercial ?? 'non-vendu',
     vendeurId: row.vendeur_id ?? undefined,
     dateLivraisonPlanifiee: row.date_livraison_planifiee ?? undefined,
+    livraisonAsap: row.livraison_asap ?? false,
+    lavageEtat: row.lavage_etat ?? 'a-faire',
+    retoucheEtat: row.retouche_etat ?? 'a-faire',
+    paiementDepot: row.paiement_depot ?? false,
+    paiementComplet: row.paiement_complet ?? false,
+    paiementPo: row.paiement_po ?? false,
   };
 }
 
@@ -73,6 +79,12 @@ function toDB(v: VehiculeInventaire): any {
     etat_commercial: v.etatCommercial ?? 'non-vendu',
     vendeur_id: v.vendeurId ?? null,
     date_livraison_planifiee: v.dateLivraisonPlanifiee ?? null,
+    livraison_asap: v.livraisonAsap ?? false,
+    lavage_etat: v.lavageEtat ?? 'a-faire',
+    retouche_etat: v.retoucheEtat ?? 'a-faire',
+    paiement_depot: v.paiementDepot ?? false,
+    paiement_complet: v.paiementComplet ?? false,
+    paiement_po: v.paiementPo ?? false,
   };
 }
 

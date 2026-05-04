@@ -46,6 +46,14 @@ export interface VehiculeInventaire {
   etatCommercial?: 'non-vendu' | 'reserve' | 'vendu' | 'location';
   vendeurId?: string;          // ref prod_vendeurs.id
   dateLivraisonPlanifiee?: string;
+  livraisonAsap?: boolean;     // Dès que possible → priorité 1
+  // Étapes Suivi Vente (hors road_map)
+  lavageEtat?: 'pas-requis' | 'a-faire' | 'fait';
+  retoucheEtat?: 'pas-requis' | 'a-faire' | 'fait';
+  // Paiement (multi-cochable)
+  paiementDepot?: boolean;
+  paiementComplet?: boolean;
+  paiementPo?: boolean;
   roadMap?: RoadMapEtape[];
 }
 

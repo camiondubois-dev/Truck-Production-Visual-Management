@@ -4,7 +4,7 @@ import { GarageContext } from '../contexts/GarageContext';
 import type { Item } from '../types/item.types';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
-import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
 
 /** useGarage qui ne crash pas si pas de provider. */
 function useGarageOptional(): { items: Item[] } {
@@ -13,7 +13,7 @@ function useGarageOptional(): { items: Item[] } {
 }
 
 // ── Stations affichées dans le tableau ────────────────────────────
-// Dans cet ordre : 6 stations + colonne "Prêt livraison"
+// 6 stations road_map + 2 étapes finales (lavage / retouche)
 const STATIONS_SUIVI = [
   { id: 'soudure-generale',     label: 'Soudure générale',     short: 'SOUD. GÉN.',   responsable: 'Daniel D.',    color: '#f97316', icon: '🔧' },
   { id: 'mecanique-generale',   label: 'Mécanique générale',   short: 'MÉC. GÉN.',    responsable: 'Régis D.',     color: '#3b82f6', icon: '⚙️' },
@@ -21,6 +21,9 @@ const STATIONS_SUIVI = [
   { id: 'mecanique-electrique', label: 'Mécanique électrique', short: 'MÉC. ÉLEC.',   responsable: 'Joel C.',      color: '#3b82f6', icon: '💡' },
   { id: 'soudure-specialisee',  label: 'Soudure spécialisée',  short: 'SOUD. SPÉC.',  responsable: 'Sébastien H.', color: '#f97316', icon: '⚡' },
   { id: 'sous-traitants',       label: 'Sous-traitance',       short: 'SOUS-TRAIT.',  responsable: 'Patrick D.',   color: '#a855f7', icon: '🏭' },
+  // Étapes finales (booléens sur prod_inventaire, pas dans road_map)
+  { id: 'lavage',               label: 'Lavage',               short: 'LAVAGE',       responsable: '',             color: '#06b6d4', icon: '🧽' },
+  { id: 'retouche',             label: 'Retouche finale',      short: 'RETOUCHE',     responsable: '',             color: '#a855f7', icon: '✨' },
 ] as const;
 
 export function VueSuiviVente() {
@@ -30,6 +33,8 @@ export function VueSuiviVente() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
+  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
 
   // Horloge live
   useEffect(() => {
@@ -80,21 +85,28 @@ export function VueSuiviVente() {
     ),
   [vehicules]);
 
-  // Liste affichée : ceux pas encore prêts
-  const aLivrer = useMemo(() => {
-    const list = camionsVendus.filter(v => !estVehiculePret(v));
+  // Tri commun : ASAP en haut, puis date la plus proche
+  const trier = (list: VehiculeInventaire[]) => {
     list.sort((a, b) => {
+      // ASAP en priorité absolue
+      if (a.livraisonAsap && !b.livraisonAsap) return -1;
+      if (!a.livraisonAsap && b.livraisonAsap) return 1;
       const da = a.dateLivraisonPlanifiee ? new Date(a.dateLivraisonPlanifiee).getTime() : Number.MAX_SAFE_INTEGER;
       const db = b.dateLivraisonPlanifiee ? new Date(b.dateLivraisonPlanifiee).getTime() : Number.MAX_SAFE_INTEGER;
       return da - db;
     });
     return list;
-  }, [camionsVendus]);
+  };
 
-  // Compteur prêts à livrer (vendus + prêts, pas archivés)
-  const pretsCount = useMemo(() =>
-    camionsVendus.filter(estVehiculePret).length,
-  [camionsVendus]);
+  // À livrer : pas encore prêts
+  const aLivrer = useMemo(() => trier(camionsVendus.filter(v => !estVehiculePret(v))), [camionsVendus]);
+
+  // Prêts : marqués prêt mais pas archivés
+  const pretsList = useMemo(() => trier(camionsVendus.filter(estVehiculePret)), [camionsVendus]);
+
+  // Liste affichée selon le mode
+  const liste = viewMode === 'prets' ? pretsList : aLivrer;
+  const pretsCount = pretsList.length;
 
   const selected = selectedId ? vehicules.find(v => v.id === selectedId) ?? null : null;
   const selectedItem = selected ? itemByInvId[selected.id] : undefined;
@@ -125,35 +137,45 @@ export function VueSuiviVente() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 'clamp(24px, 2.5vw, 34px)' }}>🛒</span>
           <div>
-            <div style={{ fontSize: 'clamp(15px, 1.5vw, 20px)', fontWeight: 900, letterSpacing: '0.04em' }}>SUIVI VENTE</div>
+            <div style={{ fontSize: 'clamp(15px, 1.5vw, 20px)', fontWeight: 900, letterSpacing: '0.04em' }}>
+              {viewMode === 'prets' ? 'SUIVI VENTE — PRÊTS À LIVRER' : 'SUIVI VENTE'}
+            </div>
             <div style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Camions vendus en production · {aLivrer.length} à livrer
+              {viewMode === 'prets'
+                ? `${pretsList.length} camion${pretsList.length > 1 ? 's' : ''} prêt${pretsList.length > 1 ? 's' : ''} à livrer`
+                : `Camions vendus en production · ${aLivrer.length} à livrer`}
             </div>
           </div>
         </div>
 
         <div />
 
-        {/* Compteur Prêts à livrer */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 14,
-          padding: '8px 16px',
-          background: pretsCount > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)',
-          border: `2px solid ${pretsCount > 0 ? '#22c55e' : 'rgba(255,255,255,0.15)'}`,
-          borderRadius: 10,
-        }}>
-          <span style={{ fontSize: 'clamp(20px, 2vw, 28px)' }}>✅</span>
-          <div>
+        {/* Compteur Prêts à livrer (cliquable → toggle) */}
+        <button onClick={() => setViewMode(m => m === 'prets' ? 'a-livrer' : 'prets')}
+          title={viewMode === 'prets' ? 'Retour à la liste à livrer' : 'Voir les camions prêts à livrer'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '8px 16px',
+            background: viewMode === 'prets'
+              ? 'rgba(34,197,94,0.35)'
+              : (pretsCount > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)'),
+            border: `2px solid ${viewMode === 'prets' ? '#86efac' : (pretsCount > 0 ? '#22c55e' : 'rgba(255,255,255,0.15)')}`,
+            borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+            font: 'inherit', color: 'inherit',
+            boxShadow: viewMode === 'prets' ? '0 0 0 4px rgba(134,239,172,0.25)' : 'none',
+          }}>
+          <span style={{ fontSize: 'clamp(20px, 2vw, 28px)' }}>{viewMode === 'prets' ? '↩' : '✅'}</span>
+          <div style={{ textAlign: 'left' }}>
             <div style={{
               fontSize: 'clamp(28px, 3vw, 42px)', fontWeight: 900, lineHeight: 1,
               color: pretsCount > 0 ? '#86efac' : 'rgba(255,255,255,0.6)',
               fontFamily: 'system-ui',
             }}>{pretsCount}</div>
-            <div style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginTop: 2 }}>
-              Prêts à livrer
+            <div style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
+              {viewMode === 'prets' ? '← Retour' : 'Prêts à livrer'}
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Horloge + bouton TV */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -191,30 +213,42 @@ export function VueSuiviVente() {
         <div style={{
           flex: 1, minHeight: 0, overflow: 'hidden',
           display: 'grid',
-          gridTemplateRows: aLivrer.length > 0 ? `repeat(${aLivrer.length}, minmax(0, 1fr))` : '1fr',
+          gridTemplateRows: liste.length > 0 ? `repeat(${liste.length}, minmax(0, 1fr))` : '1fr',
         }}>
-          {aLivrer.length === 0 ? (
+          {liste.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8', gap: 12 }}>
-              <span style={{ fontSize: 64 }}>✅</span>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#475569' }}>Aucun camion vendu en attente</div>
-              {pretsCount > 0 && (
-                <div style={{ fontSize: 14 }}><strong>{pretsCount}</strong> prêt{pretsCount > 1 ? 's' : ''} à livrer (compteur en haut)</div>
-              )}
+              <span style={{ fontSize: 64 }}>{viewMode === 'prets' ? '🚚' : '✅'}</span>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#475569' }}>
+                {viewMode === 'prets' ? 'Aucun camion prêt à livrer' : 'Aucun camion vendu en attente'}
+              </div>
             </div>
-          ) : aLivrer.map((v, idx) => (
+          ) : liste.map((v, idx) => (
             <LigneVente key={v.id} v={v}
               idx={idx}
               vendeur={v.vendeurId ? vendeurById[v.vendeurId] : undefined}
+              item={itemByInvId[v.id]}
               onClickNumero={() => setSelectedId(v.id === selectedId ? null : v.id)}
+              onClickPdf={setPdfOuvert}
               selected={selectedId === v.id} />
           ))}
         </div>
       </div>
 
-      {/* Panneau détail (slide-in à droite) */}
+      {/* Panneau détail (slide-in à droite) — key force le remount au changement de camion */}
       {selected && (
-        <PanneauDetailVehicule vehicule={selected} item={selectedItem} onClose={() => setSelectedId(null)} />
+        <PanneauDetailVehicule key={selected.id} vehicule={selected} item={selectedItem} onClose={() => setSelectedId(null)} />
       )}
+
+      {/* Modal PDF */}
+      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
+
+      {/* Animation ASAP */}
+      <style>{`
+        @keyframes asapPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.5); }
+          50%      { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -238,36 +272,35 @@ function HeaderRow() {
       <CellHeader>Équipement</CellHeader>
       <CellHeader>Vendeur</CellHeader>
       <CellHeader>Date prévue<br/>livraison</CellHeader>
+      <CellHeader align="center">
+        <div style={{ fontSize: 'clamp(13px, 1.4vw, 22px)' }}>📄</div>
+      </CellHeader>
       {STATIONS_SUIVI.map(s => (
         <CellHeader key={s.id} align="center">
-          <div style={{ fontSize: 'clamp(14px, 1.5vw, 26px)', marginBottom: 2 }}>{s.icon}</div>
-          <div style={{ fontSize: 'clamp(8px, 0.85vw, 13px)', whiteSpace: 'nowrap', textAlign: 'center' }}>{s.short}</div>
-          <div style={{
-            fontSize: 'clamp(8px, 0.75vw, 12px)',
-            fontWeight: 600,
-            color: '#94a3b8',
-            textTransform: 'none',
-            letterSpacing: 0,
-            marginTop: 2,
-            whiteSpace: 'nowrap',
-          }}>
-            {s.responsable}
-          </div>
+          <div style={{ fontSize: 'clamp(13px, 1.4vw, 24px)', marginBottom: 2 }}>{s.icon}</div>
+          <div style={{ fontSize: 'clamp(7px, 0.8vw, 12px)', whiteSpace: 'nowrap', textAlign: 'center' }}>{s.short}</div>
+          {s.responsable && (
+            <div style={{
+              fontSize: 'clamp(7px, 0.7vw, 11px)',
+              fontWeight: 600,
+              color: '#94a3b8',
+              textTransform: 'none',
+              letterSpacing: 0,
+              marginTop: 2,
+              whiteSpace: 'nowrap',
+            }}>
+              {s.responsable}
+            </div>
+          )}
         </CellHeader>
       ))}
-      <CellHeader align="center" style={{ background: '#166534' }}>
-        <div style={{ fontSize: 'clamp(14px, 1.5vw, 26px)', marginBottom: 2 }}>🚚</div>
-        <div style={{ fontSize: 'clamp(8px, 0.85vw, 13px)', textAlign: 'center', whiteSpace: 'nowrap' }}>Prêt<br/>livraison</div>
-      </CellHeader>
     </div>
   );
 }
 
 // Toutes les colonnes en fr → s'adaptent à la largeur disponible (TV/4K friendly)
-// Stock, Vendeur, Date, Prêt = colonnes étroites mais visibles
-// Équipement = la plus large (4fr, prend tout l'espace restant)
-// 6 stations = 1fr chacune (égales)
-const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr repeat(6, minmax(0, 1fr)) 1.2fr';
+// Stock | Équipement | Vendeur | Date | PDF | 6 stations + 2 finales = 8 stations
+const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr 0.6fr repeat(8, minmax(0, 1fr))';
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
@@ -284,16 +317,19 @@ function CellHeader({ children, align, style }: { children: React.ReactNode; ali
 }
 
 // ── Ligne d'un véhicule vendu ────────────────────────────────────
-function LigneVente({ v, idx, vendeur, onClickNumero, selected }: {
+function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected }: {
   v: VehiculeInventaire;
   idx: number;
   vendeur?: Vendeur;
+  item?: Item;
   onClickNumero: () => void;
+  onClickPdf: (doc: { nom: string; base64: string }) => void;
   selected: boolean;
 }) {
   const dateStr = formatDate(v.dateLivraisonPlanifiee);
   const dateUrgence = urgenceDate(v.dateLivraisonPlanifiee);
   const equipement = formatEquipement(v);
+  const documents = item?.documents ?? [];
 
   // Zebra : alterner blanc / gris très pâle
   const zebraBg = idx % 2 === 0 ? 'white' : '#f3f4f6';
@@ -348,42 +384,81 @@ function LigneVente({ v, idx, vendeur, onClickNumero, selected }: {
         </div>
       </Cell>
 
-      {/* Vendeur */}
+      {/* Vendeur + mini-badges paiement */}
       <Cell>
-        <span style={{
-          fontSize: 'clamp(13px, 1.3vw, 24px)',
-          fontWeight: 800, color: vendeur ? '#7c3aed' : '#9ca3af',
-          textTransform: 'uppercase', whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-        }}>
-          {vendeur?.nom ?? '—'}
-        </span>
-      </Cell>
-
-      {/* Date prévue livraison */}
-      <Cell>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-          <div style={{ fontSize: 'clamp(13px, 1.3vw, 22px)', fontWeight: 800, color: dateUrgence.color, whiteSpace: 'nowrap' }}>
-            {dateStr}
-          </div>
-          {dateUrgence.note && (
-            <div style={{ fontSize: 'clamp(10px, 0.95vw, 16px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
-              {dateUrgence.note}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <span style={{
+            fontSize: 'clamp(13px, 1.3vw, 22px)',
+            fontWeight: 800, color: vendeur ? '#7c3aed' : '#9ca3af',
+            textTransform: 'uppercase', whiteSpace: 'nowrap',
+            overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {vendeur?.nom ?? '—'}
+          </span>
+          {(v.paiementDepot || v.paiementComplet || v.paiementPo) && (
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+              {v.paiementDepot   && <MiniBadgePaiement bg="#f59e0b" label="💵" title="Dépôt reçu" />}
+              {v.paiementComplet && <MiniBadgePaiement bg="#22c55e" label="✅" title="Payé complet" />}
+              {v.paiementPo      && <MiniBadgePaiement bg="#3b82f6" label="📋" title="PO reçu" />}
             </div>
           )}
         </div>
       </Cell>
 
+      {/* Date prévue livraison + flag ASAP */}
+      <Cell>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+          {v.livraisonAsap ? (
+            <div style={{
+              fontSize: 'clamp(13px, 1.3vw, 22px)', fontWeight: 900,
+              color: '#dc2626', whiteSpace: 'nowrap',
+              padding: '3px 8px', borderRadius: 4,
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              animation: 'asapPulse 1.5s infinite',
+            }}>
+              🔥 ASAP
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 'clamp(13px, 1.3vw, 22px)', fontWeight: 800, color: dateUrgence.color, whiteSpace: 'nowrap' }}>
+                {dateStr}
+              </div>
+              {dateUrgence.note && (
+                <div style={{ fontSize: 'clamp(10px, 0.95vw, 16px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
+                  {dateUrgence.note}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </Cell>
+
+      {/* PDF (compact) */}
+      <Cell align="center">
+        {documents.length > 0 ? (
+          <button onClick={(e) => { e.stopPropagation(); onClickPdf({ nom: documents[0].nom, base64: documents[0].base64 }); }}
+            title={documents.map(d => d.nom).join(' · ')}
+            style={{
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              color: '#dc2626', borderRadius: 6,
+              padding: 'clamp(4px, 0.6vw, 8px) clamp(6px, 0.7vw, 10px)',
+              cursor: 'pointer', fontWeight: 700,
+              fontSize: 'clamp(11px, 1.1vw, 16px)',
+              display: 'flex', alignItems: 'center', gap: 3,
+              whiteSpace: 'nowrap',
+            }}>
+            📄{documents.length > 1 && <span>{documents.length}</span>}
+          </button>
+        ) : (
+          <span style={{ color: '#cbd5e1', fontSize: 'clamp(12px, 1.1vw, 16px)' }}>—</span>
+        )}
+      </Cell>
+
       {/* Stations */}
       {STATIONS_SUIVI.map(s => {
-        const etat = etatStation(v.roadMap ?? [], s.id);
+        const etat = etatStationOrFinale(v, s.id);
         return <Cell key={s.id} align="center"><EtapeIcon etat={etat} /></Cell>;
       })}
-
-      {/* Prêt livraison */}
-      <Cell align="center" style={{ background: estVehiculePret(v) ? '#dcfce7' : '#f8fafc' }}>
-        <EtapeIcon etat={estVehiculePret(v) ? 'termine' : 'planifie'} large />
-      </Cell>
     </div>
   );
 }
@@ -468,6 +543,21 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
   );
 }
 
+// ── Mini-badge paiement (compact, sous vendeur) ──────────────────
+function MiniBadgePaiement({ bg, label, title }: { bg: string; label: string; title: string }) {
+  return (
+    <span title={title} style={{
+      fontSize: 'clamp(10px, 0.85vw, 13px)',
+      background: bg, color: 'white',
+      padding: 'clamp(1px, 0.2vh, 3px) clamp(4px, 0.4vw, 7px)',
+      borderRadius: 3, fontWeight: 800,
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  );
+}
+
 // ── Icône type (eau = goutte bleue / detail = tag vert) ──────────
 function TypeIcon({ type }: { type: 'eau' | 'client' | 'detail' }) {
   const cfg = type === 'eau'
@@ -522,8 +612,22 @@ function etatStation(roadMap: RoadMapEtape[], stationId: string): EtatEtape {
   if (etapes.length === 0) return 'absente'; // pas dans le road_map → rond barré rouge
   if (etapes.some(r => r.statut === 'termine') && etapes.every(r => r.statut === 'termine' || r.statut === 'saute')) return 'termine';
   if (etapes.some(r => r.statut === 'en-cours')) return 'en-cours';
-  // Tout en planifié, en-attente, ou sauté (mais pas terminé) → vide
   return 'planifie';
+}
+
+/** État pour stations road_map OU étapes finales (lavage/retouche). */
+function etatStationOrFinale(v: VehiculeInventaire, stationId: string): EtatEtape {
+  if (stationId === 'lavage') {
+    if (v.lavageEtat === 'pas-requis') return 'absente';
+    if (v.lavageEtat === 'fait')        return 'termine';
+    return 'planifie';
+  }
+  if (stationId === 'retouche') {
+    if (v.retoucheEtat === 'pas-requis') return 'absente';
+    if (v.retoucheEtat === 'fait')        return 'termine';
+    return 'planifie';
+  }
+  return etatStation(v.roadMap ?? [], stationId);
 }
 
 function formatEquipement(v: VehiculeInventaire): string {
