@@ -54,6 +54,10 @@ export default function App() {
   if (profile.role === 'tv') {
     const tvSession = getTVSession();
     if (tvSession) {
+      // Vues spéciales (non-garage) : Suivi Vente
+      if (tvSession.garageId === 'suivi-vente') {
+        return <VueSuiviVente />;
+      }
       return <VueTV />;
     }
     return (

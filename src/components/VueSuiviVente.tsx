@@ -251,7 +251,7 @@ function HeaderRow() {
   );
 }
 
-const COL_TEMPLATE = '90px minmax(180px, 2.5fr) 90px 110px repeat(6, minmax(70px, 1fr)) 90px';
+const COL_TEMPLATE = '120px minmax(260px, 3fr) 100px 120px repeat(6, minmax(70px, 1fr)) 100px';
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
@@ -287,41 +287,44 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
       transition: 'background 0.15s',
       minHeight: 0,
     }}>
-      {/* Stock — cliquable */}
+      {/* Stock — cliquable, gros pour TV */}
       <Cell onClick={onClickNumero} style={{ cursor: 'pointer', background: selected ? '#fde68a' : '#f8fafc' }}>
         <span style={{
-          fontFamily: 'monospace', fontWeight: 900, fontSize: 'clamp(13px, 1.3vw, 18px)',
+          fontFamily: 'monospace', fontWeight: 900, fontSize: 'clamp(20px, 2vw, 30px)',
           color: selected ? '#92400e' : '#0f172a',
           textDecoration: 'underline', textDecorationColor: '#cbd5e1',
+          letterSpacing: '0.02em',
         }}>
           {v.numero}**
         </span>
       </Cell>
 
-      {/* Équipement */}
-      <Cell>
-        <span style={{ fontSize: 'clamp(11px, 1vw, 14px)', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* Équipement — gros pour TV */}
+      <Cell align="left">
+        <span style={{ fontSize: 'clamp(15px, 1.5vw, 22px)', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
           {equipement}
         </span>
       </Cell>
 
       {/* Vendeur */}
       <Cell>
-        <span style={{ fontSize: 'clamp(11px, 1vw, 14px)', fontWeight: 700, color: vendeur ? '#7c3aed' : '#9ca3af', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: vendeur ? '#7c3aed' : '#9ca3af', textTransform: 'uppercase' }}>
           {vendeur?.nom ?? '—'}
         </span>
       </Cell>
 
       {/* Date prévue livraison */}
       <Cell>
-        <div style={{ fontSize: 'clamp(10px, 0.95vw, 13px)', fontWeight: 700, color: dateUrgence.color }}>
-          {dateStr}
-        </div>
-        {dateUrgence.note && (
-          <div style={{ fontSize: 'clamp(8px, 0.75vw, 10px)', color: dateUrgence.color, fontWeight: 600 }}>
-            {dateUrgence.note}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <div style={{ fontSize: 'clamp(13px, 1.2vw, 17px)', fontWeight: 800, color: dateUrgence.color }}>
+            {dateStr}
           </div>
-        )}
+          {dateUrgence.note && (
+            <div style={{ fontSize: 'clamp(10px, 0.9vw, 12px)', color: dateUrgence.color, fontWeight: 700, marginTop: 2 }}>
+              {dateUrgence.note}
+            </div>
+          )}
+        </div>
       </Cell>
 
       {/* Stations */}
@@ -341,10 +344,11 @@ function LigneVente({ v, vendeur, onClickNumero, selected }: {
 function Cell({ children, align, onClick, style }: { children: React.ReactNode; align?: 'left' | 'center'; onClick?: () => void; style?: React.CSSProperties }) {
   return (
     <div onClick={onClick} style={{
-      padding: 'clamp(4px, 0.6vh, 10px) clamp(6px, 0.6vw, 10px)',
+      padding: 'clamp(4px, 0.6vh, 10px) clamp(8px, 0.8vw, 14px)',
       borderRight: '1px solid #e5e7eb',
-      display: 'flex', alignItems: 'center', justifyContent: align === 'center' ? 'center' : 'flex-start',
-      flexDirection: 'column',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: align === 'center' ? 'center' : 'flex-start',
       minHeight: 0, overflow: 'hidden',
       ...style,
     }}>

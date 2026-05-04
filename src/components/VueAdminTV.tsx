@@ -17,6 +17,7 @@ const TV_PRESETS = [
   { garage_id: 'mecanique',        label: 'Mécanique',                description: 'Méc. Moteur + Méc. Générale + Sous-traitants', color: '#3b82f6' },
   { garage_id: 'spec',             label: 'Soudure Spéc. + Peinture', description: 'Soudure spécialisée + Peinture', color: '#f97316' },
   { garage_id: 'sous-traitants',   label: 'Sous-traitants',           description: 'Sous-traitants uniquement', color: '#a855f7' },
+  { garage_id: 'suivi-vente',      label: 'Suivi Vente',              description: 'Tableau livraison camions vendus (showroom/bureau)', color: '#0ea5e9' },
 ];
 
 export function VueAdminTV() {
