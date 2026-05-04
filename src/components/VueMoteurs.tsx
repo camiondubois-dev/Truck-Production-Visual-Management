@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useMoteurs } from '../contexts/MoteurContext';
+import { supabase } from '../lib/supabase';
 import { ENGINE_ETAPES, ENGINE_SLOTS, getEngineSlot, getEngineEtape } from '../data/engineStations';
 import { etapeEnCoursMoteur, prochaineEtapeMoteur, etapesRestantesMoteur, progressionMoteur } from '../types/engineTypes';
 import type { Moteur, ProprietaireMoteur, StatutMoteur } from '../types/engineTypes';
@@ -40,7 +41,32 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
   const [filtreAnnee, setFiltreAnnee] = useState<string>('tous');
   const [hpMin, setHpMin] = useState<string>('');
   const [hpMax, setHpMax] = useState<string>('');
+  const [filtreEmploye, setFiltreEmploye] = useState<string>('tous'); // 'tous' / 'aucun' / employeId
   const [recherche, setRecherche] = useState('');
+
+  // ── Liste des employés (avec nom) chargés depuis profiles ────
+  const [employes, setEmployes] = useState<{ id: string; nom: string; departement?: string; role?: string }[]>([]);
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, nom, departement, role, actif')
+      .eq('actif', true)
+      .then(({ data }) => {
+        const list = (data ?? [])
+          .filter(p => p.role === 'employe' || p.role === 'gestion')
+          .map(p => ({ id: p.id, nom: p.nom ?? 'Sans nom', departement: p.departement ?? undefined, role: p.role }));
+        // Tri : mécanos moteur d'abord
+        list.sort((a, b) => {
+          const prio = (p: typeof a) =>
+            p.departement === 'mecanique-moteur' ? 0 :
+            p.role === 'employe'                 ? 1 : 2;
+          const pa = prio(a), pb = prio(b);
+          if (pa !== pb) return pa - pb;
+          return a.nom.localeCompare(b.nom);
+        });
+        setEmployes(list);
+      });
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showFiltresAvances, setShowFiltresAvances] = useState(false);
@@ -80,6 +106,28 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     };
   }, [moteurs]);
 
+  // Compte de moteurs par employé (assigné OU étapes faites/en-cours)
+  const countsParEmploye = useMemo(() => {
+    const c: Record<string, { total: number; enCours: number; termine: number }> = {};
+    for (const m of moteurs) {
+      const empIds = new Set<string>();
+      if (m.employeCourant) empIds.add(m.employeCourant);
+      for (const e of m.roadMap) if (e.employeId) empIds.add(e.employeId);
+
+      for (const id of empIds) {
+        if (!c[id]) c[id] = { total: 0, enCours: 0, termine: 0 };
+        c[id].total++;
+        if (m.statut === 'en-cours' && (m.employeCourant === id || m.roadMap.some(e => e.employeId === id && e.statut === 'en-cours'))) {
+          c[id].enCours++;
+        }
+        if (m.roadMap.some(e => e.employeId === id && e.statut === 'termine')) {
+          c[id].termine++;
+        }
+      }
+    }
+    return c;
+  }, [moteurs]);
+
   // Comptes par étape requise (pour les filtres FiltreBtn)
   const countsParEtape = useMemo(() => {
     const c: Record<string, number> = {};
@@ -115,6 +163,20 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
       if (filtreSlot === 'aucun') result = result.filter(m => !m.posteCourant);
       else result = result.filter(m => m.posteCourant === filtreSlot);
     }
+    if (filtreEmploye !== 'tous') {
+      if (filtreEmploye === 'aucun') {
+        // Aucun employé attitré ET aucune étape avec employeId
+        result = result.filter(m =>
+          !m.employeCourant && !m.roadMap.some(e => !!e.employeId)
+        );
+      } else {
+        // L'employé est attitré OU a au moins une étape (tous statuts) avec son employeId
+        result = result.filter(m =>
+          m.employeCourant === filtreEmploye ||
+          m.roadMap.some(e => e.employeId === filtreEmploye)
+        );
+      }
+    }
     if (filtreMarque !== 'tous') result = result.filter(m => m.marque === filtreMarque);
     if (filtreModele !== 'tous') result = result.filter(m => m.modele === filtreModele);
     if (filtreEpa !== 'tous')    result = result.filter(m => m.epa === filtreEpa);
@@ -143,7 +205,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     }
 
     return result;
-  }, [moteurs, filtreStatut, filtreProprietaire, filtreEtapeRequise, filtreSlot, filtreMarque, filtreModele, filtreEpa, filtreGhg, filtreAnnee, hpMin, hpMax, recherche]);
+  }, [moteurs, filtreStatut, filtreProprietaire, filtreEtapeRequise, filtreSlot, filtreEmploye, filtreMarque, filtreModele, filtreEpa, filtreGhg, filtreAnnee, hpMin, hpMax, recherche]);
 
   // Sections par statut pour l'affichage
   const sections = useMemo(() => {
@@ -157,10 +219,11 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
 
   const selected = selectedId ? moteurs.find(m => m.id === selectedId) ?? null : null;
 
-  const filtresActifs = filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || filtreMarque !== 'tous' || filtreModele !== 'tous' || filtreEpa !== 'tous' || filtreGhg !== 'tous' || filtreAnnee !== 'tous' || hpMin || hpMax || recherche;
+  const filtresActifs = filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || filtreEmploye !== 'tous' || filtreMarque !== 'tous' || filtreModele !== 'tous' || filtreEpa !== 'tous' || filtreGhg !== 'tous' || filtreAnnee !== 'tous' || hpMin || hpMax || recherche;
 
   const reinitialiser = () => {
     setFiltreStatut('tous'); setFiltreProprietaire('tous'); setFiltreEtapeRequise('tous'); setFiltreSlot('tous');
+    setFiltreEmploye('tous');
     setFiltreMarque('tous'); setFiltreModele('tous'); setFiltreEpa('tous'); setFiltreGhg('tous'); setFiltreAnnee('tous');
     setHpMin(''); setHpMax(''); setRecherche('');
   };
@@ -232,6 +295,48 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
                 label={`${e.icon} ${e.label} (${nb})`} color={e.color} />
             );
           })}
+        </div>
+
+        {/* ── Filtre Employé (mécano) ────────────────────────── */}
+        <div style={{
+          display: 'flex', gap: 6, padding: mobile ? '6px 14px 8px' : '8px 20px 10px',
+          borderBottom: '1px solid #e5e7eb', background: 'white', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>
+            👤 Employé :
+          </span>
+          <FiltreBtn active={filtreEmploye === 'tous'} onClick={() => setFiltreEmploye('tous')} label="Tous" />
+          <FiltreBtn active={filtreEmploye === 'aucun'} onClick={() => setFiltreEmploye('aucun')}
+            label={`— Aucun assigné —`} color="#9ca3af" />
+          {(() => {
+            // Mécanos moteur d'abord, puis ceux ayant des moteurs liés (autres)
+            const mecanos = employes.filter(e => e.departement === 'mecanique-moteur');
+            const autresAvecMoteurs = employes.filter(e => e.departement !== 'mecanique-moteur' && countsParEmploye[e.id]);
+            return (
+              <>
+                {mecanos.map(e => {
+                  const c = countsParEmploye[e.id];
+                  const total = c?.total ?? 0;
+                  const enCours = c?.enCours ?? 0;
+                  return (
+                    <FiltreBtn key={e.id} active={filtreEmploye === e.id} onClick={() => setFiltreEmploye(filtreEmploye === e.id ? 'tous' : e.id)}
+                      label={`${e.nom}${total > 0 ? ` (${total}${enCours > 0 ? ` · ${enCours} 🚛` : ''})` : ''}`}
+                      color={enCours > 0 ? '#3b82f6' : '#7c3aed'} />
+                  );
+                })}
+                {autresAvecMoteurs.length > 0 && mecanos.length > 0 && (
+                  <div style={{ width: 1, background: '#e5e7eb', margin: '0 4px', alignSelf: 'stretch' }} />
+                )}
+                {autresAvecMoteurs.map(e => {
+                  const c = countsParEmploye[e.id];
+                  return (
+                    <FiltreBtn key={e.id} active={filtreEmploye === e.id} onClick={() => setFiltreEmploye(filtreEmploye === e.id ? 'tous' : e.id)}
+                      label={`${e.nom} (${c.total})`} color="#64748b" />
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
 
         {/* ── Filtres propriétaire ───────────────────────────── */}
@@ -328,11 +433,30 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: 'auto' }}>
+            {/* Bandeau résumé quand filtré par employé */}
+            {filtreEmploye !== 'tous' && filtreEmploye !== 'aucun' && (() => {
+              const emp = employes.find(e => e.id === filtreEmploye);
+              const c = countsParEmploye[filtreEmploye];
+              if (!emp) return null;
+              return (
+                <div style={{ padding: '12px 20px', background: '#ede9fe', borderBottom: '1px solid #c4b5fd', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 18 }}>👤</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: '#6d28d9' }}>{emp.nom}</span>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#6d28d9' }}>
+                    <span>🚛 <strong>{c?.enCours ?? 0}</strong> en cours</span>
+                    <span>✅ <strong>{c?.termine ?? 0}</strong> étapes terminées</span>
+                    <span>📋 <strong>{c?.total ?? 0}</strong> moteurs au total</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {sections.enCours.length > 0 && (
               <>
                 <SectionHeaderCard label="🚛 En cours" color="#3b82f6" count={sections.enCours.length} />
                 {sections.enCours.map(m => (
                   <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    employeIdHighlight={filtreEmploye !== 'tous' && filtreEmploye !== 'aucun' ? filtreEmploye : undefined}
                     onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
                 ))}
               </>
@@ -342,6 +466,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
                 <SectionHeaderCard label="✅ Prêts à livrer" color="#22c55e" count={sections.prets.length} />
                 {sections.prets.map(m => (
                   <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    employeIdHighlight={filtreEmploye !== 'tous' && filtreEmploye !== 'aucun' ? filtreEmploye : undefined}
                     onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
                 ))}
               </>
@@ -351,6 +476,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
                 <SectionHeaderCard label="⏳ En attente" color="#f59e0b" count={sections.enAttente.length} />
                 {sections.enAttente.map(m => (
                   <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    employeIdHighlight={filtreEmploye !== 'tous' && filtreEmploye !== 'aucun' ? filtreEmploye : undefined}
                     onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
                 ))}
               </>
@@ -360,6 +486,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
                 <SectionHeaderCard label="📦 Archivés" color="#6b7280" count={sections.archives.length} />
                 {sections.archives.map(m => (
                   <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    employeIdHighlight={filtreEmploye !== 'tous' && filtreEmploye !== 'aucun' ? filtreEmploye : undefined}
                     onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
                 ))}
               </>
@@ -405,7 +532,10 @@ function SelectMini({ label, value, onChange, options }: {
 }
 
 // ── Carte moteur ─────────────────────────────────────────────────
-function CarteMoteur({ m, onClick, mobile, selected }: { m: Moteur; onClick: () => void; mobile?: boolean; selected?: boolean }) {
+function CarteMoteur({ m, onClick, mobile, selected, employeIdHighlight }: {
+  m: Moteur; onClick: () => void; mobile?: boolean; selected?: boolean;
+  employeIdHighlight?: string;
+}) {
   const enCours = etapeEnCoursMoteur(m);
   const prochaine = prochaineEtapeMoteur(m);
   const restantes = etapesRestantesMoteur(m);
@@ -467,6 +597,39 @@ function CarteMoteur({ m, onClick, mobile, selected }: { m: Moteur; onClick: () 
             {m.etatCommercial && <span style={{ color: '#92400e', fontWeight: 600 }}>· {m.etatCommercial}</span>}
             {m.notes && <span title={m.notes} style={{ color: '#dc2626', fontWeight: 600 }}>⚠ {m.notes.slice(0, 40)}{m.notes.length > 40 ? '…' : ''}</span>}
           </div>
+
+          {/* Détail employé filtré : ce qu'il a fait / fait sur ce moteur */}
+          {employeIdHighlight && (() => {
+            const empEtapes = m.roadMap.filter(e => e.employeId === employeIdHighlight);
+            const estCourant = m.employeCourant === employeIdHighlight;
+            if (empEtapes.length === 0 && !estCourant) return null;
+            return (
+              <div style={{ marginTop: 4, padding: '4px 8px', background: '#f5f3ff', borderLeft: '3px solid #7c3aed', borderRadius: 3, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 10 }}>
+                {estCourant && !empEtapes.some(e => e.statut === 'en-cours') && (
+                  <span style={{ color: '#6d28d9', fontWeight: 700 }}>👤 Attitré (pas démarré)</span>
+                )}
+                {empEtapes.map(e => {
+                  const meta = getEngineEtape(e.etapeId);
+                  if (!meta) return null;
+                  const cfg =
+                    e.statut === 'en-cours' ? { bg: '#dbeafe', color: '#1e40af', icon: '🚛' } :
+                    e.statut === 'termine'  ? { bg: '#dcfce7', color: '#166534', icon: '✅' } :
+                    e.statut === 'saute'    ? { bg: '#fef3c7', color: '#92400e', icon: '⏭' } :
+                                              { bg: '#f3f4f6', color: '#6b7280', icon: '⏸' };
+                  return (
+                    <span key={e.id} style={{ padding: '1px 6px', borderRadius: 3, background: cfg.bg, color: cfg.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {cfg.icon} {meta.icon} {meta.label}
+                      {e.dureeMinutes !== undefined && (
+                        <span style={{ marginLeft: 4, opacity: 0.8 }}>
+                          {e.dureeMinutes >= 60 ? `${Math.floor(e.dureeMinutes / 60)}h${e.dureeMinutes % 60 ? ` ${e.dureeMinutes % 60}min` : ''}` : `${e.dureeMinutes}min`}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
