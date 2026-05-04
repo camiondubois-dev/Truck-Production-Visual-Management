@@ -512,7 +512,7 @@ function EtapeIcon({ etat, large }: { etat: EtatEtape; large?: boolean }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize,
       }}>
-        ⏳
+        🚚
       </div>
     );
   }
