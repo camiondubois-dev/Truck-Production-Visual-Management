@@ -1,19 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useMoteurs } from '../contexts/MoteurContext';
-import { ENGINE_ETAPES, ENGINE_SLOTS, ENGINE_ZONES, getEngineSlot, getEngineEtape } from '../data/engineStations';
+import { ENGINE_ETAPES, ENGINE_SLOTS, getEngineSlot, getEngineEtape } from '../data/engineStations';
 import { etapeEnCoursMoteur, prochaineEtapeMoteur, etapesRestantesMoteur, progressionMoteur } from '../types/engineTypes';
 import type { Moteur, ProprietaireMoteur, StatutMoteur } from '../types/engineTypes';
 import { WizardMoteur } from './WizardMoteur';
 import { PanneauDetailMoteur } from './PanneauDetailMoteur';
+import { FiltreBtn, SectionHeaderCard } from './VueAsana';
 
 type FiltreStatut = 'tous' | StatutMoteur;
 type FiltreProprietaire = 'tous' | ProprietaireMoteur;
 
-const STATUT_CONFIG: Record<StatutMoteur, { label: string; color: string; bg: string }> = {
-  'en-attente': { label: 'En attente', color: '#92400e', bg: '#fef3c7' },
-  'en-cours':   { label: 'En cours',   color: '#1e40af', bg: '#dbeafe' },
-  'pret':       { label: 'Prêt',       color: '#166534', bg: '#dcfce7' },
-  'archive':    { label: 'Archivé',    color: '#6b7280', bg: '#f3f4f6' },
+const STATUT_CONFIG: Record<StatutMoteur, { label: string; color: string; bg: string; icon: string }> = {
+  'en-attente': { label: 'En attente', color: '#f59e0b', bg: '#fef3c7', icon: '⏳' },
+  'en-cours':   { label: 'En cours',   color: '#3b82f6', bg: '#dbeafe', icon: '🚛' },
+  'pret':       { label: 'Prêt',       color: '#22c55e', bg: '#dcfce7', icon: '✅' },
+  'archive':    { label: 'Archivé',    color: '#6b7280', bg: '#f3f4f6', icon: '📦' },
 };
 
 const PROPRIO_LABEL: Record<ProprietaireMoteur, string> = {
@@ -23,8 +24,11 @@ const PROPRIO_LABEL: Record<ProprietaireMoteur, string> = {
   'inventaire':  'Inventaire',
 };
 
+const COULEUR_MOTEUR = '#7c3aed';
+
 export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void } = {}) {
   const { moteurs, loading } = useMoteurs();
+
   const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');
   const [filtreProprietaire, setFiltreProprietaire] = useState<FiltreProprietaire>('tous');
   const [filtreEtapeRequise, setFiltreEtapeRequise] = useState<string>('tous');
@@ -39,7 +43,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
   const [recherche, setRecherche] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [showFiltresMobile, setShowFiltresMobile] = useState(false);
+  const [showFiltresAvances, setShowFiltresAvances] = useState(false);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -53,13 +57,13 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     };
   }, [moteurs]);
 
-  // Listes uniques auto-remplies pour les dropdowns
+  // Listes uniques pour les dropdowns
   const valeursDistinctes = useMemo(() => {
     const marques = new Set<string>();
     const modeles = new Set<string>();
-    const epas = new Set<string>();
-    const ghgs = new Set<string>();
-    const annees = new Set<number>();
+    const epas    = new Set<string>();
+    const ghgs    = new Set<string>();
+    const annees  = new Set<number>();
     for (const m of moteurs) {
       if (m.marque) marques.add(m.marque);
       if (m.modele) modeles.add(m.modele);
@@ -70,17 +74,38 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
     return {
       marques: [...marques].sort(),
       modeles: [...modeles].sort(),
-      epas: [...epas].sort(),
-      ghgs: [...ghgs].sort(),
-      annees: [...annees].sort((a, b) => b - a), // plus récent en haut
+      epas:    [...epas].sort(),
+      ghgs:    [...ghgs].sort(),
+      annees:  [...annees].sort((a, b) => b - a),
     };
+  }, [moteurs]);
+
+  // Comptes par étape requise (pour les filtres FiltreBtn)
+  const countsParEtape = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const e of ENGINE_ETAPES) {
+      c[e.id] = moteurs.filter(m =>
+        m.statut !== 'archive' &&
+        m.roadMap.some(s => s.etapeId === e.id && s.statut !== 'termine' && s.statut !== 'saute')
+      ).length;
+    }
+    return c;
+  }, [moteurs]);
+
+  // Comptes propriétaire
+  const countsProprio = useMemo(() => {
+    const c: Record<ProprietaireMoteur, number> = { interne: 0, client: 0, exportation: 0, inventaire: 0 };
+    for (const m of moteurs.filter(m => m.statut !== 'archive')) {
+      c[m.proprietaire]++;
+    }
+    return c;
   }, [moteurs]);
 
   // Filtrage
   const filtres = useMemo(() => {
     let result = [...moteurs];
-    if (filtreStatut !== 'tous') result = result.filter(m => m.statut === filtreStatut);
-    if (filtreProprietaire !== 'tous') result = result.filter(m => m.proprietaire === filtreProprietaire);
+    if (filtreStatut !== 'tous')        result = result.filter(m => m.statut === filtreStatut);
+    if (filtreProprietaire !== 'tous')  result = result.filter(m => m.proprietaire === filtreProprietaire);
     if (filtreEtapeRequise !== 'tous') {
       result = result.filter(m =>
         m.roadMap.some(e => e.etapeId === filtreEtapeRequise && e.statut !== 'termine' && e.statut !== 'saute')
@@ -117,228 +142,228 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
       );
     }
 
-    // Tri : prêts en haut (pour livraison), puis en cours, puis en attente, puis archives
-    const ordreStatut: Record<StatutMoteur, number> = { 'pret': 0, 'en-cours': 1, 'en-attente': 2, 'archive': 3 };
-    result.sort((a, b) => {
-      const da = ordreStatut[a.statut] - ordreStatut[b.statut];
-      if (da !== 0) return da;
-      return a.stkNumero.localeCompare(b.stkNumero);
-    });
-
     return result;
   }, [moteurs, filtreStatut, filtreProprietaire, filtreEtapeRequise, filtreSlot, filtreMarque, filtreModele, filtreEpa, filtreGhg, filtreAnnee, hpMin, hpMax, recherche]);
 
+  // Sections par statut pour l'affichage
+  const sections = useMemo(() => {
+    return {
+      enCours:   filtres.filter(m => m.statut === 'en-cours'),
+      enAttente: filtres.filter(m => m.statut === 'en-attente'),
+      prets:     filtres.filter(m => m.statut === 'pret'),
+      archives:  filtres.filter(m => m.statut === 'archive'),
+    };
+  }, [filtres]);
+
   const selected = selectedId ? moteurs.find(m => m.id === selectedId) ?? null : null;
+
+  const filtresActifs = filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || filtreMarque !== 'tous' || filtreModele !== 'tous' || filtreEpa !== 'tous' || filtreGhg !== 'tous' || filtreAnnee !== 'tous' || hpMin || hpMax || recherche;
+
+  const reinitialiser = () => {
+    setFiltreStatut('tous'); setFiltreProprietaire('tous'); setFiltreEtapeRequise('tous'); setFiltreSlot('tous');
+    setFiltreMarque('tous'); setFiltreModele('tous'); setFiltreEpa('tous'); setFiltreGhg('tous'); setFiltreAnnee('tous');
+    setHpMin(''); setHpMax(''); setRecherche('');
+  };
 
   if (loading) {
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', fontSize: 14 }}>
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontFamily: 'monospace', fontSize: 14 }}>
         Chargement des moteurs...
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
-
-      {/* ── KPI strip ──────────────────────────────────── */}
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{
-        flexShrink: 0,
-        background: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        padding: mobile ? '12px 14px' : '14px 24px',
-        display: 'flex', alignItems: 'center', gap: mobile ? 8 : 16, flexWrap: 'wrap',
+        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        marginRight: selected && !mobile ? 460 : 0, transition: 'margin-right 0.3s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 'auto' }}>
-          {mobile && onClose && (
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#6b7280', padding: 4 }}>←</button>
+        {/* ── En-tête ─────────────────────────────────────────── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: mobile ? '12px 14px' : '14px 24px',
+          borderBottom: '2px solid #e5e7eb', background: 'white', flexShrink: 0,
+          gap: 12, flexWrap: mobile ? 'wrap' : 'nowrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {mobile && onClose && (
+                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: '#6b7280', padding: 4 }}>←</button>
+              )}
+              <span style={{ fontSize: 26 }}>🛠️</span>
+              <h1 style={{ fontSize: mobile ? 17 : 20, fontWeight: 700, color: COULEUR_MOTEUR, margin: 0 }}>Moteurs</h1>
+            </div>
+            <StatPill label="En attente" value={kpis.enAttente} color="#f59e0b" />
+            <StatPill label="En cours"   value={kpis.enCours}   color="#3b82f6" />
+            <StatPill label="Prêts"      value={kpis.prets}     color="#22c55e" />
+            {!mobile && <StatPill label="Archivés" value={kpis.archives} color="#6b7280" />}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <input type="text" placeholder="Rechercher #, W/O, marque, modèle..."
+              value={recherche} onChange={e => setRecherche(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 7, border: '1px solid #e5e7eb', fontSize: 13, width: mobile ? 160 : 240, outline: 'none', flex: mobile ? 1 : undefined, minWidth: 140 }} />
+            <button onClick={() => setShowWizard(true)}
+              style={{ background: COULEUR_MOTEUR, color: 'white', border: 'none', borderRadius: 8, padding: mobile ? '8px 12px' : '8px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              + Nouveau
+            </button>
+          </div>
+        </div>
+
+        {/* ── Barre de filtres principale ────────────────────── */}
+        <div style={{
+          display: 'flex', gap: 6, padding: mobile ? '8px 14px' : '10px 20px',
+          borderBottom: '1px solid #e5e7eb', background: 'white', flexWrap: 'wrap', flexShrink: 0,
+        }}>
+          <FiltreBtn active={filtreStatut === 'tous'}       onClick={() => setFiltreStatut('tous')}       label={`Tous (${kpis.total})`} />
+          <FiltreBtn active={filtreStatut === 'en-cours'}   onClick={() => setFiltreStatut('en-cours')}   label={`🚛 En cours (${kpis.enCours})`}     color="#3b82f6" />
+          <FiltreBtn active={filtreStatut === 'pret'}       onClick={() => setFiltreStatut('pret')}       label={`✅ Prêts (${kpis.prets})`}          color="#22c55e" />
+          <FiltreBtn active={filtreStatut === 'en-attente'} onClick={() => setFiltreStatut('en-attente')} label={`⏳ En attente (${kpis.enAttente})`} color="#f59e0b" />
+          <FiltreBtn active={filtreStatut === 'archive'}    onClick={() => setFiltreStatut('archive')}    label={`📦 Archivés (${kpis.archives})`}    color="#6b7280" />
+
+          <div style={{ width: 1, background: '#e5e7eb', margin: '0 4px', alignSelf: 'stretch' }} />
+
+          {/* Étapes à faire */}
+          {ENGINE_ETAPES.map(e => {
+            const nb = countsParEtape[e.id];
+            if (nb === 0) return null;
+            return (
+              <FiltreBtn key={e.id} active={filtreEtapeRequise === e.id} onClick={() => setFiltreEtapeRequise(filtreEtapeRequise === e.id ? 'tous' : e.id)}
+                label={`${e.icon} ${e.label} (${nb})`} color={e.color} />
+            );
+          })}
+        </div>
+
+        {/* ── Filtres propriétaire ───────────────────────────── */}
+        <div style={{
+          display: 'flex', gap: 6, padding: mobile ? '6px 14px 8px' : '8px 20px 10px',
+          borderBottom: '1px solid #e5e7eb', background: '#fafbfc', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>
+            Propriétaire :
+          </span>
+          <FiltreBtn active={filtreProprietaire === 'tous'}        onClick={() => setFiltreProprietaire('tous')}        label="Tous" />
+          <FiltreBtn active={filtreProprietaire === 'interne'}     onClick={() => setFiltreProprietaire('interne')}     label={`🏢 Interne (${countsProprio.interne})`}         color="#64748b" />
+          <FiltreBtn active={filtreProprietaire === 'client'}      onClick={() => setFiltreProprietaire('client')}      label={`👤 Client (${countsProprio.client})`}            color="#3b82f6" />
+          <FiltreBtn active={filtreProprietaire === 'exportation'} onClick={() => setFiltreProprietaire('exportation')} label={`✈ Exportation (${countsProprio.exportation})`}   color="#7c3aed" />
+          <FiltreBtn active={filtreProprietaire === 'inventaire'}  onClick={() => setFiltreProprietaire('inventaire')}  label={`📦 Inventaire (${countsProprio.inventaire})`}    color="#22c55e" />
+
+          <div style={{ flex: 1 }} />
+
+          <button onClick={() => setShowFiltresAvances(s => !s)}
+            style={{
+              padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+              border: `1px solid ${showFiltresAvances ? COULEUR_MOTEUR : '#e5e7eb'}`,
+              background: showFiltresAvances ? `${COULEUR_MOTEUR}15` : 'white',
+              color: showFiltresAvances ? COULEUR_MOTEUR : '#6b7280',
+              cursor: 'pointer',
+            }}>
+            ⚙ Filtres avancés {showFiltresAvances ? '▲' : '▼'}
+          </button>
+
+          {filtresActifs && (
+            <button onClick={reinitialiser}
+              style={{ padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, border: '1px solid #fca5a5', background: 'white', color: '#dc2626', cursor: 'pointer' }}>
+              ✕ Effacer
+            </button>
           )}
-          <span style={{ fontSize: mobile ? 20 : 24 }}>🛠️</span>
-          <div>
-            <div style={{ fontSize: mobile ? 16 : 18, fontWeight: 800, color: '#111827' }}>{mobile ? 'Moteurs' : 'Inventaire Moteurs'}</div>
-            <div style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {filtres.length} moteur{filtres.length > 1 ? 's' : ''}
+        </div>
+
+        {/* ── Filtres avancés (collapsible) ──────────────────── */}
+        {showFiltresAvances && (
+          <div style={{
+            display: 'flex', gap: 12, padding: '10px 20px', borderBottom: '1px solid #e5e7eb',
+            background: '#f8fafc', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center',
+          }}>
+            {valeursDistinctes.marques.length > 0 && (
+              <SelectMini label="Marque" value={filtreMarque} onChange={setFiltreMarque}
+                options={[['tous', `Toutes (${valeursDistinctes.marques.length})`], ...valeursDistinctes.marques.map(m => [m, m] as [string, string])]} />
+            )}
+            {valeursDistinctes.modeles.length > 0 && (
+              <SelectMini label="Modèle" value={filtreModele} onChange={setFiltreModele}
+                options={[['tous', 'Tous'], ...valeursDistinctes.modeles.map(m => [m, m] as [string, string])]} />
+            )}
+            {valeursDistinctes.epas.length > 0 && (
+              <SelectMini label="EPA" value={filtreEpa} onChange={setFiltreEpa}
+                options={[['tous', 'Tous'], ...valeursDistinctes.epas.map(e => [e, e] as [string, string])]} />
+            )}
+            {valeursDistinctes.ghgs.length > 0 && (
+              <SelectMini label="GHG" value={filtreGhg} onChange={setFiltreGhg}
+                options={[['tous', 'Tous'], ...valeursDistinctes.ghgs.map(g => [g, g] as [string, string])]} />
+            )}
+            {valeursDistinctes.annees.length > 0 && (
+              <SelectMini label="Année" value={filtreAnnee} onChange={setFiltreAnnee}
+                options={[['tous', 'Toutes'], ...valeursDistinctes.annees.map(a => [String(a), String(a)] as [string, string])]} />
+            )}
+            <SelectMini label="Emplacement" value={filtreSlot} onChange={setFiltreSlot}
+              options={[
+                ['tous', 'Tous'],
+                ['aucun', 'Aucun (à placer)'],
+                ...ENGINE_SLOTS.map(s => [s.id, s.label] as [string, string]),
+              ]} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>HP :</span>
+              <input type="number" value={hpMin} onChange={e => setHpMin(e.target.value)} placeholder="min"
+                style={{ width: 56, padding: '5px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
+              <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>
+              <input type="number" value={hpMax} onChange={e => setHpMax(e.target.value)} placeholder="max"
+                style={{ width: 56, padding: '5px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
             </div>
           </div>
-        </div>
-
-        <KPI value={kpis.enAttente}  label="En attente" color="#f59e0b" />
-        <KPI value={kpis.enCours}    label="En cours"   color="#3b82f6" />
-        <KPI value={kpis.prets}      label="Prêts"      color="#22c55e" highlight />
-        {!mobile && <KPI value={kpis.archives} label="Archivés" color="#6b7280" />}
-
-        <button onClick={() => setShowWizard(true)}
-          style={{
-            background: '#7c3aed', color: 'white', border: 'none', borderRadius: mobile ? '50%' : 10,
-            padding: mobile ? 0 : '10px 18px',
-            width: mobile ? 40 : 'auto', height: mobile ? 40 : 'auto',
-            fontWeight: 700, fontSize: mobile ? 22 : 14, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            flexShrink: 0,
-          }}
-          title={mobile ? 'Nouveau moteur' : ''}>
-          {mobile ? '+' : '+ Nouveau moteur'}
-        </button>
-      </div>
-
-      {/* ── Filtres ───────────────────────────────────── */}
-      {/* Sur mobile : recherche + bouton "Filtres" toujours visibles ; le reste est repliable */}
-      <div style={{
-        flexShrink: 0, background: 'white', borderBottom: mobile && !showFiltresMobile ? '1px solid #e5e7eb' : 'none',
-        padding: mobile ? '10px 14px' : '10px 24px',
-        display: 'flex', flexWrap: 'wrap', gap: mobile ? 6 : 12, alignItems: 'center',
-      }}>
-        {/* Recherche (toujours visible) */}
-        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: mobile ? 160 : 240, maxWidth: mobile ? '100%' : 360 }}>
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}>🔍</span>
-          <input value={recherche} onChange={e => setRecherche(e.target.value)}
-            placeholder={mobile ? '🔍 Rechercher...' : 'STK# / W/O / description / client / notes...'}
-            style={{
-              width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8,
-              border: '1px solid #e5e7eb', fontSize: 13, outline: 'none', boxSizing: 'border-box',
-              background: '#f8fafc',
-            }} />
-        </div>
-
-        {/* Mobile : bouton toggle filtres */}
-        {mobile && (
-          <button onClick={() => setShowFiltresMobile(s => !s)}
-            style={{
-              padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              border: '1px solid #e5e7eb',
-              background: showFiltresMobile ? '#7c3aed' : 'white',
-              color: showFiltresMobile ? 'white' : '#7c3aed',
-              cursor: 'pointer', flexShrink: 0,
-            }}>
-            {showFiltresMobile ? '✕ Fermer' : '⚙ Filtres'}
-          </button>
-        )}
-      </div>
-
-      {/* Bloc filtres avancés — masqué sur mobile par défaut */}
-      {(!mobile || showFiltresMobile) && (
-      <div style={{
-        flexShrink: 0, background: 'white', borderBottom: '1px solid #e5e7eb',
-        padding: mobile ? '10px 14px' : '10px 24px 10px 24px',
-        display: 'flex', flexWrap: 'wrap', gap: mobile ? 8 : 12, alignItems: 'center',
-      }}>
-
-        {/* Statut */}
-        <SelectFiltre label="Statut" value={filtreStatut} onChange={v => setFiltreStatut(v as FiltreStatut)}
-          options={[
-            ['tous', 'Tous statuts'],
-            ['en-attente', 'En attente'],
-            ['en-cours', 'En cours'],
-            ['pret', 'Prêt'],
-            ['archive', 'Archivé'],
-          ]} />
-
-        {/* Propriétaire */}
-        <SelectFiltre label="Propriétaire" value={filtreProprietaire} onChange={v => setFiltreProprietaire(v as FiltreProprietaire)}
-          options={[
-            ['tous', 'Tous'],
-            ['interne', 'Interne'],
-            ['client', 'Client'],
-            ['exportation', 'Exportation'],
-            ['inventaire', 'Inventaire'],
-          ]} />
-
-        {/* Étape à faire */}
-        <SelectFiltre label="Étape à faire" value={filtreEtapeRequise} onChange={setFiltreEtapeRequise}
-          options={[
-            ['tous', 'Toutes étapes'],
-            ...ENGINE_ETAPES.map(e => [e.id, `${e.icon} ${e.label}`] as [string, string]),
-          ]} />
-
-        {/* Emplacement */}
-        <SelectFiltre label="Emplacement" value={filtreSlot} onChange={setFiltreSlot}
-          options={[
-            ['tous', 'Tous emplacements'],
-            ['aucun', '— Aucun (à placer) —'],
-            ...ENGINE_SLOTS.map(s => [s.id, `${s.label} (cap. ${s.capacite})`] as [string, string]),
-          ]} />
-
-        {/* Marque (auto-rempli) */}
-        {valeursDistinctes.marques.length > 0 && (
-          <SelectFiltre label="Marque" value={filtreMarque} onChange={setFiltreMarque}
-            options={[
-              ['tous', `Toutes (${valeursDistinctes.marques.length})`],
-              ...valeursDistinctes.marques.map(m => [m, m] as [string, string]),
-            ]} />
         )}
 
-        {/* Modèle (auto-rempli) */}
-        {valeursDistinctes.modeles.length > 0 && (
-          <SelectFiltre label="Modèle" value={filtreModele} onChange={setFiltreModele}
-            options={[
-              ['tous', `Tous (${valeursDistinctes.modeles.length})`],
-              ...valeursDistinctes.modeles.map(m => [m, m] as [string, string]),
-            ]} />
-        )}
-
-        {/* EPA */}
-        {valeursDistinctes.epas.length > 0 && (
-          <SelectFiltre label="EPA" value={filtreEpa} onChange={setFiltreEpa}
-            options={[
-              ['tous', 'Tous'],
-              ...valeursDistinctes.epas.map(e => [e, e] as [string, string]),
-            ]} />
-        )}
-
-        {/* GHG */}
-        {valeursDistinctes.ghgs.length > 0 && (
-          <SelectFiltre label="GHG" value={filtreGhg} onChange={setFiltreGhg}
-            options={[
-              ['tous', 'Tous'],
-              ...valeursDistinctes.ghgs.map(g => [g, g] as [string, string]),
-            ]} />
-        )}
-
-        {/* Année */}
-        {valeursDistinctes.annees.length > 0 && (
-          <SelectFiltre label="Année" value={filtreAnnee} onChange={setFiltreAnnee}
-            options={[
-              ['tous', 'Toutes'],
-              ...valeursDistinctes.annees.map(a => [String(a), String(a)] as [string, string]),
-            ]} />
-        )}
-
-        {/* HP min/max */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>HP:</span>
-          <input type="number" value={hpMin} onChange={e => setHpMin(e.target.value)} placeholder="min"
-            style={{ width: 60, padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
-          <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>
-          <input type="number" value={hpMax} onChange={e => setHpMax(e.target.value)} placeholder="max"
-            style={{ width: 60, padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, outline: 'none', background: 'white' }} />
-        </div>
-
-        {(filtreStatut !== 'tous' || filtreProprietaire !== 'tous' || filtreEtapeRequise !== 'tous' || filtreSlot !== 'tous' || filtreMarque !== 'tous' || filtreModele !== 'tous' || filtreEpa !== 'tous' || filtreGhg !== 'tous' || filtreAnnee !== 'tous' || hpMin || hpMax || recherche) && (
-          <button onClick={() => {
-            setFiltreStatut('tous'); setFiltreProprietaire('tous'); setFiltreEtapeRequise('tous'); setFiltreSlot('tous');
-            setFiltreMarque('tous'); setFiltreModele('tous'); setFiltreEpa('tous'); setFiltreGhg('tous'); setFiltreAnnee('tous');
-            setHpMin(''); setHpMax(''); setRecherche('');
-          }}
-            style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#991b1b', fontWeight: 600, cursor: 'pointer' }}>
-            ✕ Effacer tous les filtres
-          </button>
-        )}
-      </div>
-      )}
-
-      {/* ── Liste ──────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {filtres.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60, color: '#9ca3af', fontSize: 14 }}>
-            {moteurs.length === 0
-              ? 'Aucun moteur dans la base. Cliquez sur « + Nouveau moteur » pour commencer.'
-              : 'Aucun moteur ne correspond aux filtres.'}
+        {/* ── Liste des moteurs ──────────────────────────────── */}
+        {moteurs.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9ca3af' }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🛠️</div>
+            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Aucun moteur pour l'instant</div>
+            <div style={{ fontSize: 14 }}>Clique sur « + Nouveau » pour commencer</div>
+          </div>
+        ) : filtres.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9ca3af' }}>
+            <div style={{ fontSize: 14, marginBottom: 12 }}>Aucun moteur ne correspond aux filtres.</div>
+            <button onClick={reinitialiser} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #fca5a5', background: 'white', color: '#dc2626', fontWeight: 600, cursor: 'pointer' }}>
+              ✕ Effacer les filtres
+            </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 1400, margin: '0 auto' }}>
-            {filtres.map(m => (
-              <CarteMoteur key={m.id} m={m} mobile={mobile} onClick={() => setSelectedId(m.id)} />
-            ))}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {sections.enCours.length > 0 && (
+              <>
+                <SectionHeaderCard label="🚛 En cours" color="#3b82f6" count={sections.enCours.length} />
+                {sections.enCours.map(m => (
+                  <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
+                ))}
+              </>
+            )}
+            {sections.prets.length > 0 && (
+              <>
+                <SectionHeaderCard label="✅ Prêts à livrer" color="#22c55e" count={sections.prets.length} />
+                {sections.prets.map(m => (
+                  <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
+                ))}
+              </>
+            )}
+            {sections.enAttente.length > 0 && (
+              <>
+                <SectionHeaderCard label="⏳ En attente" color="#f59e0b" count={sections.enAttente.length} />
+                {sections.enAttente.map(m => (
+                  <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
+                ))}
+              </>
+            )}
+            {sections.archives.length > 0 && (
+              <>
+                <SectionHeaderCard label="📦 Archivés" color="#6b7280" count={sections.archives.length} />
+                {sections.archives.map(m => (
+                  <CarteMoteur key={m.id} m={m} mobile={mobile} selected={selectedId === m.id}
+                    onClick={() => setSelectedId(m.id === selectedId ? null : m.id)} />
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -352,180 +377,159 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
   );
 }
 
-// ── KPI block ────────────────────────────────────────────────────
-function KPI({ value, label, color, highlight }: { value: number; label: string; color: string; highlight?: boolean }) {
+// ── StatPill ─────────────────────────────────────────────────────
+function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px',
-      borderRadius: 8, background: highlight ? `${color}15` : 'transparent',
-      border: highlight ? `1px solid ${color}40` : '1px solid transparent',
-    }}>
-      <span style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1, fontFamily: 'system-ui' }}>{value}</span>
-      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+      <span style={{ background: color, color: 'white', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 10, minWidth: 20, textAlign: 'center' }}>
+        {value}
+      </span>
     </div>
   );
 }
 
-// ── Select filtre ────────────────────────────────────────────────
-function SelectFiltre({ label, value, onChange, options }: {
+// ── Select mini (filtres avancés) ────────────────────────────────
+function SelectMini({ label, value, onChange, options }: {
   label: string; value: string; onChange: (v: string) => void; options: [string, string][];
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>{label}:</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>{label} :</span>
       <select value={value} onChange={e => onChange(e.target.value)}
-        style={{
-          padding: '6px 10px', borderRadius: 6, border: '1px solid #e5e7eb',
-          fontSize: 13, background: 'white', cursor: 'pointer', outline: 'none',
-        }}>
+        style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, background: 'white', cursor: 'pointer', outline: 'none' }}>
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </div>
   );
 }
 
-// ── Carte moteur (ligne) ─────────────────────────────────────────
-function CarteMoteur({ m, onClick, mobile }: { m: Moteur; onClick: () => void; mobile?: boolean }) {
+// ── Carte moteur ─────────────────────────────────────────────────
+function CarteMoteur({ m, onClick, mobile, selected }: { m: Moteur; onClick: () => void; mobile?: boolean; selected?: boolean }) {
   const enCours = etapeEnCoursMoteur(m);
   const prochaine = prochaineEtapeMoteur(m);
   const restantes = etapesRestantesMoteur(m);
   const pct = progressionMoteur(m);
   const slot = m.posteCourant ? getEngineSlot(m.posteCourant) : null;
   const statutCfg = STATUT_CONFIG[m.statut];
-
-  // Étape affichée : en cours > prochaine > rien
   const etapeShown = enCours ?? prochaine;
   const etapeMeta = etapeShown ? getEngineEtape(etapeShown.etapeId) : null;
 
   return (
     <div onClick={onClick}
       style={{
-        background: 'white', border: '1px solid #e5e7eb',
-        borderLeft: `5px solid ${statutCfg.color}`,
-        borderRadius: 10, padding: mobile ? '10px 12px' : '14px 16px', cursor: 'pointer',
-        display: 'grid',
-        gridTemplateColumns: mobile ? 'auto 1fr' : 'auto 1fr auto auto auto',
-        gap: mobile ? 10 : 16, alignItems: 'center',
-        transition: 'all 0.15s',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        display: 'flex', alignItems: 'stretch',
+        background: selected ? `${COULEUR_MOTEUR}06` : 'white',
+        borderBottom: '1px solid #e5e7eb',
+        borderLeft: `4px solid ${statutCfg.color}`,
+        cursor: 'pointer', transition: 'all 0.15s',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'; (e.currentTarget as HTMLDivElement).style.transform = 'none'; }}
+      onMouseEnter={e => { if (!selected) { (e.currentTarget as HTMLDivElement).style.background = '#f0f4ff'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; } }}
+      onMouseLeave={e => { if (!selected) { (e.currentTarget as HTMLDivElement).style.background = 'white'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; } }}
     >
-      {/* Photo / icône */}
-      <div style={{
-        width: 60, height: 60, borderRadius: 8, flexShrink: 0,
-        background: m.photoUrl ? `url(${m.photoUrl}) center/cover` : '#f3f4f6',
-        border: '1px solid #e5e7eb',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28,
-      }}>
-        {!m.photoUrl && '🛠️'}
+      {/* Photo + numéro + description */}
+      <div style={{ width: mobile ? 'auto' : 340, minWidth: mobile ? 0 : 340, flex: mobile ? 1 : '0 0 auto', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 50, height: 50, borderRadius: 8, flexShrink: 0,
+          background: m.photoUrl ? `url(${m.photoUrl}) center/cover` : `${COULEUR_MOTEUR}15`,
+          border: `1px solid ${m.photoUrl ? '#e5e7eb' : `${COULEUR_MOTEUR}40`}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+        }}>
+          {!m.photoUrl && '🛠️'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 800, color: COULEUR_MOTEUR }}>
+              #{m.stkNumero}
+            </span>
+            {m.workOrder && (
+              <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#6b7280', background: '#f3f4f6', padding: '1px 5px', borderRadius: 3 }}>
+                W/O {m.workOrder}
+              </span>
+            )}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: statutCfg.bg, color: statutCfg.color, textTransform: 'uppercase' }}>
+              {statutCfg.icon} {statutCfg.label}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: '#374151', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', overflow: 'hidden' }}>
+            {m.marque && <span style={{ color: COULEUR_MOTEUR, fontWeight: 800 }}>{m.marque}</span>}
+            {m.modele && <span>{m.modele}</span>}
+            {m.serie && <span style={{ color: '#6b7280', fontSize: 11, fontFamily: 'monospace' }}>{m.serie}</span>}
+            {m.annee && <span style={{ color: '#6b7280', fontSize: 11 }}>({m.annee})</span>}
+            {m.epa && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af', fontWeight: 700 }}>{m.epa}</span>}
+            {m.ghg && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{m.ghg}</span>}
+            {m.puissanceHp && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, fontFamily: 'monospace' }}>{m.puissanceHp} HP</span>}
+            {!m.marque && !m.descriptionMoteur && <em style={{ color: '#9ca3af' }}>Pas de description</em>}
+          </div>
+          <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span>{PROPRIO_LABEL[m.proprietaire]}{m.nomClient ? ` · ${m.nomClient}` : ''}</span>
+            {m.etatCommercial && <span style={{ color: '#92400e', fontWeight: 600 }}>· {m.etatCommercial}</span>}
+            {m.notes && <span title={m.notes} style={{ color: '#dc2626', fontWeight: 600 }}>⚠ {m.notes.slice(0, 40)}{m.notes.length > 40 ? '…' : ''}</span>}
+          </div>
+        </div>
       </div>
 
-      {/* Identification + description */}
-      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: '#111827' }}>
-            #{m.stkNumero}
-          </span>
-          {m.workOrder && (
-            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>
-              W/O {m.workOrder}
-            </span>
-          )}
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: statutCfg.bg, color: statutCfg.color, textTransform: 'uppercase' }}>
-            {statutCfg.label}
-          </span>
-          {m.etatCommercial && (
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e' }}>
-              {m.etatCommercial}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 13, color: '#374151', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {m.marque && <span style={{ color: '#7c3aed', fontWeight: 800 }}>{m.marque}</span>}
-          {m.modele && <span>{m.modele}</span>}
-          {m.serie && <span style={{ color: '#6b7280', fontSize: 11, fontFamily: 'monospace' }}>{m.serie}</span>}
-          {m.annee && <span style={{ color: '#6b7280', fontSize: 11 }}>({m.annee})</span>}
-          {m.epa && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af', fontWeight: 700 }}>{m.epa}</span>}
-          {m.ghg && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{m.ghg}</span>}
-          {m.puissanceHp && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, fontFamily: 'monospace' }}>{m.puissanceHp} HP</span>}
-          {m.codeMoteur && <span style={{ fontSize: 10, color: '#9ca3af' }}>· {m.codeMoteur}</span>}
-          {!m.marque && !m.modele && !m.descriptionMoteur && <em style={{ color: '#9ca3af' }}>Pas de description</em>}
-          {!m.marque && !m.modele && m.descriptionMoteur && <span>{m.descriptionMoteur}</span>}
-        </div>
-        <div style={{ fontSize: 11, color: '#9ca3af', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <span>{PROPRIO_LABEL[m.proprietaire]}{m.nomClient ? ` · ${m.nomClient}` : ''}</span>
-          {m.notes && <span title={m.notes} style={{ color: '#dc2626', fontWeight: 600 }}>⚠ {m.notes.slice(0, 60)}{m.notes.length > 60 ? '…' : ''}</span>}
-        </div>
-
-        {/* Mobile : résumé étape + progression + emplacement en bas */}
-        {mobile && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, paddingTop: 6, borderTop: '1px solid #f1f5f9' }}>
-            {etapeShown && etapeMeta && (
-              <div style={{ fontSize: 11, fontWeight: 600, color: etapeMeta.color }}>
-                {enCours ? '🚛 ' : '⏭ '}{etapeMeta.icon} {etapeMeta.label}
+      {/* Étape + Progression + Emplacement (desktop seulement) */}
+      {!mobile && (
+        <>
+          <div style={{ flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* Étape */}
+            <div style={{ minWidth: 180, flex: 1 }}>
+              <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                Étape
               </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ flex: 1, height: 4, borderRadius: 2, background: '#e5e7eb', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#f59e0b' }} />
+              {etapeShown && etapeMeta ? (
+                <div style={{ fontSize: 12, fontWeight: 700, color: etapeMeta.color }}>
+                  {enCours ? '🚛 ' : '⏭ '}{etapeMeta.icon} {etapeMeta.label}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: m.statut === 'pret' ? '#22c55e' : '#9ca3af', fontWeight: 700 }}>
+                  {m.statut === 'pret' ? '✅ Toutes faites' : '—'}
+                </div>
+              )}
+            </div>
+
+            {/* Progression */}
+            <div style={{ minWidth: 110 }}>
+              <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                Progression
               </div>
-              <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#374151' }}>{pct}%</span>
+              <div style={{ width: 100, height: 5, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#f59e0b' }} />
+              </div>
+              <div style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#374151', marginTop: 2 }}>
+                {pct}% · {restantes.length} reste
+              </div>
             </div>
-            {slot && (
-              <div style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700 }}>📍 {slot.label}</div>
-            )}
-          </div>
-        )}
-      </div>
 
-      {/* Desktop : Étape en cours / prochaine */}
-      {!mobile && <div style={{ minWidth: 160, textAlign: 'right' }}>
-        {etapeShown && etapeMeta ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {enCours ? '🚛 En cours' : '⏭ Prochaine'}
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: etapeMeta.color }}>
-              {etapeMeta.icon} {etapeMeta.label}
+            {/* Emplacement */}
+            <div style={{ minWidth: 140 }}>
+              <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                Emplacement
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: slot ? COULEUR_MOTEUR : '#9ca3af' }}>
+                {slot ? `📍 ${slot.label}` : '— Aucun'}
+              </div>
             </div>
           </div>
-        ) : (
-          <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>
-            {m.statut === 'pret' ? '✅ Toutes étapes faites' : '—'}
-          </div>
-        )}
-      </div>}
+        </>
+      )}
 
-      {/* Desktop : Progression */}
-      {!mobile && <div style={{ minWidth: 110, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-        <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Progression
+      {/* Mobile : étape + progression + emplacement empilés à droite */}
+      {mobile && (
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 12px', borderLeft: '1px solid #f1f5f9', minWidth: 90, gap: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', fontFamily: 'monospace' }}>{pct}%</div>
+          {etapeMeta && (
+            <div style={{ fontSize: 10, color: etapeMeta.color, fontWeight: 600 }}>
+              {etapeMeta.icon}
+            </div>
+          )}
+          {slot && (
+            <div style={{ fontSize: 9, color: COULEUR_MOTEUR, fontWeight: 700 }}>📍 {slot.label.slice(0, 8)}</div>
+          )}
         </div>
-        <div style={{ width: 100, height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#f59e0b' }} />
-        </div>
-        <div style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#374151' }}>
-          {pct}% · {restantes.length} restante{restantes.length > 1 ? 's' : ''}
-        </div>
-      </div>}
-
-      {/* Desktop : Emplacement */}
-      {!mobile && <div style={{ minWidth: 130, textAlign: 'right' }}>
-        <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Emplacement
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: slot ? '#7c3aed' : '#9ca3af' }}>
-          {slot ? `📍 ${slot.label}` : '—'}
-        </div>
-        {ENGINE_ZONES.find(z => z.id === slot?.zone) && (
-          <div style={{ fontSize: 10, color: '#9ca3af' }}>
-            {ENGINE_ZONES.find(z => z.id === slot?.zone)?.label}
-          </div>
-        )}
-      </div>}
+      )}
     </div>
   );
 }
