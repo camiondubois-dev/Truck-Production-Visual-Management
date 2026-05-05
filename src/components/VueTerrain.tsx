@@ -975,11 +975,27 @@ function VueTerrainMain() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [showCreation, setShowCreation] = useState(false);
   const [showReservoirs, setShowReservoirs] = useState(false);
-  const [showLivraisons, setShowLivraisons] = useState(false);
-  const [showMoteurs, setShowMoteurs]       = useState(false);
-  // Suivi Vente s'ouvre par défaut au chargement de /terrain (demande équipe)
-  const [showSuiviVente, setShowSuiviVente] = useState(true);
+  // Module actif persisté pour survivre au refresh (par défaut suivi-vente)
+  const initialModule = (() => {
+    try {
+      const saved = localStorage.getItem('terrain_module');
+      if (saved === 'livraisons' || saved === 'moteurs' || saved === 'suivi-vente' || saved === 'inventaire') return saved;
+    } catch { /* ignore */ }
+    return 'suivi-vente';
+  })();
+  const [showLivraisons, setShowLivraisons] = useState(initialModule === 'livraisons');
+  const [showMoteurs, setShowMoteurs]       = useState(initialModule === 'moteurs');
+  const [showSuiviVente, setShowSuiviVente] = useState(initialModule === 'suivi-vente');
   const [previousModule, setPreviousModule] = useState<'livraisons' | 'suivi-vente' | 'moteurs' | null>(null);
+
+  // Persiste le module courant dès qu'il change
+  useEffect(() => {
+    let mod = 'inventaire';
+    if (showSuiviVente) mod = 'suivi-vente';
+    else if (showLivraisons) mod = 'livraisons';
+    else if (showMoteurs) mod = 'moteurs';
+    try { localStorage.setItem('terrain_module', mod); } catch { /* ignore */ }
+  }, [showSuiviVente, showLivraisons, showMoteurs]);
 
   const charger = async () => {
     const { data } = await supabase

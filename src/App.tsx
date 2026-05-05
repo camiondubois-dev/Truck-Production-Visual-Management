@@ -24,10 +24,25 @@ import { supabase } from './lib/supabase';
 
 type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive' | 'tv-admin';
 
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','prets','livraisons','suivi-vente','moteurs','inventaire','reservoirs','baseclients','analyse','archive','tv-admin'];
+const LS_TAB_KEY = 'app_current_tab';
+
 export default function App() {
   const { profile, loading } = useAuth();
-  const [currentTab, setCurrentTab] = useState<Tab>('livraisons');
+  const [currentTab, setCurrentTab] = useState<Tab>(() => {
+    try {
+      const saved = localStorage.getItem(LS_TAB_KEY);
+      if (saved && (VALID_TABS as string[]).includes(saved)) return saved as Tab;
+    } catch { /* ignore */ }
+    return 'livraisons';
+  });
   const [showWizard, setShowWizard] = useState(false);
+
+  // Persiste l'onglet courant pour survivre au refresh
+  const handleTabChange = (id: string) => {
+    setCurrentTab(id as Tab);
+    try { localStorage.setItem(LS_TAB_KEY, id); } catch { /* ignore */ }
+  };
 
   if (loading) {
     return (
@@ -75,7 +90,7 @@ export default function App() {
     <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0f0e0b' }}>
       <Navigation
         currentTab={currentTab}
-        onTabChange={(id) => setCurrentTab(id as Tab)}
+        onTabChange={handleTabChange}
         onNouveau={currentTab === 'plancher' ? () => setShowWizard(true) : undefined}
       />
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
