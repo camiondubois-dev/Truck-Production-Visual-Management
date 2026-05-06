@@ -372,8 +372,10 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
     else { setSortCol(col); setSortDir('desc'); }
   }
 
+  const stickyTh: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 2, background: '#0f0e0b' };
+
   const Th = ({ col, label }: { col: string; label: string }) => (
-    <th onClick={() => toggleSort(col)} style={{ padding: '10px 12px', textAlign: 'right', color: sortCol === col ? '#f59e0b' : 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
+    <th onClick={() => toggleSort(col)} style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: sortCol === col ? '#f59e0b' : 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
       {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
     </th>
   );
@@ -429,10 +431,10 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Stock #</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Marque</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Modèle</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Type</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Stock #</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Marque</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Modèle</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Type</th>
               <Th col="annee_fiscale" label="AF" />
               <Th col="prix_achat_reel" label="Coût achat" />
               <Th col="cout_mo" label="M.O." />
@@ -622,8 +624,10 @@ function VueInventaire({
     else { setSortCol(col); setSortDir('desc'); }
   }
 
+  const stickyTh: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 2, background: '#0f0e0b' };
+
   const Th = ({ col, label, right = true }: { col: string; label: string; right?: boolean }) => (
-    <th onClick={() => toggleSort(col)} style={{ padding: '10px 12px', textAlign: right ? 'right' : 'left', color: sortCol === col ? '#f59e0b' : 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
+    <th onClick={() => toggleSort(col)} style={{ ...stickyTh, padding: '10px 12px', textAlign: right ? 'right' : 'left', color: sortCol === col ? '#f59e0b' : 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
       {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
     </th>
   );
@@ -726,7 +730,7 @@ function VueInventaire({
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <th style={{ padding: '10px 12px', width: 36 }}>
+              <th style={{ ...stickyTh, padding: '10px 12px', width: 36 }}>
                 <input
                   type="checkbox"
                   checked={filtered.length > 0 && selected.size === filtered.length}
@@ -736,22 +740,22 @@ function VueInventaire({
                 />
               </th>
               <Th col="stock_numero" label="# INV" right={false} />
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Marque</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Modèle</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Marque</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Modèle</th>
               <Th col="annee" label="Année" />
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Type</th>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Type</th>
               <Th col="age_jours" label="Âge (j)" />
-              <th style={{ padding: '10px 12px', textAlign: 'right', color: '#a78bfa', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: '#a78bfa', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
                 Coût achat 💾
               </th>
               <Th col="cout_total_depense" label="M.O.+Pièces" />
-              <th style={{ padding: '10px 12px', textAlign: 'right', color: '#f59e0b', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: '#f59e0b', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
                 Coûts à venir ✏️
               </th>
-              <th style={{ padding: '10px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.6)', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.6)', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
                 Coût total
               </th>
-              <th style={{ padding: '10px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
+              <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                 Prix demandé 💾
               </th>
               <Th col="profit_proj" label="Profit projeté" />
