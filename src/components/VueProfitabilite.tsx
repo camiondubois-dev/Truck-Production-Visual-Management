@@ -427,7 +427,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 520px)', minHeight: 200 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -726,7 +726,7 @@ function VueInventaire({
       )}
 
       {/* Tableau */}
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 340px)', minHeight: 200 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
