@@ -370,8 +370,10 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
 
   const parType = useMemo(() => {
     const typeColor: Record<string, string> = {
-      'Encan': '#ef4444', 'Exportation': '#3b82f6',
-      'Camion a eau': '#0ea5e9', 'Vente detail': '#22c55e',
+      'Encan':       '#ef4444',  // rouge
+      'Exportation': '#f59e0b',  // ambre
+      'Camion a eau':'#06b6d4',  // cyan (eau)
+      'Vente detail':'#22c55e',  // vert
     };
     const map: Record<string, { vente: number; profit: number; nb: number }> = {};
     filtered.forEach(r => {
@@ -475,10 +477,18 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         {/* ── 2. Par type de vente — donut + légende ── */}
         <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Par type de vente</div>
-          <ResponsiveContainer width="100%" height={130}>
+          <ResponsiveContainer width="100%" height={168}>
             <PieChart>
-              <Pie data={parType} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="vente" paddingAngle={3} strokeWidth={0}>
-                {parType.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie
+                data={parType} cx="50%" cy="50%"
+                innerRadius={54} outerRadius={78}
+                dataKey="vente" paddingAngle={4} strokeWidth={0}
+                onClick={(d) => setFType(fType === d.name ? '' : d.name)}
+                style={{ cursor: 'pointer' }}
+              >
+                {parType.map((e, i) => (
+                  <Cell key={i} fill={e.color} fillOpacity={fType && fType !== e.name ? 0.25 : 1} />
+                ))}
               </Pie>
               <Tooltip cursor={false} content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
@@ -496,13 +506,20 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
               }} />
             </PieChart>
           </ResponsiveContainer>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10, flex: 1, justifyContent: 'center' }}>
-            {parType.sort((a, b) => b.vente - a.vente).map(t => (
-              <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
-                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 600 }}>{fmt$(t.vente)}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: t.profit >= 0 ? '#22c55e' : '#ef4444', minWidth: 68, textAlign: 'right' }}>{fmt$(t.profit)}</span>
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 9, marginTop: -4, marginBottom: 6, letterSpacing: '0.04em' }}>
+            CLIQUER POUR FILTRER
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, justifyContent: 'center' }}>
+            {[...parType].sort((a, b) => b.vente - a.vente).map(t => (
+              <div
+                key={t.name}
+                onClick={() => setFType(fType === t.name ? '' : t.name)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 6, padding: '3px 4px', background: fType === t.name ? `${t.color}18` : 'transparent', transition: 'background 0.15s', opacity: fType && fType !== t.name ? 0.4 : 1 }}
+              >
+                <div style={{ width: 8, height: 8, borderRadius: 2, background: t.color, flexShrink: 0 }} />
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: 600 }}>{fmt$(t.vente)}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: t.profit >= 0 ? '#22c55e' : '#ef4444', minWidth: 72, textAlign: 'right' }}>{fmt$(t.profit)}</span>
               </div>
             ))}
           </div>
@@ -531,7 +548,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
                     </div>
                   );
                 }} />
-                <Bar dataKey="vente" fill="#f59e0b" fillOpacity={0.82} radius={[4, 4, 0, 0]} maxBarSize={36}>
+                <Bar dataKey="vente" fill="#f59e0b" fillOpacity={0.82} radius={[4, 4, 0, 0]} barSize={44}>
                   <LabelList dataKey="nb" position="top" style={{ fill: 'rgba(255,255,255,0.35)', fontSize: 9, fontWeight: 700 }} />
                 </Bar>
               </BarChart>
@@ -558,7 +575,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
                     </div>
                   );
                 }} />
-                <Bar dataKey="profit" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                <Bar dataKey="profit" radius={[4, 4, 0, 0]} barSize={44}>
                   {parAnnee.map((e, i) => <Cell key={i} fill={e.profit >= 0 ? '#22c55e' : '#ef4444'} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
