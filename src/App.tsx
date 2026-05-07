@@ -5,13 +5,10 @@ import { VueDepartement } from './components/VueDepartement';
 import { Navigation } from './components/Navigation';
 import { PlancherView } from './components/PlancherView';
 import { VueCamionsEau } from './components/VueCamionsEau';
-import { VueClientsExternes } from './components/VueClientsExternes';
 import { VueCamionsDetail } from './components/VueCamionsDetail';
 import { VueInventaire } from './components/VueInventaire';
 import { VueArchive } from './components/VueArchive';
-import { VueClients } from './components/VueClients';
 import { VueReservoirs } from './components/VueReservoirs';
-import { VuePrets } from './components/VuePrets';
 import { VueLivraisons } from './components/VueLivraisons';
 import { VueSuiviVente } from './components/VueSuiviVente';
 import { VueMoteurs } from './components/VueMoteurs';
@@ -19,12 +16,14 @@ import { VueAnalyse } from './components/VueAnalyse';
 import { VueTV } from './components/VueTV';
 import { TVConnexion } from './components/TVConnexion';
 import { VueAdminTV } from './components/VueAdminTV';
+import { VueImport } from './components/VueImport';
+import { VueProfitabilite } from './components/VueProfitabilite';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'prets' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'baseclients' | 'analyse' | 'archive' | 'tv-admin';
+type Tab = 'plancher' | 'eau' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','prets','livraisons','suivi-vente','moteurs','inventaire','reservoirs','baseclients','analyse','archive','tv-admin'];
+const VALID_TABS: Tab[] = ['plancher','eau','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -94,20 +93,20 @@ export default function App() {
         onNouveau={currentTab === 'plancher' ? () => setShowWizard(true) : undefined}
       />
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-        {currentTab === 'plancher'    && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
-        {currentTab === 'eau'         && <VueCamionsEau />}
-        {currentTab === 'clients'     && <VueClientsExternes />}
-        {currentTab === 'detail'      && <VueCamionsDetail />}
-        {currentTab === 'prets'       && <VuePrets />}
-        {currentTab === 'livraisons'  && <VueLivraisons />}
-        {currentTab === 'suivi-vente' && <VueSuiviVente />}
-        {currentTab === 'moteurs'     && <VueMoteurs />}
-        {currentTab === 'inventaire'  && <VueInventaire />}
-        {currentTab === 'reservoirs'  && <VueReservoirs />}
-        {currentTab === 'baseclients' && <VueClients />}
-        {currentTab === 'analyse'     && <VueAnalyse />}
-        {currentTab === 'archive'     && <VueArchive />}
-        {currentTab === 'tv-admin'    && <VueAdminTV />}
+        {currentTab === 'plancher'      && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
+        {currentTab === 'eau'           && <VueCamionsEau />}
+        {currentTab === 'detail'        && <VueCamionsDetail />}
+        {currentTab === 'livraisons'    && <VueLivraisons />}
+        {currentTab === 'suivi-vente'   && <VueSuiviVente />}
+        {currentTab === 'moteurs'       && <VueMoteurs />}
+        {currentTab === 'inventaire'    && <VueInventaire />}
+        {currentTab === 'reservoirs'    && <VueReservoirs />}
+        {currentTab === 'archive'       && <VueArchive />}
+        {/* Administration — gestion seulement */}
+        {currentTab === 'analyse'       && <VueAnalyse />}
+        {currentTab === 'tv-admin'      && <VueAdminTV />}
+        {currentTab === 'import'        && <VueImport />}
+        {currentTab === 'profitabilite' && <VueProfitabilite />}
       </div>
     </div>
   );
