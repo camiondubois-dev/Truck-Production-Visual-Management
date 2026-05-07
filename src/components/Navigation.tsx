@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useGarage } from '../hooks/useGarage';
 import { EauIcon } from './EauIcon';
@@ -12,34 +12,50 @@ interface NavigationProps {
 }
 
 const TABS = [
-  { id: 'plancher',    label: 'Vue Plancher',   icon: '🏭' },
-  { id: 'eau',         label: 'Camions à eau',  icon: 'EAU_LOGO', color: '#f97316' },
-  { id: 'clients',     label: 'Jobs clients',   icon: '🔧',       color: '#3b82f6' },
-  { id: 'detail',      label: 'Camions détail', icon: '🏷️',       color: '#22c55e' },
-  { id: 'prets',       label: 'Prêts',          icon: '✅',        color: '#22c55e' },
-  { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',     color: '#dc2626' },
-  { id: 'suivi-vente', label: 'Suivi vente',    icon: '🛒',       color: '#0ea5e9' },
-  { id: 'moteurs',     label: 'Moteurs',        icon: '🛠️',      color: '#7c3aed' },
-  { id: 'inventaire',  label: 'Inventaire',     icon: '📋',       color: '#1e293b' },
-  { id: 'reservoirs',  label: 'Réservoirs',     icon: '🛢',       color: '#0ea5e9' },
-  { id: 'baseclients', label: 'Clients',        icon: '👤',       color: '#6366f1' },
-  { id: 'analyse',     label: 'Analyse',        icon: '📊',       color: '#8b5cf6' },
-  { id: 'archive',     label: 'Archive',        icon: '📦',       color: '#6b7280' },
+  { id: 'plancher',    label: 'Vue Plancher',     icon: '🏭' },
+  { id: 'eau',         label: 'Camions à eau',    icon: 'EAU_LOGO', color: '#f97316' },
+  { id: 'detail',      label: 'Camions détail',   icon: '🏷️',       color: '#22c55e' },
+  { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',       color: '#dc2626' },
+  { id: 'suivi-vente', label: 'Suivi vente',      icon: '🛒',       color: '#0ea5e9' },
+  { id: 'moteurs',     label: 'Moteurs',          icon: '🛠️',      color: '#7c3aed' },
+  { id: 'inventaire',  label: 'Inventaire',       icon: '📋',       color: '#1e293b' },
+  { id: 'reservoirs',  label: 'Réservoirs',       icon: '🛢',       color: '#0ea5e9' },
+  { id: 'archive',     label: 'Archive',          icon: '📦',       color: '#6b7280' },
 ];
 
-const TV_TAB = { id: 'tv-admin', label: 'TV', icon: '📺', color: '#f97316' };
+const ADMIN_TABS = [
+  { id: 'analyse',       label: 'Analyse',         icon: '📊', color: '#8b5cf6' },
+  { id: 'tv-admin',      label: 'Modifications TV', icon: '📺', color: '#f97316' },
+  { id: 'import',        label: 'Import',           icon: '📥', color: '#f59e0b' },
+  { id: 'profitabilite', label: 'Profitabilité',    icon: '💹', color: '#22c55e' },
+];
 
 export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationProps) {
   const { deconnexion, profile } = useAuth();
   const { items } = useGarage();
-
-  const pretsCount = items.filter(i => i.etat !== 'termine' && toutesEtapesCompletees(i)).length;
+  const adminRef = useRef<HTMLDivElement>(null);
 
   const [now, setNow] = useState(() => new Date());
+  const [showAdmin, setShowAdmin] = useState(false);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fermer le menu admin si clic en dehors
+  useEffect(() => {
+    if (!showAdmin) return;
+    const handler = (e: MouseEvent) => {
+      if (adminRef.current && !adminRef.current.contains(e.target as Node)) {
+        setShowAdmin(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAdmin]);
+
+  const isAdminTab = ADMIN_TABS.some(t => t.id === currentTab);
 
   return (
     <div style={{
@@ -75,57 +91,89 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
       </div>
 
       {/* Onglets — zone scrollable, prend l'espace disponible */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 4,
-        flex: 1, overflow: 'hidden',
-      }}>
-        {[...TABS, ...(profile?.role === 'gestion' ? [TV_TAB] : [])].map((tab) => {
-          const count = tab.id === 'prets' ? pretsCount : undefined;
-          return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, overflow: 'hidden' }}>
+
+        {/* Onglets principaux */}
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '7px 12px',
+              background: currentTab === tab.id ? (tab.color ? `${tab.color}20` : 'rgba(255,255,255,0.08)') : 'transparent',
+              border: currentTab === tab.id ? `1px solid ${tab.color || 'rgba(255,255,255,0.15)'}` : '1px solid transparent',
+              borderRadius: 8,
+              color: currentTab === tab.id ? (tab.color || '#ffffff') : 'rgba(255,255,255,0.5)',
+              cursor: 'pointer', fontFamily: 'system-ui, sans-serif',
+              fontSize: 13, fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { if (currentTab !== tab.id) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; } }}
+            onMouseLeave={e => { if (currentTab !== tab.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
+          >
+            {tab.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 15 }}>{tab.icon}</span>}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+
+        {/* ── Menu Administration (gestion seulement) ── */}
+        {profile?.role === 'gestion' && (
+          <div ref={adminRef} style={{ position: 'relative', flexShrink: 0 }}>
             <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => setShowAdmin(v => !v)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 12px',
-                background: currentTab === tab.id ? (tab.color ? `${tab.color}20` : 'rgba(255,255,255,0.08)') : 'transparent',
-                border: currentTab === tab.id ? `1px solid ${tab.color || 'rgba(255,255,255,0.15)'}` : '1px solid transparent',
+                background: isAdminTab ? '#6366f120' : showAdmin ? 'rgba(255,255,255,0.06)' : 'transparent',
+                border: isAdminTab ? '1px solid #6366f1' : showAdmin ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
                 borderRadius: 8,
-                color: currentTab === tab.id ? (tab.color || '#ffffff') : 'rgba(255,255,255,0.5)',
-                cursor: 'pointer',
-                fontFamily: 'system-ui, sans-serif',
-                fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                if (currentTab !== tab.id) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (currentTab !== tab.id) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.borderColor = 'transparent';
-                }
+                color: isAdminTab ? '#6366f1' : 'rgba(255,255,255,0.5)',
+                cursor: 'pointer', fontFamily: 'system-ui, sans-serif',
+                fontSize: 13, fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap',
               }}
             >
-              {tab.icon === 'EAU_LOGO' ? <EauIcon /> : <span style={{ fontSize: 15 }}>{tab.icon}</span>}
-              <span>{tab.label}</span>
-              {count !== undefined && count > 0 && (
-                <span style={{
-                  background: currentTab === tab.id ? tab.color : '#22c55e',
-                  color: 'white',
-                  fontSize: 11, fontWeight: 700,
-                  padding: '2px 6px', borderRadius: 10,
-                  minWidth: 18, textAlign: 'center',
-                }}>
-                  {count}
-                </span>
-              )}
+              <span style={{ fontSize: 15 }}>⚙️</span>
+              <span>Administration</span>
+              <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>{showAdmin ? '▲' : '▼'}</span>
             </button>
-          );
-        })}
+
+            {/* Dropdown */}
+            {showAdmin && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', left: 0,
+                background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 10, padding: 6, zIndex: 200,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                minWidth: 190,
+              }}>
+                {ADMIN_TABS.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { onTabChange(tab.id); setShowAdmin(false); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      width: '100%', padding: '9px 12px', borderRadius: 7,
+                      background: currentTab === tab.id ? `${tab.color}20` : 'transparent',
+                      border: 'none',
+                      color: currentTab === tab.id ? tab.color : 'rgba(255,255,255,0.65)',
+                      cursor: 'pointer', fontFamily: 'system-ui, sans-serif',
+                      fontSize: 13, fontWeight: currentTab === tab.id ? 700 : 500,
+                      textAlign: 'left', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { if (currentTab !== tab.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                    onMouseLeave={e => { if (currentTab !== tab.id) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <span style={{ fontSize: 15 }}>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    {currentTab === tab.id && (
+                      <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: tab.color, display: 'inline-block' }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Droite — nouveau + horloge + déconnexion, toujours visible */}
