@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  ComposedChart, Line, Legend,
+  PieChart, Pie, LabelList,
 } from 'recharts';
 import { supabase } from '../lib/supabase';
 
@@ -444,75 +444,126 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         <KpiCard label="Marge de profit" value={fmtPct(margeMoy)} color={profitColor(margeMoy)} />
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'stretch' }}>
 
-        {/* ── Graphique 1 : Profit par marque (1/3) ── */}
-        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Profit / Marque</div>
-          <ResponsiveContainer width="100%" height={190}>
-            <BarChart data={profitParMarque} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
-              <Tooltip contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} formatter={(v: number) => [fmt$(v), 'Profit']} />
-              <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
-                {profitParMarque.map((e, i) => <Cell key={i} fill={e.profit >= 0 ? '#f59e0b' : '#ef4444'} />)}
+        {/* ── 1. Profit / Marque — barres horizontales ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Profit / Marque</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart layout="vertical" data={profitParMarque} margin={{ top: 0, right: 52, left: 4, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 11 }} width={76} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const v = payload[0].value as number;
+                return (
+                  <div style={{ background: 'rgba(8,7,5,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 28px rgba(0,0,0,0.65)', fontSize: 12 }}>
+                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 4 }}>{payload[0].payload.name}</div>
+                    <div style={{ color: v >= 0 ? '#f59e0b' : '#ef4444', fontWeight: 800, fontSize: 15 }}>{fmt$(v)}</div>
+                  </div>
+                );
+              }} />
+              <Bar dataKey="profit" radius={[0, 5, 5, 0]} maxBarSize={16}>
+                <LabelList dataKey="profit" position="right" style={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} formatter={(v: number) => `${Math.round(v / 1000)}k`} />
+                {profitParMarque.map((e, i) => <Cell key={i} fill={e.profit >= 0 ? '#f59e0b' : '#ef4444'} fillOpacity={0.88} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* ── Graphique 2 : Par type de vente (1/3) ── */}
-        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Par type de vente</div>
-          <ResponsiveContainer width="100%" height={190}>
-            <BarChart data={parType} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
-              <Tooltip
-                contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }}
-                formatter={(v: number, name: string) => [fmt$(v), name === 'vente' ? 'Vente totale' : 'Profit']}
-                labelFormatter={(label, payload) => {
-                  const nb = payload?.[0]?.payload?.nb ?? 0;
-                  return `${label} — ${nb} vente${nb > 1 ? 's' : ''}`;
-                }}
-              />
-              <Legend formatter={v => v === 'vente' ? 'Vente totale' : 'Profit'} wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }} />
-              <Bar dataKey="vente" radius={[3, 3, 0, 0]}>
-                {parType.map((e, i) => <Cell key={i} fill={e.color} fillOpacity={0.7} />)}
-              </Bar>
-              <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
+        {/* ── 2. Par type de vente — donut + légende ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Par type de vente</div>
+          <ResponsiveContainer width="100%" height={130}>
+            <PieChart>
+              <Pie data={parType} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="vente" paddingAngle={3} strokeWidth={0}>
                 {parType.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Bar>
-            </BarChart>
+              </Pie>
+              <Tooltip cursor={false} content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0].payload;
+                const marge = d.vente > 0 ? ((d.profit / d.vente) * 100).toFixed(1) : '—';
+                return (
+                  <div style={{ background: 'rgba(8,7,5,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 28px rgba(0,0,0,0.65)', fontSize: 12, minWidth: 170 }}>
+                    <div style={{ color: d.color, fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{d.name}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Vente totale</span><span style={{ fontWeight: 700 }}>{fmt$(d.vente)}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Profit</span><span style={{ fontWeight: 700, color: d.profit >= 0 ? '#22c55e' : '#ef4444' }}>{fmt$(d.profit)}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Marge</span><span style={{ fontWeight: 700, color: d.profit >= 0 ? '#22c55e' : '#ef4444' }}>{marge} %</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Nb ventes</span><span style={{ fontWeight: 700 }}>{d.nb}</span></div>
+                  </div>
+                );
+              }} />
+            </PieChart>
           </ResponsiveContainer>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10, flex: 1, justifyContent: 'center' }}>
+            {parType.sort((a, b) => b.vente - a.vente).map(t => (
+              <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 600 }}>{fmt$(t.vente)}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: t.profit >= 0 ? '#22c55e' : '#ef4444', minWidth: 68, textAlign: 'right' }}>{fmt$(t.profit)}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* ── Graphique 3 : Par année fiscale — double axe (1/3) ── */}
-        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Par année fiscale</div>
-          <ResponsiveContainer width="100%" height={190}>
-            <ComposedChart data={parAnnee} margin={{ top: 2, right: 36, left: 0, bottom: 2 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="annee" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
-              <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: '#22c55e', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={36} />
-              <Tooltip
-                contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }}
-                formatter={(v: number, name: string) => [
-                  name === 'nb' ? `${v} vente${v > 1 ? 's' : ''}` : fmt$(v),
-                  name === 'vente' ? 'Vente totale' : name === 'profit' ? 'Profit total' : 'Nb ventes',
-                ]}
-                labelFormatter={label => `Année fiscale ${label}`}
-              />
-              <Legend formatter={v => v === 'vente' ? 'Vente totale' : 'Profit total'} wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }} />
-              <Bar yAxisId="left" dataKey="vente" fill="#f59e0b" fillOpacity={0.75} radius={[3, 3, 0, 0]}
-                label={{ position: 'top', formatter: (v: number, entry: { payload?: { nb?: number } }) => entry?.payload?.nb ?? '', fill: 'rgba(255,255,255,0.35)', fontSize: 10 }}
-              />
-              <Line yAxisId="right" type="monotone" dataKey="profit" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 3 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
+        {/* ── 3. Par année fiscale — 2 mini-graphiques ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Par année fiscale</div>
+
+          {/* Vente totale */}
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vente totale · nb</div>
+            <ResponsiveContainer width="100%" height={100}>
+              <BarChart data={parAnnee} margin={{ top: 16, right: 6, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis dataKey="annee" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div style={{ background: 'rgba(8,7,5,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 28px rgba(0,0,0,0.65)', fontSize: 12 }}>
+                      <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>AF {label}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Vente totale</span><span style={{ fontWeight: 700, color: '#f59e0b' }}>{fmt$(d.vente)}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Nb ventes</span><span style={{ fontWeight: 700 }}>{d.nb}</span></div>
+                    </div>
+                  );
+                }} />
+                <Bar dataKey="vente" fill="#f59e0b" fillOpacity={0.82} radius={[4, 4, 0, 0]} maxBarSize={36}>
+                  <LabelList dataKey="nb" position="top" style={{ fill: 'rgba(255,255,255,0.35)', fontSize: 9, fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Profit total */}
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Profit total</div>
+            <ResponsiveContainer width="100%" height={90}>
+              <BarChart data={parAnnee} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis dataKey="annee" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  const marge = d.vente > 0 ? ((d.profit / d.vente) * 100).toFixed(1) : '—';
+                  return (
+                    <div style={{ background: 'rgba(8,7,5,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 14px', boxShadow: '0 8px 28px rgba(0,0,0,0.65)', fontSize: 12 }}>
+                      <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>AF {label}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Profit total</span><span style={{ fontWeight: 700, color: d.profit >= 0 ? '#22c55e' : '#ef4444' }}>{fmt$(d.profit)}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 3 }}><span style={{ color: 'rgba(255,255,255,0.4)' }}>Marge</span><span style={{ fontWeight: 700, color: d.profit >= 0 ? '#22c55e' : '#ef4444' }}>{marge} %</span></div>
+                    </div>
+                  );
+                }} />
+                <Bar dataKey="profit" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                  {parAnnee.map((e, i) => <Cell key={i} fill={e.profit >= 0 ? '#22c55e' : '#ef4444'} fillOpacity={0.85} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
       </div>
