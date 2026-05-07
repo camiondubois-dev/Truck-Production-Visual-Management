@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ComposedChart, Line, Legend,
 } from 'recharts';
 import { supabase } from '../lib/supabase';
 
@@ -364,7 +365,40 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
     return Object.entries(map)
       .map(([name, profit]) => ({ name, profit: Math.round(profit) }))
       .sort((a, b) => Math.abs(b.profit) - Math.abs(a.profit))
-      .slice(0, 12);
+      .slice(0, 10);
+  }, [filtered]);
+
+  const parType = useMemo(() => {
+    const typeColor: Record<string, string> = {
+      'Encan': '#ef4444', 'Exportation': '#3b82f6',
+      'Camion a eau': '#0ea5e9', 'Vente detail': '#22c55e',
+    };
+    const map: Record<string, { vente: number; profit: number; nb: number }> = {};
+    filtered.forEach(r => {
+      const t = r.type_vente_label;
+      if (!map[t]) map[t] = { vente: 0, profit: 0, nb: 0 };
+      map[t].vente += r.prix_vente ?? 0;
+      map[t].profit += r.marge_profit ?? 0;
+      map[t].nb += 1;
+    });
+    return Object.entries(map).map(([name, v]) => ({
+      name, color: typeColor[name] ?? '#9ca3af',
+      vente: Math.round(v.vente), profit: Math.round(v.profit), nb: v.nb,
+    }));
+  }, [filtered]);
+
+  const parAnnee = useMemo(() => {
+    const map: Record<string, { vente: number; profit: number; nb: number }> = {};
+    filtered.forEach(r => {
+      const a = String(r.annee_fiscale);
+      if (!map[a]) map[a] = { vente: 0, profit: 0, nb: 0 };
+      map[a].vente += r.prix_vente ?? 0;
+      map[a].profit += r.marge_profit ?? 0;
+      map[a].nb += 1;
+    });
+    return Object.entries(map)
+      .map(([annee, v]) => ({ annee, vente: Math.round(v.vente), profit: Math.round(v.profit), nb: v.nb }))
+      .sort((a, b) => a.annee.localeCompare(b.annee));
   }, [filtered]);
 
   function toggleSort(col: string) {
@@ -410,22 +444,78 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         <KpiCard label="Marge de profit" value={fmtPct(margeMoy)} color={profitColor(margeMoy)} />
       </div>
 
-      {profitParMarque.length > 0 && (
-        <div style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 20px', marginBottom: 24 }}>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Profit $ / Marque</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={profitParMarque} margin={{ top: 4, right: 16, left: 16, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-              <Tooltip contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white' }} formatter={(v: number) => [fmt$(v), 'Profit']} />
-              <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
-                {profitParMarque.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? '#f59e0b' : '#ef4444'} />)}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+
+        {/* ── Graphique 1 : Profit par marque (1/3) ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Profit / Marque</div>
+          <ResponsiveContainer width="100%" height={190}>
+            <BarChart data={profitParMarque} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
+              <Tooltip contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} formatter={(v: number) => [fmt$(v), 'Profit']} />
+              <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
+                {profitParMarque.map((e, i) => <Cell key={i} fill={e.profit >= 0 ? '#f59e0b' : '#ef4444'} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      )}
+
+        {/* ── Graphique 2 : Par type de vente (1/3) ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Par type de vente</div>
+          <ResponsiveContainer width="100%" height={190}>
+            <BarChart data={parType} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
+              <Tooltip
+                contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }}
+                formatter={(v: number, name: string) => [fmt$(v), name === 'vente' ? 'Vente totale' : 'Profit']}
+                labelFormatter={(label, payload) => {
+                  const nb = payload?.[0]?.payload?.nb ?? 0;
+                  return `${label} — ${nb} vente${nb > 1 ? 's' : ''}`;
+                }}
+              />
+              <Legend formatter={v => v === 'vente' ? 'Vente totale' : 'Profit'} wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }} />
+              <Bar dataKey="vente" radius={[3, 3, 0, 0]}>
+                {parType.map((e, i) => <Cell key={i} fill={e.color} fillOpacity={0.7} />)}
+              </Bar>
+              <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
+                {parType.map((e, i) => <Cell key={i} fill={e.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ── Graphique 3 : Par année fiscale — double axe (1/3) ── */}
+        <div style={{ flex: 1, minWidth: 0, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Par année fiscale</div>
+          <ResponsiveContainer width="100%" height={190}>
+            <ComposedChart data={parAnnee} margin={{ top: 2, right: 36, left: 0, bottom: 2 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="annee" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+              <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={38} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fill: '#22c55e', fontSize: 10 }} tickFormatter={v => `${Math.round(v / 1000)}k`} width={36} />
+              <Tooltip
+                contentStyle={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }}
+                formatter={(v: number, name: string) => [
+                  name === 'nb' ? `${v} vente${v > 1 ? 's' : ''}` : fmt$(v),
+                  name === 'vente' ? 'Vente totale' : name === 'profit' ? 'Profit total' : 'Nb ventes',
+                ]}
+                labelFormatter={label => `Année fiscale ${label}`}
+              />
+              <Legend formatter={v => v === 'vente' ? 'Vente totale' : 'Profit total'} wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }} />
+              <Bar yAxisId="left" dataKey="vente" fill="#f59e0b" fillOpacity={0.75} radius={[3, 3, 0, 0]}
+                label={{ position: 'top', formatter: (v: number, entry: { payload?: { nb?: number } }) => entry?.payload?.nb ?? '', fill: 'rgba(255,255,255,0.35)', fontSize: 10 }}
+              />
+              <Line yAxisId="right" type="monotone" dataKey="profit" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+      </div>
 
       <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 520px)', minHeight: 200 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
