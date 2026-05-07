@@ -609,8 +609,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
 
       </div>
 
-      <div style={{ overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>Stock #</th>
@@ -654,7 +653,6 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         {filtered.length === 0 && (
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '24px 12px', textAlign: 'center' }}>Aucun résultat</div>
         )}
-      </div>
     </div>
   );
 }
