@@ -34,6 +34,7 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
   const { deconnexion, profile } = useAuth();
   const { items } = useGarage();
   const adminRef = useRef<HTMLDivElement>(null);
+  const [dropdownLeft, setDropdownLeft] = useState(0);
 
   const [now, setNow] = useState(() => new Date());
   const [showAdmin, setShowAdmin] = useState(false);
@@ -120,7 +121,12 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
         {profile?.role === 'gestion' && (
           <div ref={adminRef} style={{ position: 'relative', flexShrink: 0 }}>
             <button
-              onClick={() => setShowAdmin(v => !v)}
+              onClick={() => {
+                if (adminRef.current) {
+                  setDropdownLeft(adminRef.current.getBoundingClientRect().left);
+                }
+                setShowAdmin(v => !v);
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 12px',
@@ -137,14 +143,14 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
               <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>{showAdmin ? '▲' : '▼'}</span>
             </button>
 
-            {/* Dropdown */}
+            {/* Dropdown — position fixed pour échapper au overflow:hidden de la nav */}
             {showAdmin && (
               <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', left: 0,
+                position: 'fixed', top: 68, left: dropdownLeft,
                 background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 10, padding: 6, zIndex: 200,
+                borderRadius: 10, padding: 6, zIndex: 9999,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-                minWidth: 190,
+                minWidth: 200,
               }}>
                 {ADMIN_TABS.map(tab => (
                   <button
