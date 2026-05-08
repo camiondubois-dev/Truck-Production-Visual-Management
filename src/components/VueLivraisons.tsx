@@ -324,6 +324,23 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         />
       )}
 
+      {/* Bouton X flottant pour quitter le mode TV (toujours visible) */}
+      {tvMode && (
+        <button onClick={toggleTvMode}
+          title="Quitter le mode TV (ESC)"
+          style={{
+            position: 'fixed', top: 16, right: 16, zIndex: 10000,
+            width: 56, height: 56, borderRadius: '50%',
+            background: '#dc2626', border: '3px solid white',
+            color: 'white', fontSize: 22, fontWeight: 900,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
+          }}>
+          ✕
+        </button>
+      )}
+
       {/* Panneau détail (se positionne lui-même en fixed) */}
       {selected && !onSelectVehicule && (
         <PanneauDetailVehicule
