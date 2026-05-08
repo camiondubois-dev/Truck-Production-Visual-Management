@@ -28,7 +28,7 @@ interface CompactBandeauProps {
 
 export function CompactBandeau({ data, dark = false }: CompactBandeauProps) {
   const { prix_achat_reel, cout_mo, cout_total_investi, prix_demande } = data;
-  const total = cout_total_investi ?? ((prix_achat_reel ?? 0) + (cout_mo ?? 0));
+  const total = (prix_achat_reel ?? 0) + (cout_mo ?? 0); // toujours calculé (cout_total_investi DB pas fiable)
   const profit = prix_demande !== null ? prix_demande - total : null;
   const pct = profit !== null && total > 0 ? (profit / prix_demande!) * 100 : null;
 
@@ -98,7 +98,7 @@ interface FullBandeauProps {
 
 export function FullBandeau({ data, onSavePrixDemande, onLocalPrixDemande, dark = false }: FullBandeauProps) {
   const { stock_numero, prix_achat_reel, cout_mo, cout_total_investi, prix_demande } = data;
-  const total = cout_total_investi ?? ((prix_achat_reel ?? 0) + (cout_mo ?? 0));
+  const total = (prix_achat_reel ?? 0) + (cout_mo ?? 0); // toujours calculé (cout_total_investi DB pas fiable)
   const profit = prix_demande !== null ? prix_demande - total : null;
   const pct = profit !== null && total > 0 ? (profit / total) * 100 : null;
 

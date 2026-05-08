@@ -590,7 +590,9 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
 function FinanceCell({ finData }: { finData: FinancialMap[string] }) {
   const achat = finData.prix_achat_reel;
   const mo = finData.cout_mo;
-  const total = finData.cout_total_investi ?? ((achat ?? 0) + (mo ?? 0));
+  // Toujours calculer le total = achat + M.O. (la colonne cout_total_investi
+  // stockée en DB n'est pas fiable, elle peut contenir prix_achat_reel uniquement).
+  const total = (achat ?? 0) + (mo ?? 0);
   const fmt = (n: number | null) => n == null ? '—' : `$${Math.round(n).toLocaleString('fr-CA')}`;
   return (
     <div style={{
