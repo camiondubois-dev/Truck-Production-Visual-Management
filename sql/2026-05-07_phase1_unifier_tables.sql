@@ -1,4 +1,4 @@
--- ════════════════════════════════════════════════════════════════════
+﻿-- ════════════════════════════════════════════════════════════════════
 -- PHASE 1 : Unifier prod_ventes comme table unique (vendus + inventaire)
 -- Date : 2026-05-07
 --
@@ -16,7 +16,7 @@ ALTER TABLE prod_ventes
   ADD COLUMN IF NOT EXISTS statut         text    NOT NULL DEFAULT 'vendu'
                             CHECK (statut IN ('vendu', 'inventaire')),
   ADD COLUMN IF NOT EXISTS prix_demande   decimal(12,2),
-  ADD COLUMN IF NOT EXISTS budget_restant decimal(12,2),
+  ADD COLUMN IF NOT EXISTS cout_total_investi decimal(12,2),
   ADD COLUMN IF NOT EXISTS cout_pieces    decimal(12,2);
 
 -- prix_vente et annee_fiscale peuvent être NULL pour un camion en inventaire
@@ -57,7 +57,7 @@ INSERT INTO prod_ventes (
   annee,
   prix_achat_reel,
   cout_mo,
-  budget_restant,
+  cout_total_investi,
   date_achat
 )
 SELECT
@@ -157,7 +157,7 @@ SELECT
   END                                                            AS age_jours,
   v.prix_achat_reel                                              AS cout_achat,
   COALESCE(v.cout_mo, 0)                                        AS cout_total_depense,
-  v.budget_restant,
+  v.cout_total_investi,
   NULL::decimal                                                  AS projected_deficit,
   NULL::decimal                                                  AS remaining_market,
   v.prix_achat_reel,

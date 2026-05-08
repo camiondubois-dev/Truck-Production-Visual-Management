@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, LabelList, ComposedChart, Line,
@@ -38,7 +38,7 @@ interface InventaireRow {
   age_jours: number | null;
   cout_achat: number;
   cout_total_depense: number | null;
-  budget_restant: number | null;
+  cout_total_investi: number | null;
   projected_deficit: number | null;
   remaining_market: number | null;
   prix_achat_reel: number | null;
