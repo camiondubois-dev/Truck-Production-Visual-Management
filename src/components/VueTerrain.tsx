@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
@@ -13,6 +13,9 @@ import { VueLivraisons } from './VueLivraisons';
 import { VueMoteurs } from './VueMoteurs';
 import { VueSuiviVente } from './VueSuiviVente';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
+import { useAuth } from '../contexts/AuthContext';
+import { useFinancialData } from '../hooks/useFinancialData';
+import { FinanceSection } from './FinancialBandeau';
 
 type FiltreType   = 'tous' | 'eau' | 'detail';
 type FiltreStatut = 'tous' | 'disponibles' | 'prets' | 'vendus';
@@ -424,6 +427,12 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   onClose: () => void;
   onMisAJour: (updated: VehiculeInventaire) => void;
 }) {
+  const { profile } = useAuth();
+  const isGestion = profile?.role === 'gestion';
+  const finStockNumeros = useMemo(() => isGestion && v.numero ? [v.numero] : [], [isGestion, v.numero]);
+  const { dataByNumero: finMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(finStockNumeros);
+  const finData = finMap[v.numero];
+
   const [reservoirsDispos, setReservoirsDispos] = useState<{ id: string; numero: string; type: string }[]>([]);
   const [reservoirChoisi, setReservoirChoisi]   = useState<string>('');
   const [saving, setSaving]                     = useState(false);
@@ -605,6 +614,17 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
             {[v.marque, v.modele, v.annee].filter(Boolean).join(' ') || (v.type === 'eau' ? 'Camion à eau' : 'Camion détail')}
           </div>
         </div>
+
+        {/* ── Bandeau financier (gestion only) ── */}
+        {isGestion && finData && (
+          <div style={{ margin: '0 20px' }}>
+            <FinanceSection
+              data={finData}
+              onSavePrix={(prix) => updatePrixDemande(v.numero, prix)}
+              onLocalPrix={(prix) => setLocalPrixDemande(v.numero, prix)}
+            />
+          </div>
+        )}
 
         {/* ── Type & Variante ── */}
         <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>

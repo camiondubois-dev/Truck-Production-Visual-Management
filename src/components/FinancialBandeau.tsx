@@ -270,3 +270,182 @@ function FullBloc({ label, value, labelColor, valueColor, border, bold }: {
     </div>
   );
 }
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ── FinanceSection (panneau détail desktop ET mobile) ────────────
+// Coût d'achat | M.O. | Total investi
+// Prix de vente projeté (éditable) | Profit projeté
+// ═══════════════════════════════════════════════════════════════════
+
+export function FinanceSection({ data, onSavePrix, onLocalPrix }: {
+  data: FinancialData;
+  onSavePrix: (prix: number | null) => Promise<void>;
+  onLocalPrix: (prix: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState(data.prix_demande !== null ? String(Math.round(data.prix_demande)) : '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setInputVal(data.prix_demande !== null ? String(Math.round(data.prix_demande)) : '');
+  }, [data.prix_demande, editing]);
+
+  const achat = data.prix_achat_reel;
+  const mo = data.cout_mo;
+  const total = (achat ?? 0) + (mo ?? 0);
+  const prixDemande = data.prix_demande;
+  const profit = prixDemande !== null ? prixDemande - total : null;
+  const pct = profit !== null && total > 0 ? (profit / total) * 100 : null;
+
+  const fmt = (n: number | null) => n == null ? '—' : `$${Math.round(n).toLocaleString('fr-CA')}`;
+  const profitColor = profit === null ? '#9ca3af' : profit > 0 ? '#16a34a' : profit < 0 ? '#dc2626' : '#9ca3af';
+
+  const handleSave = async () => {
+    const parsed = inputVal.replace(/\s|,|\$/g, '');
+    const num = parsed === '' ? null : Number(parsed);
+    if (parsed !== '' && isNaN(num as number)) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      onLocalPrix(num);
+      await onSavePrix(num);
+    } catch {
+      /* ignore */
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div style={{
+      marginBottom: 20,
+      padding: 14,
+      borderRadius: 10,
+      background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+      border: '1px solid #fde68a',
+    }}>
+      <div style={{
+        fontSize: 12, fontWeight: 700, color: '#92400e',
+        marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        💰 Données financières
+      </div>
+
+      {/* Ligne 1 : Achat / M.O. / Total */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <FinBloc label="Coût d'achat" value={fmt(achat)} />
+        <FinBloc label="Main d'œuvre" value={fmt(mo)} />
+        <FinBloc label="Total investi" value={fmt(total)} highlight />
+      </div>
+
+      {/* Ligne 2 : Prix demandé éditable + Profit */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{
+          flex: 1, padding: '8px 10px', background: 'white',
+          borderRadius: 8, border: '1px solid #fde68a',
+        }}>
+          <div style={{ fontSize: 10, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 700 }}>
+            Prix de vente projeté
+          </div>
+          {editing ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 14, color: '#92400e', fontWeight: 700 }}>$</span>
+              <input
+                autoFocus
+                inputMode="numeric"
+                value={inputVal}
+                onChange={e => setInputVal(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSave();
+                  if (e.key === 'Escape') setEditing(false);
+                }}
+                onBlur={handleSave}
+                disabled={saving}
+                style={{
+                  fontSize: 16, fontWeight: 800, color: '#1e293b',
+                  background: 'transparent',
+                  border: 'none', borderBottom: '2px solid #f59e0b',
+                  outline: 'none', width: '100%',
+                  padding: '2px 0',
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              onClick={() => setEditing(true)}
+              title="Cliquer pour modifier"
+              style={{
+                fontSize: 16, fontWeight: 800, color: '#1e293b',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {fmt(prixDemande)}
+              <span style={{ fontSize: 11 }}>✏️</span>
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          flex: 1, padding: '8px 10px',
+          background: profit === null ? 'white' : profit >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+          borderRadius: 8, border: `1px solid ${profit === null ? '#fde68a' : profit >= 0 ? '#86efac' : '#fca5a5'}`,
+        }}>
+          <div style={{ fontSize: 10, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 700 }}>
+            Profit projeté
+          </div>
+          {profit !== null ? (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: profitColor }}>
+                {profit >= 0 ? '+' : ''}{fmt(profit)}
+              </span>
+              {pct !== null && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, color: profitColor,
+                  background: profit >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                  padding: '2px 6px', borderRadius: 4,
+                }}>
+                  {Math.round(pct)}%
+                </span>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>
+              Définir le prix
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinBloc({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div style={{
+      flex: 1, padding: '8px 10px',
+      background: highlight ? '#f59e0b' : 'white',
+      borderRadius: 8,
+      border: highlight ? 'none' : '1px solid #fde68a',
+    }}>
+      <div style={{
+        fontSize: 10, color: highlight ? 'rgba(255,255,255,0.85)' : '#92400e',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+        marginBottom: 3, fontWeight: 700,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 15, fontWeight: 800,
+        color: highlight ? 'white' : '#1e293b',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}

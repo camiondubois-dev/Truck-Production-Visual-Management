@@ -789,6 +789,8 @@ function CarteRiche({ v, documents, inGarage, slotId, finData, onClick, onOpenPd
 
 function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) {
   const { vehicules } = useInventaire();
+  const { profile } = useAuth();
+  const isGestion = profile?.role === 'gestion';
 
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('engagés');
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');
@@ -843,6 +845,12 @@ function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) 
     }
     return result;
   }, [vehicules, filtreCommercial, filtreType, recherche, tri]);
+
+  // Financial data (gestion only)
+  const stockNumeros = useMemo(() =>
+    isGestion ? filtres.map(v => v.numero).filter(Boolean) : [],
+  [isGestion, filtres]);
+  const { dataByNumero: finDataMap } = useFinancialData(stockNumeros);
 
   return (
     <div style={{
@@ -911,7 +919,7 @@ function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) 
           <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', fontSize: 14 }}>Aucun camion ne correspond</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtres.map(v => <CarteCamionMobile key={v.id} v={v} onClick={() => onSelectVehicule?.(v.id)} />)}
+            {filtres.map(v => <CarteCamionMobile key={v.id} v={v} finData={finDataMap[v.numero]} onClick={() => onSelectVehicule?.(v.id)} />)}
           </div>
         )}
       </div>
@@ -919,7 +927,7 @@ function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) 
   );
 }
 
-function CarteCamionMobile({ v, onClick }: { v: VehiculeInventaire; onClick: () => void }) {
+function CarteCamionMobile({ v, finData, onClick }: { v: VehiculeInventaire; finData?: FinancialMap[string]; onClick: () => void }) {
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const j = joursAvant(v.dateLivraisonPlanifiee);
   const restantes = getEtapesRestantes(v);
@@ -971,6 +979,58 @@ function CarteCamionMobile({ v, onClick }: { v: VehiculeInventaire; onClick: () 
           </div>
         );
       })()}
+
+      {/* Bandelette financière compacte (gestion only) */}
+      {finData && <CarteFinanceCompactMobile finData={finData} />}
+    </div>
+  );
+}
+
+function CarteFinanceCompactMobile({ finData }: { finData: FinancialMap[string] }) {
+  const achat = finData.prix_achat_reel;
+  const mo = finData.cout_mo;
+  const total = (achat ?? 0) + (mo ?? 0);
+  const fmtShort = (n: number | null) => {
+    if (n == null) return '—';
+    if (Math.abs(n) >= 1000) return `$${Math.round(n / 1000)}K`;
+    return `$${Math.round(n)}`;
+  };
+  return (
+    <div style={{
+      display: 'flex',
+      marginTop: 4,
+      borderTop: '1px solid #fde68a',
+      background: '#fffbeb',
+      borderRadius: 6,
+      overflow: 'hidden',
+    }}>
+      <FinPill label="Achat" value={fmtShort(achat)} />
+      <FinPill label="M.O." value={fmtShort(mo)} />
+      <FinPill label="Total" value={fmtShort(total)} highlight />
+    </div>
+  );
+}
+
+function FinPill({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div style={{
+      flex: 1,
+      padding: '4px 6px',
+      textAlign: 'center',
+      background: highlight ? '#f59e0b' : 'transparent',
+      borderRight: highlight ? 'none' : '1px solid #fde68a',
+    }}>
+      <div style={{
+        fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+        color: highlight ? 'rgba(255,255,255,0.85)' : '#92400e',
+        lineHeight: 1.1,
+      }}>{label}</div>
+      <div style={{
+        fontSize: 12, fontWeight: 800,
+        color: highlight ? 'white' : '#1e293b',
+        lineHeight: 1.2,
+        whiteSpace: 'nowrap',
+      }}>{value}</div>
     </div>
   );
 }
