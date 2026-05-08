@@ -451,21 +451,18 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column',
-      borderBottom: finData ? '2px solid #fde68a' : '1px solid #e5e7eb',
-      background: selected ? '#fef3c7' : zebraBg,
-      transition: 'background 0.15s',
-      minHeight: 0,
-    }}>
-    <div style={{
       display: 'grid',
       gridTemplateColumns: COL_TEMPLATE,
+      borderBottom: '1px solid #e5e7eb',
+      background: selected ? '#fef3c7' : zebraBg,
+      transition: 'background 0.15s',
       minHeight: 0,
     }}>
       {/* Stock — cliquable, gros pour TV (auto-fit jusqu'à 40px en 4K) */}
       <Cell onClick={onClickNumero} style={{
         cursor: 'pointer',
         background: selected ? '#fde68a' : (idx % 2 === 0 ? '#f1f5f9' : '#e2e8f0'),
+        flexDirection: 'column',
       }}>
         <span style={{
           fontFamily: 'monospace', fontWeight: 900,
@@ -477,6 +474,15 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
         }}>
           {v.numero}**
         </span>
+        {finData && finData.prix_achat_reel != null && (
+          <span style={{
+            fontSize: 'clamp(10px, 0.85vw, 13px)',
+            fontWeight: 700, color: '#92400e',
+            marginTop: 2, whiteSpace: 'nowrap',
+          }}>
+            💰 ${Math.round(finData.prix_achat_reel).toLocaleString('fr-CA')}
+          </span>
+        )}
       </Cell>
 
       {/* Équipement — icône type + texte + badge commercial */}
@@ -562,17 +568,6 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
         const etat = etatStationOrFinale(v, s.id);
         return <Cell key={s.id} align="center"><EtapeIcon etat={etat} /></Cell>;
       })}
-    </div>
-
-    {/* ── Bandeau financier (gestion only) ── */}
-    {finData && (
-      <FullBandeau
-        data={finData}
-        onSavePrixDemande={onSavePrixDemande}
-        onLocalPrixDemande={onLocalPrixDemande}
-        dark={false}
-      />
-    )}
     </div>
   );
 }
