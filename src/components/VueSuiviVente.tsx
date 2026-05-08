@@ -223,7 +223,7 @@ function VueSuiviVenteDesktop() {
         display: 'flex', flexDirection: 'column',
       }}>
         {/* En-têtes colonnes */}
-        <HeaderRow />
+        <HeaderRow showFinance={isGestion} />
 
         {/* Body : auto-fit lignes */}
         <div style={{
@@ -273,12 +273,12 @@ function VueSuiviVenteDesktop() {
 }
 
 // ── En-têtes colonnes ────────────────────────────────────────────
-function HeaderRow() {
+function HeaderRow({ showFinance }: { showFinance: boolean }) {
   return (
     <div style={{
       flexShrink: 0,
       display: 'grid',
-      gridTemplateColumns: COL_TEMPLATE,
+      gridTemplateColumns: colTemplate(showFinance),
       background: '#1e293b',
       color: 'white',
       borderBottom: '2px solid #334155',
@@ -313,13 +313,32 @@ function HeaderRow() {
           )}
         </CellHeader>
       ))}
+      {showFinance && (
+        <CellHeader align="center" style={{ padding: 0, background: '#0f172a' }}>
+          <div style={{ display: 'flex', width: '100%', borderBottom: '1px solid #334155' }}>
+            <div style={{ flex: 1, padding: 'clamp(4px, 0.5vh, 7px) 4px', textAlign: 'center', borderRight: '1px solid #334155' }}>
+              <div style={{ fontSize: 'clamp(8px, 0.8vw, 11px)', color: '#fbbf24' }}>ACHAT</div>
+            </div>
+            <div style={{ flex: 1, padding: 'clamp(4px, 0.5vh, 7px) 4px', textAlign: 'center' }}>
+              <div style={{ fontSize: 'clamp(8px, 0.8vw, 11px)', color: '#fbbf24' }}>M.O.</div>
+            </div>
+          </div>
+          <div style={{ width: '100%', padding: 'clamp(2px, 0.3vh, 5px) 4px', textAlign: 'center' }}>
+            <div style={{ fontSize: 'clamp(8px, 0.8vw, 11px)', color: '#f59e0b', fontWeight: 800 }}>TOTAL</div>
+          </div>
+        </CellHeader>
+      )}
     </div>
   );
 }
 
 // Toutes les colonnes en fr → s'adaptent à la largeur disponible (TV/4K friendly)
-// Stock | Équipement | Vendeur | Date | PDF | 6 stations road_map
-const COL_TEMPLATE = '1.4fr 4fr 1.2fr 1.6fr 0.6fr repeat(6, minmax(0, 1fr))';
+// Stock | Équipement | Vendeur | Date | PDF | 6 stations road_map | (Finance — gestion only)
+const COL_TEMPLATE_BASE = '1.4fr 4fr 1.2fr 1.6fr 0.6fr repeat(6, minmax(0, 1fr))';
+const COL_TEMPLATE_GESTION = COL_TEMPLATE_BASE + ' 1fr';
+function colTemplate(showFinance: boolean) {
+  return showFinance ? COL_TEMPLATE_GESTION : COL_TEMPLATE_BASE;
+}
 
 function CellHeader({ children, align, style }: { children: React.ReactNode; align?: 'left' | 'center'; style?: React.CSSProperties }) {
   return (
@@ -449,10 +468,11 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
   // Zebra : alterner blanc / gris très pâle
   const zebraBg = idx % 2 === 0 ? 'white' : '#f3f4f6';
 
+  const showFinance = !!finData;
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: COL_TEMPLATE,
+      gridTemplateColumns: colTemplate(showFinance),
       borderBottom: '1px solid #e5e7eb',
       background: selected ? '#fef3c7' : zebraBg,
       transition: 'background 0.15s',
@@ -462,7 +482,6 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
       <Cell onClick={onClickNumero} style={{
         cursor: 'pointer',
         background: selected ? '#fde68a' : (idx % 2 === 0 ? '#f1f5f9' : '#e2e8f0'),
-        flexDirection: 'column',
       }}>
         <span style={{
           fontFamily: 'monospace', fontWeight: 900,
@@ -474,15 +493,6 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
         }}>
           {v.numero}**
         </span>
-        {finData && finData.prix_achat_reel != null && (
-          <span style={{
-            fontSize: 'clamp(10px, 0.85vw, 13px)',
-            fontWeight: 700, color: '#92400e',
-            marginTop: 2, whiteSpace: 'nowrap',
-          }}>
-            💰 ${Math.round(finData.prix_achat_reel).toLocaleString('fr-CA')}
-          </span>
-        )}
       </Cell>
 
       {/* Équipement — icône type + texte + badge commercial */}
@@ -568,6 +578,44 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
         const etat = etatStationOrFinale(v, s.id);
         return <Cell key={s.id} align="center"><EtapeIcon etat={etat} /></Cell>;
       })}
+
+      {/* Finance (gestion only) — Achat | M.O. au-dessus, Total dessous */}
+      {showFinance && finData && (
+        <FinanceCell finData={finData} />
+      )}
+    </div>
+  );
+}
+
+function FinanceCell({ finData }: { finData: FinancialMap[string] }) {
+  const achat = finData.prix_achat_reel;
+  const mo = finData.cout_mo;
+  const total = finData.cout_total_investi ?? ((achat ?? 0) + (mo ?? 0));
+  const fmt = (n: number | null) => n == null ? '—' : `$${Math.round(n).toLocaleString('fr-CA')}`;
+  return (
+    <div style={{
+      borderRight: '1px solid #e5e7eb',
+      background: '#fffbeb',
+      display: 'flex', flexDirection: 'column',
+      minHeight: 0, overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', flex: 1, borderBottom: '1px solid #fde68a' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 4px', borderRight: '1px solid #fde68a' }}>
+          <span style={{ fontSize: 'clamp(10px, 1vw, 15px)', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+            {fmt(achat)}
+          </span>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 4px' }}>
+          <span style={{ fontSize: 'clamp(10px, 1vw, 15px)', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+            {fmt(mo)}
+          </span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 4px' }}>
+        <span style={{ fontSize: 'clamp(11px, 1.1vw, 16px)', fontWeight: 900, color: '#b45309', whiteSpace: 'nowrap' }}>
+          {fmt(total)}
+        </span>
+      </div>
     </div>
   );
 }
