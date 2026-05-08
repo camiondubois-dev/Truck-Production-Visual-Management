@@ -924,7 +924,7 @@ function FinanceSection({ data, onSavePrix, onLocalPrix }: {
           borderRadius: 8, border: '1px solid #fde68a',
         }}>
           <div style={{ fontSize: 10, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 700 }}>
-            Coût de vente projeté
+            Prix de vente projeté
           </div>
           {editing ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
