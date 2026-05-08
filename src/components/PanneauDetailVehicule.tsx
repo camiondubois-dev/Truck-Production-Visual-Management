@@ -867,8 +867,6 @@ function FinanceSection({ data, onSavePrix, onLocalPrix }: {
 
   const achat = data.prix_achat_reel;
   const mo = data.cout_mo;
-  // Toujours calculer le total à partir de achat + M.O. (cout_total_investi
-  // peut être mal peuplé en DB).
   const total = (achat ?? 0) + (mo ?? 0);
   const prixDemande = data.prix_demande;
   const profit = prixDemande !== null ? prixDemande - total : null;
