@@ -1,6 +1,10 @@
 import { useContext, useMemo, useState, useEffect } from 'react';
 import { useInventaire } from '../contexts/InventaireContext';
 import { GarageContext } from '../contexts/GarageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useFinancialData } from '../hooks/useFinancialData';
+import type { FinancialMap } from '../hooks/useFinancialData';
+import { CompactBandeau } from './FinancialBandeau';
 import type { Item } from '../types/item.types';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
@@ -93,6 +97,8 @@ export function VueLivraisons(props: VueLivraisonsProps) {
 function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: string) => void }) {
   const { vehicules } = useInventaire();
   const { items } = useGarageOptional();
+  const { profile } = useAuth();
+  const isGestion = profile?.role === 'gestion';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
@@ -142,6 +148,12 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
   const tousEngagés = useMemo(() =>
     vehicules.filter(v => v.statut !== 'archive' && isEngagé(v)),
   [vehicules]);
+
+  // Financial data (gestion only)
+  const stockNumeros = useMemo(() =>
+    isGestion ? tousEngagés.map(v => v.numero).filter(Boolean) : [],
+  [isGestion, tousEngagés]);
+  const { dataByNumero: finDataMap } = useFinancialData(stockNumeros);
 
   // Pas encore prêts → kanban du haut
   const aLivrer = useMemo(() =>
@@ -291,6 +303,7 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         onOpenPdf={setPdfOuvert}
         onOpenPhoto={setPhotoOuverte}
         itemByInvId={itemByInvId}
+        finDataMap={isGestion ? finDataMap : undefined}
         flexBasis={prets.length > 0 ? 0.68 : 1}
       />
 
@@ -305,6 +318,7 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           onOpenPdf={setPdfOuvert}
           onOpenPhoto={setPhotoOuverte}
           itemByInvId={itemByInvId}
+          finDataMap={isGestion ? finDataMap : undefined}
           flexBasis={0.32}
           variantPret
         />
@@ -419,7 +433,7 @@ function KPIBlock({ value, label, color, pulse }: { value: number; label: string
 
 
 // ── Section grille (À LIVRER ou PRÊTS) ──────────────────────────
-function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, onOpenPhoto, itemByInvId, flexBasis, variantPret }: {
+function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, onOpenPhoto, itemByInvId, finDataMap, flexBasis, variantPret }: {
   titre: string;
   icone: string;
   couleur: string;
@@ -428,6 +442,7 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, o
   onOpenPdf: (doc: { nom: string; base64: string }) => void;
   onOpenPhoto: (photo: { url: string; numero: string }) => void;
   itemByInvId: Record<string, Item>;
+  finDataMap?: FinancialMap;
   flexBasis: number;
   variantPret?: boolean;
 }) {
@@ -503,6 +518,7 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, o
                 documents={item?.documents ?? []}
                 inGarage={!!item?.slotId}
                 slotId={item?.slotId}
+                finData={finDataMap?.[v.numero]}
                 onClick={() => onClick(v.id)}
                 onOpenPdf={onOpenPdf}
                 onOpenPhoto={onOpenPhoto}
@@ -517,11 +533,12 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, o
 }
 
 // ── Carte camion riche (info complète, lisible TV) ──────────────
-function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpenPhoto, delay, variantPret }: {
+function CarteRiche({ v, documents, inGarage, slotId, finData, onClick, onOpenPdf, onOpenPhoto, delay, variantPret }: {
   v: VehiculeInventaire;
   documents: { id: string; nom: string; base64: string }[];
   inGarage: boolean;
   slotId?: string;
+  finData?: FinancialMap[string];
   onClick: () => void;
   onOpenPdf: (doc: { nom: string; base64: string }) => void;
   onOpenPhoto: (photo: { url: string; numero: string }) => void;
@@ -719,10 +736,17 @@ function CarteRiche({ v, documents, inGarage, slotId, onClick, onOpenPdf, onOpen
         )}
       </div>
 
+      {/* Bandeau financier (gestion only) */}
+      {finData && (
+        <div style={{ marginTop: 'auto' }}>
+          <CompactBandeau data={finData} dark={true} />
+        </div>
+      )}
+
       {/* Ligne PDFs (en bas, horizontale, auto-fit) */}
       {documents.length > 0 && (
         <div style={{
-          marginTop: 'auto',
+          marginTop: finData ? 4 : 'auto',
           display: 'flex', flexWrap: 'wrap', gap: 4,
           paddingTop: 4,
           borderTop: '1px solid rgba(255,255,255,0.06)',

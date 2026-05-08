@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useFinancialData } from '../hooks/useFinancialData';
+import type { FinancialMap } from '../hooks/useFinancialData';
+import { CompactBandeau } from './FinancialBandeau';
 import { EauIcon } from './EauIcon';
 import { CreateWizardModal } from './CreateWizardModal';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
@@ -26,6 +30,8 @@ type FiltreCommercial = 'tous' | 'non-vendu' | 'vendu' | 'reserve' | 'location';
 export function VueAsana({ type, config }: VueAsanaProps) {
   const { items, ajouterItem } = useGarage();
   const { vehicules } = useInventaire();
+  const { profile } = useAuth();
+  const isGestion = profile?.role === 'gestion';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [filtreActif, setFiltreActif] = useState<FiltreVue>('tous');
@@ -84,6 +90,12 @@ export function VueAsana({ type, config }: VueAsanaProps) {
       return na - nb;
     });
   }, [vehicules, items, type]);
+
+  // Financial data (gestion only)
+  const stockNumeros = useMemo(() =>
+    isGestion ? mesVehicules.map(v => v.numero).filter(Boolean) : [],
+  [isGestion, mesVehicules]);
+  const { dataByNumero: finDataMap } = useFinancialData(stockNumeros);
 
   // Filtre actif appliqué
   const vehiculesFiltres = useMemo(() => {
@@ -254,6 +266,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                   <SectionHeaderCard label="📋 À planifier" color="#9ca3af" count={aPlanifier.length} />
                   {aPlanifier.map(v => (
                     <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      finData={finDataMap[v.numero]}
                       selected={selectedId === v.id}
                       onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
@@ -264,6 +277,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                   <SectionHeaderCard label="⏳ En attente" color="#f59e0b" count={enAttente.length} />
                   {enAttente.map(v => (
                     <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      finData={finDataMap[v.numero]}
                       selected={selectedId === v.id}
                       onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
@@ -274,6 +288,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                   <SectionHeaderCard label="🔧 Dans le garage" color="#3b82f6" count={dansLeGarage.length} />
                   {dansLeGarage.map(v => (
                     <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      finData={finDataMap[v.numero]}
                       selected={selectedId === v.id}
                       onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
@@ -284,6 +299,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                   <SectionHeaderCard label="✅ Prêts" color="#22c55e" count={prets.length} />
                   {prets.map(v => (
                     <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      finData={finDataMap[v.numero]}
                       selected={selectedId === v.id}
                       onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
@@ -302,6 +318,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
                     onClick={() => setShowArchives(s => !s)} clickable />
                   {showArchives && archives.map(v => (
                     <CarteVehicule key={v.id} vehicule={v} item={itemByInvId[v.id]} type={type}
+                      finData={finDataMap[v.numero]}
                       selected={selectedId === v.id}
                       onClick={() => setSelectedId(v.id === selectedId ? null : v.id)} />
                   ))}
@@ -394,10 +411,11 @@ function getLabelVehicule(v: VehiculeInventaire): string {
 
 // ── CarteVehicule ────────────────────────────────────────────────
 
-export function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
+export function CarteVehicule({ vehicule: v, item, type, finData, selected, onClick }: {
   vehicule: VehiculeInventaire;
   item?: Item;
   type: TypeItem;
+  finData?: FinancialMap[string];
   selected: boolean;
   onClick: () => void;
 }) {
@@ -408,7 +426,7 @@ export function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
   return (
     <div onClick={onClick}
       style={{
-        display: 'flex', alignItems: 'stretch',
+        display: 'flex', flexDirection: 'column',
         background: selected ? `${typeColor}06` : isArchive ? '#fafafa' : 'white',
         borderBottom: '1px solid #e5e7eb',
         borderLeft: `4px solid ${typeColor}`,
@@ -419,6 +437,8 @@ export function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
       onMouseEnter={e => { if (!selected) { (e.currentTarget as HTMLDivElement).style.background = '#f0f4ff'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; } }}
       onMouseLeave={e => { if (!selected) { (e.currentTarget as HTMLDivElement).style.background = isArchive ? '#fafafa' : 'white'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; } }}
     >
+      {/* ── Rangée principale : info + stations ── */}
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
       {/* ── Info camion (gauche) ── */}
       <div style={{ width: 336, minWidth: 336, flexShrink: 0, padding: '12px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ fontSize: 24, flexShrink: 0 }}>
@@ -484,6 +504,10 @@ export function CarteVehicule({ vehicule: v, item, type, selected, onClick }: {
           );
         })}
       </div>
+      </div>{/* end rangée principale */}
+
+      {/* ── Bandeau financier (gestion only) ── */}
+      {finData && <CompactBandeau data={finData} dark={false} />}
     </div>
   );
 }

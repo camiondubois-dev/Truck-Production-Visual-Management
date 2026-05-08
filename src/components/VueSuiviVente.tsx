@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useInventaire } from '../contexts/InventaireContext';
 import { GarageContext } from '../contexts/GarageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useFinancialData } from '../hooks/useFinancialData';
+import type { FinancialMap } from '../hooks/useFinancialData';
+import { FullBandeau } from './FinancialBandeau';
 import type { Item } from '../types/item.types';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
@@ -33,6 +37,8 @@ export function VueSuiviVente(props: { mobile?: boolean; onClose?: () => void; o
 function VueSuiviVenteDesktop() {
   const { vehicules } = useInventaire();
   const { items } = useGarageOptional();
+  const { profile } = useAuth();
+  const isGestion = profile?.role === 'gestion';
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -88,6 +94,12 @@ function VueSuiviVenteDesktop() {
       (v.etatCommercial === 'vendu' || v.etatCommercial === 'reserve' || v.etatCommercial === 'location')
     ),
   [vehicules]);
+
+  // Financial data (gestion only)
+  const stockNumeros = useMemo(() =>
+    isGestion ? camionsVendus.map(v => v.numero).filter(Boolean) : [],
+  [isGestion, camionsVendus]);
+  const { dataByNumero: finDataMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(stockNumeros);
 
   // Tri commun : ASAP en haut, puis date la plus proche
   const trier = (list: VehiculeInventaire[]) => {
@@ -231,6 +243,9 @@ function VueSuiviVenteDesktop() {
               idx={idx}
               vendeur={v.vendeurId ? vendeurById[v.vendeurId] : undefined}
               item={itemByInvId[v.id]}
+              finData={isGestion ? finDataMap[v.numero] : undefined}
+              onSavePrixDemande={isGestion ? updatePrixDemande : undefined}
+              onLocalPrixDemande={isGestion ? setLocalPrixDemande : undefined}
               onClickNumero={() => setSelectedId(v.id === selectedId ? null : v.id)}
               onClickPdf={setPdfOuvert}
               selected={selectedId === v.id} />
@@ -414,11 +429,14 @@ function PdfCell({ documents, onClickPdf }: {
 }
 
 // ── Ligne d'un véhicule vendu ────────────────────────────────────
-function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected }: {
+function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocalPrixDemande, onClickNumero, onClickPdf, selected }: {
   v: VehiculeInventaire;
   idx: number;
   vendeur?: Vendeur;
   item?: Item;
+  finData?: FinancialMap[string];
+  onSavePrixDemande?: (stockNumero: string, prix: number | null) => Promise<void>;
+  onLocalPrixDemande?: (stockNumero: string, prix: number | null) => void;
   onClickNumero: () => void;
   onClickPdf: (doc: { nom: string; base64: string }) => void;
   selected: boolean;
@@ -433,11 +451,15 @@ function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected
 
   return (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: COL_TEMPLATE,
-      borderBottom: '1px solid #e5e7eb',
+      display: 'flex', flexDirection: 'column',
+      borderBottom: finData ? '2px solid #fde68a' : '1px solid #e5e7eb',
       background: selected ? '#fef3c7' : zebraBg,
       transition: 'background 0.15s',
+      minHeight: 0,
+    }}>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: COL_TEMPLATE,
       minHeight: 0,
     }}>
       {/* Stock — cliquable, gros pour TV (auto-fit jusqu'à 40px en 4K) */}
@@ -540,6 +562,17 @@ function LigneVente({ v, idx, vendeur, item, onClickNumero, onClickPdf, selected
         const etat = etatStationOrFinale(v, s.id);
         return <Cell key={s.id} align="center"><EtapeIcon etat={etat} /></Cell>;
       })}
+    </div>
+
+    {/* ── Bandeau financier (gestion only) ── */}
+    {finData && (
+      <FullBandeau
+        data={finData}
+        onSavePrixDemande={onSavePrixDemande}
+        onLocalPrixDemande={onLocalPrixDemande}
+        dark={false}
+      />
+    )}
     </div>
   );
 }
