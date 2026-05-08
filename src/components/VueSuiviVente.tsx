@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useInventaire } from '../contexts/InventaireContext';
 import { GarageContext } from '../contexts/GarageContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, useAuthOptional } from '../contexts/AuthContext';
 import { useFinancialData } from '../hooks/useFinancialData';
 import type { FinancialMap } from '../hooks/useFinancialData';
-import { FullBandeau } from './FinancialBandeau';
+import { FullBandeau, FinanceSection } from './FinancialBandeau';
 import { getTVSession, clearTVSession } from '../hooks/useTVAccess';
 import { supabase } from '../lib/supabase';
 import type { Item } from '../types/item.types';
@@ -867,6 +867,9 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
   onSelectVehicule?: (id: string) => void;
 }) {
   const { vehicules } = useInventaire();
+  // Terrain (PIN, pas de AuthProvider) → on affiche tout. Desktop gestion → tout. Sinon rien.
+  const auth = useAuthOptional();
+  const isGestion = !auth || auth.profile?.role === 'gestion';
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
   const [recherche, setRecherche] = useState('');
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
@@ -914,6 +917,12 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
       v.clientAcheteur?.toLowerCase().includes(q)
     );
   }, [baseList, recherche]);
+
+  // Financial data
+  const stockNumeros = useMemo(() =>
+    isGestion ? liste.map(v => v.numero).filter(Boolean) : [],
+  [isGestion, liste]);
+  const { dataByNumero: finDataMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(stockNumeros);
 
   return (
     <div style={{
@@ -994,6 +1003,9 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
             {liste.map(v => (
               <CarteSuiviVenteMobile key={v.id} v={v}
                 vendeur={v.vendeurId ? vendeurById[v.vendeurId] : undefined}
+                finData={finDataMap[v.numero]}
+                onSavePrixDemande={updatePrixDemande}
+                onLocalPrixDemande={setLocalPrixDemande}
                 onClick={() => onSelectVehicule?.(v.id)} />
             ))}
           </div>
@@ -1003,9 +1015,12 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
   );
 }
 
-function CarteSuiviVenteMobile({ v, vendeur, onClick }: {
+function CarteSuiviVenteMobile({ v, vendeur, finData, onSavePrixDemande, onLocalPrixDemande, onClick }: {
   v: VehiculeInventaire;
   vendeur?: Vendeur;
+  finData?: FinancialMap[string];
+  onSavePrixDemande?: (stockNumero: string, prix: number | null) => Promise<void>;
+  onLocalPrixDemande?: (stockNumero: string, prix: number | null) => void;
   onClick: () => void;
 }) {
   const dateStr = formatDate(v.dateLivraisonPlanifiee);
@@ -1067,6 +1082,17 @@ function CarteSuiviVenteMobile({ v, vendeur, onClick }: {
           {v.paiementDepot   && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#fef3c7', color: '#92400e' }}>💵 Dépôt</span>}
           {v.paiementComplet && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#dcfce7', color: '#166534' }}>✅ Payé</span>}
           {v.paiementPo      && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 3, background: '#dbeafe', color: '#1e40af' }}>📋 PO</span>}
+        </div>
+      )}
+
+      {/* Bandeau financier (gestion ou terrain) */}
+      {finData && onSavePrixDemande && onLocalPrixDemande && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <FinanceSection
+            data={finData}
+            onSavePrix={(prix) => onSavePrixDemande(v.numero, prix)}
+            onLocalPrix={(prix) => onLocalPrixDemande(v.numero, prix)}
+          />
         </div>
       )}
 
