@@ -57,3 +57,12 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth doit être utilisé dans AuthProvider');
   return ctx;
 };
+
+/**
+ * Version sans throw : retourne null s'il n'y a pas de AuthProvider parent.
+ * Utile pour les composants partagés desktop/terrain (l'app terrain n'utilise
+ * pas AuthProvider — auth par PIN).
+ */
+export const useAuthOptional = () => {
+  return useContext(AuthContext);
+};

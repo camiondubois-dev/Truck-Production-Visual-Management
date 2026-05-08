@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState, useEffect } from 'react';
 import { useInventaire } from '../contexts/InventaireContext';
 import { GarageContext } from '../contexts/GarageContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, useAuthOptional } from '../contexts/AuthContext';
 import { useFinancialData } from '../hooks/useFinancialData';
 import type { FinancialMap } from '../hooks/useFinancialData';
 import { CompactBandeau } from './FinancialBandeau';
@@ -806,8 +806,10 @@ function CarteRiche({ v, documents, inGarage, slotId, finData, onClick, onOpenPd
 
 function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) {
   const { vehicules } = useInventaire();
-  const { profile } = useAuth();
-  const isGestion = profile?.role === 'gestion';
+  // Sur l'app terrain (PIN), pas de AuthProvider → on affiche les coûts (terrain protégé par PIN).
+  // Sur desktop avec auth Supabase, gestion seulement.
+  const auth = useAuthOptional();
+  const isGestion = !auth || auth.profile?.role === 'gestion';
 
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('engagés');
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');

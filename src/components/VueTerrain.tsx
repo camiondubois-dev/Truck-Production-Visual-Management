@@ -13,7 +13,7 @@ import { VueLivraisons } from './VueLivraisons';
 import { VueMoteurs } from './VueMoteurs';
 import { VueSuiviVente } from './VueSuiviVente';
 import { GARAGES_COLONNES, GARAGE_TO_SLOTS } from '../data/garageData';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthOptional } from '../contexts/AuthContext';
 import { useFinancialData } from '../hooks/useFinancialData';
 import { FinanceSection } from './FinancialBandeau';
 
@@ -427,8 +427,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   onClose: () => void;
   onMisAJour: (updated: VehiculeInventaire) => void;
 }) {
-  const { profile } = useAuth();
-  const isGestion = profile?.role === 'gestion';
+  // Terrain (PIN) → pas de AuthProvider → on affiche tout. Desktop → gestion seulement.
+  const auth = useAuthOptional();
+  const isGestion = !auth || auth.profile?.role === 'gestion';
   const finStockNumeros = useMemo(() => isGestion && v.numero ? [v.numero] : [], [isGestion, v.numero]);
   const { dataByNumero: finMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(finStockNumeros);
   const finData = finMap[v.numero];
