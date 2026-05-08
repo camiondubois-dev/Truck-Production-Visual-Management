@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useFinancialData } from '../hooks/useFinancialData';
 import type { FinancialMap } from '../hooks/useFinancialData';
 import { FullBandeau } from './FinancialBandeau';
+import { getTVSession, clearTVSession } from '../hooks/useTVAccess';
+import { supabase } from '../lib/supabase';
 import type { Item } from '../types/item.types';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
@@ -39,6 +41,13 @@ function VueSuiviVenteDesktop() {
   const { items } = useGarageOptional();
   const { profile } = useAuth();
   const isGestion = profile?.role === 'gestion';
+  // Détecte si on est connecté via un code TV (rôle 'tv' avec session TV) — affiche bouton déconnexion
+  const isTVSession = !!getTVSession() && profile?.role === 'tv';
+  const handleDeconnexionTV = async () => {
+    clearTVSession();
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -253,7 +262,7 @@ function VueSuiviVenteDesktop() {
         </div>
       </div>
 
-      {/* Bouton X flottant pour quitter le mode TV (toujours visible) */}
+      {/* Bouton X flottant pour quitter le mode TV (toggle plein écran) */}
       {tvMode && (
         <button onClick={toggleTvMode}
           title="Quitter le mode TV (ESC)"
@@ -267,6 +276,25 @@ function VueSuiviVenteDesktop() {
             boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
           }}>
           ✕
+        </button>
+      )}
+
+      {/* Bouton DÉCONNEXION TV (visible si connecté via code TV — ramène au login) */}
+      {isTVSession && (
+        <button onClick={handleDeconnexionTV}
+          title="Déconnecter et retourner à l'écran de connexion"
+          style={{
+            position: 'fixed',
+            top: tvMode ? 84 : 16,
+            right: 16, zIndex: 10001,
+            padding: '10px 18px', borderRadius: 28,
+            background: '#dc2626', border: '3px solid white',
+            color: 'white', fontSize: 14, fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 8,
+            boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
+          }}>
+          ✕ Déconnecter TV
         </button>
       )}
 
