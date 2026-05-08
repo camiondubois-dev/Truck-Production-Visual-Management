@@ -14,6 +14,7 @@ interface NavigationProps {
 const TABS = [
   { id: 'plancher',    label: 'Vue Plancher',     icon: '🏭' },
   { id: 'eau',         label: 'Camions à eau',    icon: 'EAU_LOGO', color: '#f97316' },
+  { id: 'clients',     label: 'Jobs Client',      icon: '🔧',       color: '#3b82f6' },
   { id: 'detail',      label: 'Camions détail',   icon: '🏷️',       color: '#22c55e' },
   { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',       color: '#dc2626' },
   { id: 'suivi-vente', label: 'Suivi vente',      icon: '🛒',       color: '#0ea5e9' },

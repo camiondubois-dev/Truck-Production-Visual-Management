@@ -5,6 +5,7 @@ import { VueDepartement } from './components/VueDepartement';
 import { Navigation } from './components/Navigation';
 import { PlancherView } from './components/PlancherView';
 import { VueCamionsEau } from './components/VueCamionsEau';
+import { VueClientsExternes } from './components/VueClientsExternes';
 import { VueCamionsDetail } from './components/VueCamionsDetail';
 import { VueInventaire } from './components/VueInventaire';
 import { VueArchive } from './components/VueArchive';
@@ -21,9 +22,9 @@ import { VueProfitabilite } from './components/VueProfitabilite';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 
-type Tab = 'plancher' | 'eau' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite'];
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -95,6 +96,7 @@ export default function App() {
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
         {currentTab === 'plancher'      && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
         {currentTab === 'eau'           && <VueCamionsEau />}
+        {currentTab === 'clients'       && <VueClientsExternes />}
         {currentTab === 'detail'        && <VueCamionsDetail />}
         {currentTab === 'livraisons'    && <VueLivraisons />}
         {currentTab === 'suivi-vente'   && <VueSuiviVente />}
