@@ -165,17 +165,22 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
       let extId: string | undefined;
       if (data.vendeurExterneId) {
         extId = data.vendeurExterneId;
-        await vendeurExterneService.incrementerUtilisation(extId);
+        vendeurExterneService.incrementerUtilisation(extId).catch(console.error);
       } else if (data.sauverVendeur && data.vendeurNom.trim()) {
-        const ext = await vendeurExterneService.getOrCreate(data.vendeurNom.trim(), data.vendeurType);
-        extId = ext.id;
-        await vendeurExterneService.mettreAJour(ext.id, {
-          telephonePrincipal: data.vendeurTel.trim() || undefined,
-          email: data.vendeurEmail.trim() || undefined,
-          adresse: data.vendeurAdresse.trim() || undefined,
-          note: data.vendeurNote.trim() || undefined,
-        });
-        await vendeurExterneService.incrementerUtilisation(ext.id);
+        // Non-bloquant : si la RLS bloque, on continue quand même avec les infos inline
+        try {
+          const ext = await vendeurExterneService.getOrCreate(data.vendeurNom.trim(), data.vendeurType);
+          extId = ext.id;
+          vendeurExterneService.mettreAJour(ext.id, {
+            telephonePrincipal: data.vendeurTel.trim() || undefined,
+            email: data.vendeurEmail.trim() || undefined,
+            adresse: data.vendeurAdresse.trim() || undefined,
+            note: data.vendeurNote.trim() || undefined,
+          }).catch(console.error);
+          vendeurExterneService.incrementerUtilisation(ext.id).catch(console.error);
+        } catch {
+          // Permissions insuffisantes pour créer le vendeur externe — on continue sans liaison
+        }
       }
 
       const created = await creer({
@@ -356,7 +361,7 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
                   cursor: 'pointer',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                 }}>
-                  <input type="file" accept="image/*" capture="environment" multiple
+                  <input type="file" accept="image/*" multiple
                     onChange={e => handleAjouterPhoto(e, p.tag)}
                     style={{ display: 'none' }} />
                   <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
