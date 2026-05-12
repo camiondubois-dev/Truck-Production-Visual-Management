@@ -79,7 +79,9 @@ export async function notifierChangementStatut(
       await Promise.all(cibles.map(id =>
         creer(id, achatId, 'a-approuver', `⚖ ${camionLabel} — Prêt pour votre approbation`)
       ));
-      // Envoyer email via Edge Function (non-bloquant)
+      // Notification push ntfy.sh (non-bloquant)
+      notifierNtfy(camionLabel, acheteurId, achatId).catch(console.error);
+      // Email via Edge Function (non-bloquant)
       notifierParEmail(achatId, camionLabel, acheteurId).catch(console.error);
       break;
     }
@@ -161,6 +163,39 @@ export async function notifierChangementStatut(
       break;
     }
   }
+}
+
+// ── Push via ntfy.sh ─────────────────────────────────────────────
+// Canal : ntfy.sh/cd-achats-approb
+// Les approbateurs s'abonnent à ce canal dans l'app ntfy sur leur iPhone
+const NTFY_TOPIC = 'cd-achats-approb-k7x2';
+
+async function notifierNtfy(
+  camionLabel: string,
+  acheteurId: string,
+  achatId: string,
+): Promise<void> {
+  const { data: profile } = await supabase
+    .from('profiles').select('nom').eq('id', acheteurId).maybeSingle();
+  const acheteurNom = profile?.nom ?? 'Acheteur';
+
+  const { data: achat } = await supabase
+    .from('prod_achats').select('prix_demande_initial').eq('id', achatId).maybeSingle();
+  const prix = achat?.prix_demande_initial
+    ? `${Number(achat.prix_demande_initial).toLocaleString('fr-CA')} $`
+    : '';
+
+  await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+    method: 'POST',
+    headers: {
+      'Title': `🚛 À approuver : ${camionLabel}`,
+      'Priority': 'high',
+      'Tags': 'truck,white_check_mark',
+      'Click': 'https://truck-production.netlify.app/achats',
+      'Content-Type': 'text/plain',
+    },
+    body: `${prix ? prix + ' · ' : ''}Soumis par ${acheteurNom}\nOuvre l'app pour approuver ou refuser.`,
+  });
 }
 
 // ── Email via Supabase Edge Function ─────────────────────────────
