@@ -79,7 +79,7 @@ export function FicheAchatMobile({ achat, session, onClose }: {
         flexShrink: 0,
         background: '#0f172a',
         color: 'white',
-        padding: '12px 14px env(safe-area-inset-top, 12px)',
+        padding: 'max(env(safe-area-inset-top), 12px) 14px 12px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <button onClick={onClose}

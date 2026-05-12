@@ -107,7 +107,7 @@ export function VueAchatsMobile({ session, onLogout }: { session: AchatsSession;
         flexShrink: 0,
         background: '#0f172a',
         color: 'white',
-        padding: '14px 14px 10px env(safe-area-inset-top, 14px)',
+        padding: 'max(env(safe-area-inset-top), 14px) 14px 10px',
         borderBottom: `2px solid ${COULEUR}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>

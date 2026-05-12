@@ -277,7 +277,7 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
         flexShrink: 0,
         background: '#0f172a',
         color: 'white',
-        padding: '16px 16px 12px',
+        padding: 'max(env(safe-area-inset-top), 16px) 16px 12px',
         borderBottom: `3px solid ${COULEUR}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
