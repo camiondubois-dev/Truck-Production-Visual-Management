@@ -74,11 +74,13 @@ export async function notifierChangementStatut(
     }
 
     case 'a-approuver': {
-      // Prêt pour approbation → notifier approbateurs
+      // Prêt pour approbation → notifier approbateurs (badge in-app)
       const cibles = profilesAvecRole(profiles, 'approbateur-pieces', 'approbateur-vente');
       await Promise.all(cibles.map(id =>
         creer(id, achatId, 'a-approuver', `⚖ ${camionLabel} — Prêt pour votre approbation`)
       ));
+      // Envoyer email via Edge Function (non-bloquant)
+      notifierParEmail(achatId, camionLabel, acheteurId).catch(console.error);
       break;
     }
 
@@ -159,4 +161,25 @@ export async function notifierChangementStatut(
       break;
     }
   }
+}
+
+// ── Email via Supabase Edge Function ─────────────────────────────
+async function notifierParEmail(
+  achatId: string,
+  camionLabel: string,
+  acheteurId: string,
+): Promise<void> {
+  // Récupérer le nom de l'acheteur et le prix demandé
+  const [profileRes, achatRes] = await Promise.all([
+    supabase.from('profiles').select('nom').eq('id', acheteurId).maybeSingle(),
+    supabase.from('prod_achats').select('prix_demande_initial, lieu_localisation').eq('id', achatId).maybeSingle(),
+  ]);
+  const acheteurNom    = profileRes.data?.nom ?? 'Acheteur';
+  const prixDemande    = achatRes.data?.prix_demande_initial ?? null;
+  const lieuLocalisation = achatRes.data?.lieu_localisation ?? null;
+
+  const { error } = await supabase.functions.invoke('notifier-approbateurs', {
+    body: { achatId, acheteurNom, camionLabel, prixDemande, lieuLocalisation },
+  });
+  if (error) console.error('notifierParEmail:', error);
 }
