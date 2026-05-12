@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { achatService, fromDB } from '../services/achatService';
-import type { Achat } from '../types/achatTypes';
+import { notifierChangementStatut } from '../services/notificationAchatService';
+import type { Achat, StatutAchat } from '../types/achatTypes';
 
 interface AchatContextType {
   achats: Achat[];
@@ -9,6 +10,7 @@ interface AchatContextType {
   recharger: () => Promise<void>;
   creer: (a: Omit<Achat, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Achat>;
   mettreAJour: (id: string, updates: Partial<Achat>) => Promise<void>;
+  changerStatut: (id: string, statut: StatutAchat) => Promise<void>;
 }
 
 const AchatContext = createContext<AchatContextType | null>(null);
@@ -68,16 +70,32 @@ export const AchatProvider = ({ children }: { children: ReactNode }) => {
   const creer = async (a: Omit<Achat, 'id' | 'createdAt' | 'updatedAt'>) => {
     const created = await achatService.creer(a);
     setAchats(prev => [created, ...prev]);
+    // Notifier l'équipe du nouveau camion entré
+    const label = [created.annee, created.marque, created.modele].filter(Boolean).join(' ') || 'Nouveau camion';
+    notifierChangementStatut(created.id, 'evaluation-initiale', created.acheteurId, label).catch(console.error);
     return created;
   };
 
   const mettreAJour = async (id: string, updates: Partial<Achat>) => {
     await achatService.mettreAJour(id, updates);
-    setAchats(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    setAchats(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      const updated = { ...a, ...updates };
+      // Déclencher notifications si le statut change
+      if (updates.statut && updates.statut !== a.statut) {
+        const label = [updated.annee, updated.marque, updated.modele].filter(Boolean).join(' ') || 'Camion';
+        notifierChangementStatut(id, updates.statut, updated.acheteurId, label).catch(console.error);
+      }
+      return updated;
+    }));
+  };
+
+  const changerStatut = async (id: string, statut: StatutAchat) => {
+    await mettreAJour(id, { statut });
   };
 
   return (
-    <AchatContext.Provider value={{ achats, loading, recharger, creer, mettreAJour }}>
+    <AchatContext.Provider value={{ achats, loading, recharger, creer, mettreAJour, changerStatut }}>
       {children}
     </AchatContext.Provider>
   );

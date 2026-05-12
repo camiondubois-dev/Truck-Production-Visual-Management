@@ -14,6 +14,7 @@ import type {
 } from '../types/achatTypes';
 import { LABELS_STATUT, COULEURS_STATUT } from '../types/achatTypes';
 import type { AchatsSession } from '../hooks/useAchatsAuth';
+import { NotesVocales } from './NotesVocales';
 
 const COULEUR = '#10b981';
 
@@ -108,11 +109,11 @@ export function FicheAchatMobile({ achat, session, onClose }: {
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px env(safe-area-inset-bottom, 14px)', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-          {/* Photos en grille */}
-          {photos.length > 0 && (
-            <Section title={`📸 Photos (${photos.length})`}>
+          {/* Photos en grille (excluant les vocaux) */}
+          {photos.filter(p => p.tag !== 'vocal').length > 0 && (
+            <Section title={`📸 Photos (${photos.filter(p => p.tag !== 'vocal').length})`}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                {photos.map(p => (
+                {photos.filter(p => p.tag !== 'vocal').map(p => (
                   <a key={p.id} href={p.url} target="_blank" rel="noreferrer" style={{ display: 'block', borderRadius: 6, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                     <img src={p.url} alt={p.tag ?? ''} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
                   </a>
@@ -120,6 +121,15 @@ export function FicheAchatMobile({ achat, session, onClose }: {
               </div>
             </Section>
           )}
+
+          {/* Notes vocales */}
+          <Section title="🎙 Notes vocales">
+            <NotesVocales
+              achatId={achat.id}
+              uploadedBy={session.profileId}
+              canRecord={true}
+            />
+          </Section>
 
           {/* Identification */}
           <Section title="🚛 Camion">

@@ -7,6 +7,7 @@ import type { Achat, StatutAchat } from '../types/achatTypes';
 import { LABELS_STATUT, COULEURS_STATUT } from '../types/achatTypes';
 import { MobileWizardAchat } from './MobileWizardAchat';
 import { FicheAchatMobile } from './FicheAchatMobile';
+import { NotificationsBell } from './NotificationsBell';
 import type { AchatsSession } from '../hooks/useAchatsAuth';
 
 const COULEUR = '#10b981';
@@ -117,10 +118,16 @@ export function VueAchatsMobile({ session, onLogout }: { session: AchatsSession;
               <div style={{ fontSize: 11, color: COULEUR, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>👤 {session.nom}</div>
             </div>
           </div>
-          <button onClick={() => setShowMenu(true)}
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', width: 38, height: 38, borderRadius: 10, color: 'white', fontSize: 18, cursor: 'pointer' }}>
-            ⋯
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <NotificationsBell
+              profileId={session.profileId}
+              onOuvrirAchat={(achatId) => setSelectedId(achatId)}
+            />
+            <button onClick={() => setShowMenu(true)}
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', width: 44, height: 44, borderRadius: 12, color: 'white', fontSize: 18, cursor: 'pointer' }}>
+              ⋯
+            </button>
+          </div>
         </div>
         {/* Recherche */}
         <div style={{ position: 'relative' }}>
