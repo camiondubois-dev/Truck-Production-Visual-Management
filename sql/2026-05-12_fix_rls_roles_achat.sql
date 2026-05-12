@@ -43,9 +43,23 @@ CREATE POLICY "achats_photos_write" ON prod_achats_photos
   USING  (auth_peut_ecrire_achats())
   WITH CHECK (auth_peut_ecrire_achats());
 
--- ── prod_achats_approbations ──────────────────────────────────────
-DROP POLICY IF EXISTS "achats_appro_write" ON prod_achats_approbations;
-CREATE POLICY "achats_appro_write" ON prod_achats_approbations
+-- ── prod_achats_decisions ─────────────────────────────────────────
+DROP POLICY IF EXISTS "achats_decisions_write" ON prod_achats_decisions;
+CREATE POLICY "achats_decisions_write" ON prod_achats_decisions
+  FOR ALL TO authenticated
+  USING  (auth_peut_ecrire_achats())
+  WITH CHECK (auth_peut_ecrire_achats());
+
+-- ── prod_achats_evaluations_initiales ─────────────────────────────
+DROP POLICY IF EXISTS "achats_eval_init_write" ON prod_achats_evaluations_initiales;
+CREATE POLICY "achats_eval_init_write" ON prod_achats_evaluations_initiales
+  FOR ALL TO authenticated
+  USING  (auth_peut_ecrire_achats())
+  WITH CHECK (auth_peut_ecrire_achats());
+
+-- ── prod_achats_evaluations_finales ───────────────────────────────
+DROP POLICY IF EXISTS "achats_eval_fin_write" ON prod_achats_evaluations_finales;
+CREATE POLICY "achats_eval_fin_write" ON prod_achats_evaluations_finales
   FOR ALL TO authenticated
   USING  (auth_peut_ecrire_achats())
   WITH CHECK (auth_peut_ecrire_achats());
