@@ -544,11 +544,6 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
         {data.step === 8 && (
           <Step title="✅ Résumé final" subtitle="Vérifie les informations avant de créer l'opportunité.">
             <ResumeCarte data={data} photos={photos.length} />
-            {erreur && (
-              <div style={{ padding: 14, borderRadius: 10, background: '#fee2e2', color: '#991b1b', fontSize: 15, fontWeight: 600, marginTop: 14 }}>
-                ⚠ {erreur}
-              </div>
-            )}
           </Step>
         )}
       </div>
@@ -559,9 +554,15 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
         background: 'white',
         borderTop: '2px solid #e5e7eb',
         padding: '14px 16px env(safe-area-inset-bottom, 14px)',
-        display: 'flex', gap: 10,
+        display: 'flex', flexDirection: 'column', gap: 10,
         boxShadow: '0 -4px 16px rgba(0,0,0,0.10)',
       }}>
+        {erreur && (
+          <div style={{ padding: '12px 14px', borderRadius: 10, background: '#fee2e2', color: '#991b1b', fontSize: 14, fontWeight: 700, lineHeight: 1.4 }}>
+            ⚠ {erreur}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10 }}>
         {data.step > 1 && (
           <button onClick={goPrev}
             style={{ flex: '0 0 auto', padding: '16px 20px', borderRadius: 14, border: '2px solid #e5e7eb', background: 'white', color: '#374151', fontSize: 18, fontWeight: 700, cursor: 'pointer', minWidth: 56 }}>
@@ -609,6 +610,7 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
               {saving ? '⏳ Création en cours…' : '✓ CRÉER L\'OPPORTUNITÉ'}
             </button>
           )}
+        </div>
         </div>
       </div>
 
