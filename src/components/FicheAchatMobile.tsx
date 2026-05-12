@@ -195,16 +195,18 @@ export function FicheAchatMobile({ achat, session, onClose }: {
             <KV label="Payé"      value={achat.prixPaye           != null ? `${achat.prixPaye.toLocaleString()} $` : '—'} />
           </Section>
 
-          {/* ── Évaluation initiale ───────────────────────── */}
+          {/* ── Soumettre pour approbation (si bloqué en eval-initiale / eval-finale) */}
+          {isAcheteurPrincipal && ['evaluation-initiale', 'evaluation-finale'].includes(achat.statut) && (
+            <SectionSoumettre onSoumettre={async () => {
+              await mettreAJour(achat.id, { statut: 'a-approuver' });
+            }} />
+          )}
+
+          {/* ── Évaluation initiale (optionnelle — infos supplémentaires) ─── */}
           {(achat.statut === 'evaluation-initiale' || evalInits.length > 0) && (
             <SectionEvalInit achat={achat} evals={evalInits} profiles={profilesById}
               canEvaluate={isAcheteurPrincipal} userId={session.profileId}
-              onSaved={async () => { await reload();
-                const refreshed = await achatService.getEvaluationsInitiales(achat.id);
-                if (refreshed.length >= 2 && achat.statut === 'evaluation-initiale') {
-                  await mettreAJour(achat.id, { statut: 'evaluation-finale' });
-                }
-              }} />
+              onSaved={async () => { await reload(); }} />
           )}
 
           {/* Évaluation finale */}
@@ -357,6 +359,31 @@ export function FicheAchatMobile({ achat, session, onClose }: {
 }
 
 // ── Sous-sections ─────────────────────────────────────────
+
+function SectionSoumettre({ onSoumettre }: { onSoumettre: () => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  return (
+    <div style={{ padding: 16, borderRadius: 14, background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', border: '2px solid #10b981' }}>
+      <div style={{ fontSize: 16, fontWeight: 800, color: 'white', marginBottom: 4 }}>
+        🚀 Prêt à soumettre ?
+      </div>
+      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 14, lineHeight: 1.5 }}>
+        Joël, Jason et Régis recevront une notification et pourront approuver, faire une contre-offre ou refuser.
+      </div>
+      <button onClick={async () => { setSaving(true); await onSoumettre(); setSaving(false); }}
+        disabled={saving}
+        style={{
+          width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+          background: saving ? '#374151' : '#10b981',
+          color: 'white', fontSize: 17, fontWeight: 800,
+          cursor: saving ? 'not-allowed' : 'pointer',
+          boxShadow: saving ? 'none' : '0 4px 14px rgba(16,185,129,0.4)',
+        }}>
+        {saving ? '⏳ Envoi…' : '📤 Soumettre pour approbation'}
+      </button>
+    </div>
+  );
+}
 
 function SectionEvalInit({ achat, evals, profiles, canEvaluate, userId, onSaved }: any) {
   const monEval = evals.find((e: any) => e.evaluateurId === userId);

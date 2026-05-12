@@ -221,7 +221,7 @@ export function MobileWizardAchat({ acheteurId, onClose, onCree }: {
         prixDemandeInitial: data.prixDemande ? parseFloat(data.prixDemande) : undefined,
         lieuLocalisation: data.lieuLocalisation || undefined,
         paye: false,
-        statut: 'evaluation-initiale',
+        statut: 'a-approuver',
         acheteurId,
       });
 
