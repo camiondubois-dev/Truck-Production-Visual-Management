@@ -313,8 +313,6 @@ CREATE POLICY "plans_vente_write" ON prod_plans_vente
   USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
 
 -- ── prod_plans_vente_vehicules ────────────────────────────────────
--- NOTE : si cette table s'affiche avec une icône œil dans Supabase,
--- c'est une vue — retirer ce bloc avant d'exécuter le script.
 ALTER TABLE prod_plans_vente_vehicules ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "plans_veh_select"          ON prod_plans_vente_vehicules;
 DROP POLICY IF EXISTS "plans_veh_write"           ON prod_plans_vente_vehicules;
