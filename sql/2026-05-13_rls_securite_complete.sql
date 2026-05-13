@@ -298,14 +298,9 @@ CREATE POLICY "couts_veh_write" ON prod_couts_vehicule
   USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
 
 -- ── prod_inventaire_couts ─────────────────────────────────────────
-ALTER TABLE prod_inventaire_couts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "inv_couts_select"          ON prod_inventaire_couts;
-DROP POLICY IF EXISTS "inv_couts_write"           ON prod_inventaire_couts;
-CREATE POLICY "inv_couts_select" ON prod_inventaire_couts
-  FOR SELECT TO authenticated USING (auth_peut_lire_finance());
-CREATE POLICY "inv_couts_write" ON prod_inventaire_couts
-  FOR ALL TO authenticated
-  USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
+-- VUE SQL — impossible de faire ALTER TABLE ENABLE ROW LEVEL SECURITY
+-- sur une vue. Protégée indirectement via RLS sur prod_couts_vehicule
+-- (les utilisateurs sans rôle gestion ne peuvent pas lire la table source).
 
 -- ── prod_plans_vente ──────────────────────────────────────────────
 ALTER TABLE prod_plans_vente ENABLE ROW LEVEL SECURITY;
@@ -318,6 +313,8 @@ CREATE POLICY "plans_vente_write" ON prod_plans_vente
   USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
 
 -- ── prod_plans_vente_vehicules ────────────────────────────────────
+-- NOTE : si cette table s'affiche avec une icône œil dans Supabase,
+-- c'est une vue — retirer ce bloc avant d'exécuter le script.
 ALTER TABLE prod_plans_vente_vehicules ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "plans_veh_select"          ON prod_plans_vente_vehicules;
 DROP POLICY IF EXISTS "plans_veh_write"           ON prod_plans_vente_vehicules;
@@ -328,11 +325,6 @@ CREATE POLICY "plans_veh_write" ON prod_plans_vente_vehicules
   USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
 
 -- ── prod_rapport_profitabilite ────────────────────────────────────
-ALTER TABLE prod_rapport_profitabilite ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "rapport_prof_select"       ON prod_rapport_profitabilite;
-DROP POLICY IF EXISTS "rapport_prof_write"        ON prod_rapport_profitabilite;
-CREATE POLICY "rapport_prof_select" ON prod_rapport_profitabilite
-  FOR SELECT TO authenticated USING (auth_peut_lire_finance());
-CREATE POLICY "rapport_prof_write" ON prod_rapport_profitabilite
-  FOR ALL TO authenticated
-  USING  (auth_peut_lire_finance()) WITH CHECK (auth_peut_lire_finance());
+-- VUE SQL — impossible de faire ALTER TABLE ENABLE ROW LEVEL SECURITY
+-- sur une vue. Protégée indirectement via RLS sur prod_ventes et
+-- prod_couts_vehicule (les tables sources sont sécurisées).
