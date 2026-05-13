@@ -9,6 +9,7 @@ import { MobileWizardAchat } from './MobileWizardAchat';
 import { FicheAchatMobile } from './FicheAchatMobile';
 import { NotificationsBell } from './NotificationsBell';
 import type { AchatsSession } from '../hooks/useAchatsAuth';
+import { useActiviteTracker } from '../hooks/useActiviteTracker';
 
 const COULEUR = '#10b981';
 const DRAFT_KEY = 'achats_wizard_draft';
@@ -24,6 +25,9 @@ export function VueAchatsMobile({ session, onLogout }: { session: AchatsSession;
   const [showMenu, setShowMenu] = useState(false);
 
   const aDraft = !!localStorage.getItem(DRAFT_KEY);
+
+  // Tracking présence — apparaît dans le logbook sous le nom PIN
+  useActiviteTracker(session.nom, 'tv', 'achats-mobile', 'mobile-achats');
 
   // Filtrage
   const liste = useMemo(() => {

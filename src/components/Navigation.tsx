@@ -29,6 +29,7 @@ const ADMIN_TABS = [
   { id: 'tv-admin',      label: 'Modifications TV', icon: '📺', color: '#f97316' },
   { id: 'import',        label: 'Import',           icon: '📥', color: '#f59e0b' },
   { id: 'profitabilite', label: 'Profitabilité',    icon: '💹', color: '#22c55e' },
+  { id: 'activite',      label: 'Activité',         icon: '👁️', color: '#06b6d4' },
 ];
 
 export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationProps) {

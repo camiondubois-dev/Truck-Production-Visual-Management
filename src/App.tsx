@@ -19,12 +19,14 @@ import { TVConnexion } from './components/TVConnexion';
 import { VueAdminTV } from './components/VueAdminTV';
 import { VueImport } from './components/VueImport';
 import { VueProfitabilite } from './components/VueProfitabilite';
+import { VueActivite } from './components/VueActivite';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
+import { useActiviteTracker } from './hooks/useActiviteTracker';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'activite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite'];
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite','activite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -37,6 +39,9 @@ export default function App() {
     return 'livraisons';
   });
   const [showWizard, setShowWizard] = useState(false);
+
+  // Tracking activité — log chaque changement d'onglet
+  useActiviteTracker(profile?.nom, profile?.role, currentTab);
 
   // Persiste l'onglet courant pour survivre au refresh
   const handleTabChange = (id: string) => {
@@ -109,6 +114,7 @@ export default function App() {
         {currentTab === 'tv-admin'      && <VueAdminTV />}
         {currentTab === 'import'        && <VueImport />}
         {currentTab === 'profitabilite' && <VueProfitabilite />}
+        {currentTab === 'activite'      && <VueActivite />}
       </div>
     </div>
   );
