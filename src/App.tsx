@@ -23,6 +23,7 @@ import { VueActivite } from './components/VueActivite';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 import { useActiviteTracker } from './hooks/useActiviteTracker';
+import { useAutoReload } from './hooks/useAutoReload';
 
 type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'activite';
 
@@ -39,6 +40,9 @@ export default function App() {
     return 'livraisons';
   });
   const [showWizard, setShowWizard] = useState(false);
+
+  // Rechargement automatique quand Netlify déploie une nouvelle version
+  useAutoReload();
 
   // Tracking activité — log chaque changement d'onglet
   useActiviteTracker(profile?.nom, profile?.role, currentTab);
