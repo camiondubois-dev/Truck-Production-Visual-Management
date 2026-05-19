@@ -406,12 +406,12 @@ export interface VenteRow {
 }
 
 // ─── Calcul de l'année fiscale (juillet → juin) ─────────────────────
-// Convention : FY se termine en juin. Donc vente en juillet 2026 → FY2027.
+// Convention : FY est nommé par l'année de départ. Juillet 2025 → juin 2026 = FY2025.
 export function anneeFiscale(dateStr: string): number {
   const d = new Date(dateStr);
   const month = d.getMonth(); // 0 = jan, 6 = jul
   const year = d.getFullYear();
-  return month >= 6 ? year + 1 : year;
+  return month >= 6 ? year : year - 1;
 }
 
 // ─── Parser CSV ventes par inventory type (9000 ou 9025) ────────────
