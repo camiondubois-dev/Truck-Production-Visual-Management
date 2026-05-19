@@ -13,7 +13,8 @@ export interface DbVehicule {
   stock_numero: string;
   prix_achat_reel: number | null;
   cout_mo: number | null;
-  type: 'eau' | 'detail' | string;
+  /** Dans prod_ventes la colonne s'appelle `source` (valeurs : 'eau' | 'detail' | 'encan' | 'exportation') */
+  source: 'eau' | 'detail' | string;
   marque: string | null;
   modele: string | null;
   annee: number | null;
@@ -119,9 +120,9 @@ export function parseHitracCSV(text: string): HitracAggregate[] {
 export async function loadInventaireActif(): Promise<DbVehicule[]> {
   const { data, error } = await supabase
     .from('prod_ventes')
-    .select('stock_numero, prix_achat_reel, cout_mo, type, marque, modele, annee')
+    .select('stock_numero, prix_achat_reel, cout_mo, source, marque, modele, annee')
     .eq('statut', 'inventaire')
-    .in('type', ['eau', 'detail']);
+    .in('source', ['eau', 'detail']);
 
   if (error) throw error;
   return (data ?? []) as DbVehicule[];
@@ -145,7 +146,7 @@ export function calculateDiff(db: DbVehicule[], hitrac: HitracAggregate[]): Diff
       absents++;
       rows.push({
         stock_numero: v.stock_numero,
-        type: v.type, label,
+        type: v.source, label,
         achat_db: v.prix_achat_reel, achat_hitrac: 0, achat_nouvelle: null, achat_protege: false,
         mo_db: v.cout_mo, mo_hitrac: 0, mo_nouvelle: null,
         kind: 'absent_hitrac',
