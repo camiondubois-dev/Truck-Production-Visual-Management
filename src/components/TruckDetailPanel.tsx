@@ -65,6 +65,7 @@ export function TruckDetailPanel({
       <div
         style={{
           padding: '16px 20px',
+          paddingTop: 'max(16px, env(safe-area-inset-top))',
           borderBottom: '1px solid #e5e7eb',
           background: '#ffffff',
           flexShrink: 0,
