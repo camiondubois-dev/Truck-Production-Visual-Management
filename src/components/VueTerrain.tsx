@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
@@ -573,9 +573,16 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     background: 'white', boxSizing: 'border-box',
   };
 
+  const touchStartY = useRef<number>(0);
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', maxHeight: '92vh', overflowY: 'auto', paddingBottom: 40 }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        onTouchStart={e => { touchStartY.current = e.touches[0].clientY; }}
+        onTouchEnd={e => { if (e.changedTouches[0].clientY - touchStartY.current > 80) onClose(); }}
+        style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', maxHeight: '92vh', overflowY: 'auto', paddingBottom: 40 }}
+      >
 
         {/* Poignée + bouton fermer */}
         <div style={{ padding: '12px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -776,6 +783,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           <RoadMapEditor
             vehicule={v}
             onSaved={updated => onMisAJour(updated)}
+            onClose={onClose}
             compact={true}
           />
         </div>

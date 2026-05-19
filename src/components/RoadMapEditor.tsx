@@ -22,10 +22,11 @@ const STATUT_CONFIG = {
 interface Props {
   vehicule: VehiculeInventaire;
   onSaved: (updated: VehiculeInventaire) => void;
+  onClose?: () => void;
   compact?: boolean; // true = terrain (mobile), false = desktop
 }
 
-export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
+export function RoadMapEditor({ vehicule, onSaved, onClose, compact = false }: Props) {
   const { mettreAJourRoadMap } = useInventaire();
   const [steps, setSteps] = useState<RoadMapEtape[]>(
     (vehicule.roadMap ?? []).sort((a, b) => a.ordre - b.ordre)
@@ -54,7 +55,7 @@ export function RoadMapEditor({ vehicule, onSaved, compact = false }: Props) {
       }
       onSaved({ ...vehicule, roadMap: newSteps, typeReservoirRequis: (typeReservoir || undefined) as any });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => { setSaved(false); onClose?.(); }, 1200);
     } finally { setSaving(false); }
   };
 
