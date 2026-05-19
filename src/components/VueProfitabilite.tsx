@@ -318,6 +318,8 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
   const [fModele, setFModele] = useState('');
   const [fAnnee, setFAnnee] = useState('');
   const [fStock, setFStock] = useState('');
+  const [fDateDu, setFDateDu] = useState('');
+  const [fDateAu, setFDateAu] = useState('');
   const [sortCol, setSortCol] = useState<string>('date_vente');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -344,13 +346,15 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
     if (fModele) r = r.filter(x => x.modele === fModele);
     if (fAnnee) r = r.filter(x => String(x.annee_fiscale) === fAnnee);
     if (fStock) r = r.filter(x => x.stock_numero.includes(fStock));
+    if (fDateDu) r = r.filter(x => x.date_vente != null && x.date_vente >= fDateDu);
+    if (fDateAu) r = r.filter(x => x.date_vente != null && x.date_vente <= fDateAu);
     return [...r].sort((a, b) => {
       const va = (a as Record<string, unknown>)[sortCol] ?? '';
       const vb = (b as Record<string, unknown>)[sortCol] ?? '';
       const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [rows, fType, fMarque, fModele, fAnnee, fStock, sortCol, sortDir]);
+  }, [rows, fType, fMarque, fModele, fAnnee, fStock, fDateDu, fDateAu, sortCol, sortDir]);
 
   const totalVente = filtered.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
   const totalProfit = filtered.reduce((s, r) => s + (r.marge_profit ?? 0), 0);
@@ -431,8 +435,24 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
           onChange={e => setFStock(e.target.value)}
           style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '7px 12px', fontSize: 13, fontFamily: 'system-ui, sans-serif', width: 100 }}
         />
-        {(fType || fMarque || fModele || fAnnee || fStock) && (
-          <button onClick={() => { setFType(''); setFMarque(''); setFModele(''); setFAnnee(''); setFStock(''); }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Du</span>
+          <input
+            type="date"
+            value={fDateDu}
+            onChange={e => setFDateDu(e.target.value)}
+            style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '7px 10px', fontSize: 13, fontFamily: 'system-ui, sans-serif', colorScheme: 'dark' }}
+          />
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Au</span>
+          <input
+            type="date"
+            value={fDateAu}
+            onChange={e => setFDateAu(e.target.value)}
+            style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '7px 10px', fontSize: 13, fontFamily: 'system-ui, sans-serif', colorScheme: 'dark' }}
+          />
+        </div>
+        {(fType || fMarque || fModele || fAnnee || fStock || fDateDu || fDateAu) && (
+          <button onClick={() => { setFType(''); setFMarque(''); setFModele(''); setFAnnee(''); setFStock(''); setFDateDu(''); setFDateAu(''); }}
             style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>
             Effacer filtres
           </button>
@@ -619,6 +639,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
               <Th col="annee_fiscale" label="AF" />
               <Th col="prix_achat_reel" label="Coût achat" />
               <Th col="cout_mo" label="M.O." />
+              <Th col="cout_total" label="Coût total" />
               <Th col="prix_vente" label="Prix vente" />
               <Th col="marge_profit" label="Profit" />
               <Th col="pct_profit" label="Marge %" />
@@ -643,6 +664,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
                   <td style={{ padding: '9px 12px', textAlign: 'right' }}>{r.annee_fiscale}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right' }}>{fmt$(r.prix_achat_reel)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right' }}>{fmt$(r.cout_mo)}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.6)' }}>{fmt$(r.cout_total)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.prix_vente)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: profitColor(r.marge_profit) }}>{fmt$(r.marge_profit)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', color: profitColor(r.pct_profit) }}>{fmtPct(r.pct_profit)}</td>
