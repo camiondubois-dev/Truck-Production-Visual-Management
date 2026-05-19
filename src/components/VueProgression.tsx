@@ -173,14 +173,19 @@ export function VueProgression() {
   }, [trucks]);
 
   const handleRowClick = (truck: Truck) => {
-    setSelectedTruckId(truck.id);
+    setSelectedTruckId(prev => prev === truck.id ? null : truck.id);
     setScrollToStationId(undefined);
   };
 
   const handleCellClick = (truck: Truck, stationId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedTruckId(truck.id);
-    setScrollToStationId(stationId);
+    if (selectedTruckId === truck.id) {
+      setSelectedTruckId(null);
+      setScrollToStationId(undefined);
+    } else {
+      setSelectedTruckId(truck.id);
+      setScrollToStationId(stationId);
+    }
   };
 
   return (
