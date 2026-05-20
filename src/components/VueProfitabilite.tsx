@@ -1291,6 +1291,7 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
   const [vehicules, setVehicules] = useState<PlanVehicule[]>([]);
   const [loadingV, setLoadingV] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
+  const [pushing,    setPushing]    = useState<string | null>(null);
 
   const metaMap = Object.fromEntries(invMeta.map(m => [m.numero, m]));
 
@@ -1381,6 +1382,27 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
 
     setActivating(null);
     chargerPlans();
+  }
+
+  async function pousserPrix(plan: PlanResume) {
+    if (!confirm(`Pousser les ${plan.nb_vehicules} prix de "${plan.nom}" vers l'inventaire ? Les prix demandés actuels seront remplacés.`)) return;
+    setPushing(plan.id);
+    const { data: veh } = await supabase
+      .from('prod_plans_vente_vehicules')
+      .select('stock_numero, prix_plan')
+      .eq('plan_id', plan.id);
+    if (veh) {
+      const avecPrix = (veh as { stock_numero: string; prix_plan: number | null }[]).filter(v => v.prix_plan != null);
+      await Promise.all(
+        avecPrix.map(v =>
+          supabase.from('prod_ventes')
+            .update({ prix_demande: v.prix_plan })
+            .eq('stock_numero', v.stock_numero)
+        )
+      );
+    }
+    setPushing(null);
+    alert(`✅ ${(veh ?? []).filter((v: any) => v.prix_plan != null).length} prix poussés dans l'inventaire.`);
   }
 
   async function archiverPlan(planId: string) {
@@ -1474,6 +1496,16 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
+                  {/* Bouton Pousser les prix — visible sur TOUS les plans */}
+                  <button
+                    onClick={() => pousserPrix(plan)}
+                    disabled={pushing === plan.id}
+                    style={{ background: '#f59e0b', border: 'none', borderRadius: 8, color: 'white', padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    title="Écrire les prix de ce plan dans l'inventaire (prix_demande)"
+                  >
+                    {pushing === plan.id ? '...' : '📤 Pousser les prix'}
+                  </button>
+
                   {plan.statut === 'brouillon' && (
                     <button
                       onClick={() => activerPlan(plan)}
@@ -1491,7 +1523,7 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
                       Archiver
                     </button>
                   )}
-                  {plan.statut === 'archive' && (
+                  {plan.statut !== 'actif' && (
                     <button
                       onClick={() => supprimerPlan(plan.id, plan.nom)}
                       style={{ background: 'transparent', border: '1px solid #ef444440', borderRadius: 8, color: '#ef4444', padding: '7px 14px', fontSize: 12, cursor: 'pointer' }}
