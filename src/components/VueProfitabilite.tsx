@@ -50,6 +50,10 @@ interface InventaireRow {
   modele?: string;
   annee?: number;
   type?: string;
+  // Statut paiement (depuis prod_inventaire)
+  etat_commercial?: string;
+  paiement_complet?: boolean;
+  paiement_depot?: boolean;
 }
 
 interface InvMeta {
@@ -707,6 +711,7 @@ function VueInventaire({
   const [fAnnee, setFAnnee] = useState('');
   const [fStock, setFStock] = useState('');
   const [fAvecPrix, setFAvecPrix] = useState(false);
+  const [fPaiement, setFPaiement] = useState<'' | 'paye' | 'depot' | 'pipeline'>('');
   const [sortCol, setSortCol] = useState<string>('stock_numero');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showModal, setShowModal] = useState(false);
@@ -753,15 +758,23 @@ function VueInventaire({
   }
 
   useEffect(() => {
-    supabase.from('prod_inventaire_couts').select('*').then(({ data }) => {
+    Promise.all([
+      supabase.from('prod_inventaire_couts').select('*'),
+      supabase.from('prod_inventaire').select('numero, etat_commercial, paiement_complet, paiement_depot'),
+    ]).then(([{ data }, { data: invPay }]) => {
       if (!data) return;
       const metaMap = Object.fromEntries(invMeta.map(m => [m.numero, m]));
+      const payMap: Record<string, { etat_commercial: string; paiement_complet: boolean; paiement_depot: boolean }> = {};
+      (invPay ?? []).forEach((r: any) => { payMap[r.numero] = r; });
       const enriched = (data as InventaireRow[]).map(r => ({
         ...r,
         marque: metaMap[r.stock_numero]?.marque ?? '',
         modele: metaMap[r.stock_numero]?.modele ?? '',
         annee: metaMap[r.stock_numero]?.annee ?? undefined,
         type: metaMap[r.stock_numero]?.type ?? r.type_vehicule,
+        etat_commercial: payMap[r.stock_numero]?.etat_commercial,
+        paiement_complet: payMap[r.stock_numero]?.paiement_complet ?? false,
+        paiement_depot: payMap[r.stock_numero]?.paiement_depot ?? false,
       }));
       setRows(enriched);
       setLoading(false);
@@ -837,6 +850,9 @@ function VueInventaire({
       if (fAnnee) r = r.filter(x => String(x.annee) === fAnnee);
       if (fStock) r = r.filter(x => x.stock_numero.includes(fStock));
       if (fAvecPrix) r = r.filter(x => x.prix_demande && x.prix_demande > 0);
+      if (fPaiement === 'paye')     r = r.filter(x => x.paiement_complet);
+      if (fPaiement === 'depot')    r = r.filter(x => x.paiement_depot && !x.paiement_complet);
+      if (fPaiement === 'pipeline') r = r.filter(x => ['reserve', 'vendu', 'location'].includes(x.etat_commercial ?? '') && !x.paiement_complet);
     }
     return [...r].sort((a, b) => {
       const va = (a as Record<string, unknown>)[sortCol] ?? 0;
@@ -879,7 +895,7 @@ function VueInventaire({
 
   if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', padding: 32 }}>Chargement...</div>;
 
-  const hasActiveFilters = fType || fMarque || fModele || fAnnee || fStock || fAvecPrix;
+  const hasActiveFilters = fType || fMarque || fModele || fAnnee || fStock || fAvecPrix || fPaiement;
 
   return (
     <div>
@@ -908,8 +924,29 @@ function VueInventaire({
         >
           {fAvecPrix ? '✓ ' : ''}Avec prix demandé
         </button>
+        {/* Filtre paiement */}
+        {(['', 'pipeline', 'depot', 'paye'] as const).map(v => {
+          const labels: Record<string, string> = { '': 'Tous', pipeline: '🔒 Pipeline', depot: '💵 Dépôt reçu', paye: '✅ Payés complet' };
+          const colors: Record<string, string> = { '': 'rgba(255,255,255,0.12)', pipeline: '#8b5cf6', depot: '#f59e0b', paye: '#22c55e' };
+          const active = fPaiement === v;
+          return (
+            <button
+              key={v}
+              onClick={() => setFPaiement(v)}
+              style={{
+                background: active ? `${colors[v]}25` : 'transparent',
+                border: `1px solid ${active ? colors[v] : 'rgba(255,255,255,0.12)'}`,
+                borderRadius: 8, color: active ? colors[v] : 'rgba(255,255,255,0.5)',
+                padding: '7px 14px', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+                fontFamily: 'system-ui, sans-serif',
+              }}
+            >
+              {labels[v]}
+            </button>
+          );
+        })}
         {hasActiveFilters && (
-          <button onClick={() => { setFType(''); setFMarque(''); setFModele(''); setFAnnee(''); setFStock(''); setFAvecPrix(false); }}
+          <button onClick={() => { setFType(''); setFMarque(''); setFModele(''); setFAnnee(''); setFStock(''); setFAvecPrix(false); setFPaiement(''); }}
             style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>
             Effacer filtres
           </button>
@@ -1075,17 +1112,38 @@ function VueInventaire({
               const isSelected = selected.has(r.stock_numero);
               const hasPrix = prixDemande && prixDemande > 0;
 
+              // Color coding paiement
+              const isPaye    = r.paiement_complet;
+              const hasDepot  = r.paiement_depot && !r.paiement_complet;
+              const isPipeline = ['reserve', 'vendu', 'location'].includes(r.etat_commercial ?? '') && !r.paiement_complet;
+              const rowBg = isSelected ? '#f59e0b10'
+                : isPaye    ? 'rgba(74,222,128,0.07)'
+                : hasDepot  ? 'rgba(245,158,11,0.07)'
+                : isPipeline ? 'rgba(139,92,246,0.05)'
+                : 'transparent';
+              const rowBorderLeft = isPaye    ? '3px solid #4ade80'
+                : hasDepot  ? '3px solid #f59e0b'
+                : isPipeline ? '3px solid #8b5cf6'
+                : '3px solid transparent';
+
               return (
                 <tr key={r.stock_numero}
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.8)', background: isSelected ? '#f59e0b10' : 'transparent', cursor: 'pointer' }}
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.8)', background: rowBg, cursor: 'pointer', borderLeft: rowBorderLeft }}
                   onClick={() => toggleSelect(r.stock_numero)}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = isSelected ? '#f59e0b10' : 'transparent'; }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = isPaye ? 'rgba(74,222,128,0.12)' : hasDepot ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = rowBg; }}
                 >
                   <td style={{ padding: '9px 12px', width: 36 }} onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(r.stock_numero)} style={{ cursor: 'pointer', accentColor: '#f59e0b' }} />
                   </td>
-                  <td style={{ padding: '9px 12px', fontWeight: 600 }}>{r.stock_numero}</td>
+                  <td style={{ padding: '9px 12px', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {r.stock_numero}
+                      {isPaye    && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: 'rgba(74,222,128,0.2)', color: '#4ade80' }}>PAYÉ</span>}
+                      {hasDepot  && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>DÉPÔT</span>}
+                      {isPipeline && !hasDepot && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: 'rgba(139,92,246,0.2)', color: '#a78bfa' }}>PIPELINE</span>}
+                    </div>
+                  </td>
                   <td style={{ padding: '9px 12px' }}>{r.marque || '—'}</td>
                   <td style={{ padding: '9px 12px' }}>{r.modele || '—'}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right' }}>{r.annee ?? '—'}</td>
