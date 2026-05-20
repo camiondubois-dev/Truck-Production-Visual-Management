@@ -632,9 +632,19 @@ const restoreBtn: React.CSSProperties = { padding: '4px 10px', borderRadius: 6, 
 // ─── IMPORTER VENTES PIÈCES (export Hightrack CSV par vendeur) ──────
 // ════════════════════════════════════════════════════════════════════
 
+// Vendeurs disponibles pour l'import pièces
+const VENDEURS_IMPORT = [
+  { code: 'avaliquette', nom: 'Alex Valiquette' },
+  { code: 'brainville',  nom: 'Bernard Rainville' },
+  { code: 'jchamps',     nom: 'Jimmy Champs' },
+  { code: 'xgemme',      nom: 'Xavier Gemme' },
+  { code: 'pdoiron',     nom: 'Patrick Doiron' },
+];
+
 function PiecesImporter() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<'upload' | 'preview' | 'done'>('upload');
+  const [vendeurCode, setVendeurCode] = useState('');   // code du vendeur sélectionné
   const [error, setError] = useState<string | null>(null);
   const [filename, setFilename] = useState('');
   const [parsed, setParsed] = useState<PieceRow[]>([]);
@@ -643,7 +653,10 @@ function PiecesImporter() {
   const [result, setResult] = useState<PiecesImportResult | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
 
+  const vendeurNom = VENDEURS_IMPORT.find(v => v.code === vendeurCode)?.nom ?? '';
+
   async function handleFile(file: File) {
+    if (!vendeurCode) { setError('Veuillez d\'abord choisir le vendeur.'); return; }
     setError(null);
     setLoading(true);
     setFilename(file.name);
@@ -651,10 +664,12 @@ function PiecesImporter() {
       const text = await file.text();
       const { rows, errors: pErrors } = parsePiecesCSV(text);
       if (rows.length === 0) { setError('Aucune ligne valide trouvée dans le fichier.'); setLoading(false); return; }
+      // Écraser le vendeur de chaque ligne avec le vendeur sélectionné
+      const rowsTagged = rows.map(r => ({ ...r, vendeur: vendeurCode }));
       setParseErrors(pErrors);
-      setParsed(rows);
+      setParsed(rowsTagged);
       const existants = await loadPiecesExistantes();
-      setDiff(calculatePiecesDiff(rows, existants));
+      setDiff(calculatePiecesDiff(rowsTagged, existants));
       setStep('preview');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erreur inconnue');
@@ -671,114 +686,120 @@ function PiecesImporter() {
     setLoading(false);
   }
 
-  function reset() { setStep('upload'); setError(null); setParsed([]); setDiff(null); setResult(null); setParseErrors([]); }
+  function reset() {
+    setStep('upload'); setError(null); setParsed([]); setDiff(null);
+    setResult(null); setParseErrors([]); setVendeurCode('');
+    if (fileRef.current) fileRef.current.value = '';
+  }
 
   const totalNet = parsed.reduce((s, r) => s + r.sous_total, 0);
-  const vendeurs = [...new Set(parsed.map(r => r.vendeur || '(sans vendeur)'))].sort();
-
   const fmt$ = (n: number) => new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2 }).format(n);
 
-  // ── Étape 1 : Upload ──
+  // ── Étape 1 : Choisir vendeur + Upload ──
   if (step === 'upload') return (
     <div style={{ maxWidth: 600 }}>
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: 32, marginBottom: 16 }}>
-        <h2 style={{ margin: '0 0 8px', color: '#0f172a', fontSize: 20, fontWeight: 700 }}>🔧 Import Ventes Pièces</h2>
-        <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>
-          Export Hightrack · <strong>Sales Orders</strong> par vendeur (CSV).<br />
-          Colonnes requises : Date, Document #, Salesperson, Subtotal, Customer Company Name.
-        </p>
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: 32 }}>
+        <h2 style={{ margin: '0 0 4px', color: '#0f172a', fontSize: 20, fontWeight: 700 }}>🔧 Import Ventes Pièces</h2>
+        <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Export Hightrack · Sales Orders (CSV)</p>
+
+        {/* Sélection du vendeur */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 }}>
+            1. Ce rapport appartient à quel vendeur ?
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {VENDEURS_IMPORT.map(v => (
+              <button
+                key={v.code}
+                onClick={() => setVendeurCode(v.code)}
+                style={{
+                  padding: '10px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  background: vendeurCode === v.code ? '#10b981' : '#f8fafc',
+                  border: vendeurCode === v.code ? '2px solid #10b981' : '2px solid #e5e7eb',
+                  color: vendeurCode === v.code ? 'white' : '#374151',
+                  transition: 'all 0.15s',
+                }}
+              >{v.nom}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Zone de dépôt du fichier */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 }}>
+          2. Téléverser le fichier CSV
+        </div>
         <div
-          onClick={() => fileRef.current?.click()}
+          onClick={() => vendeurCode ? fileRef.current?.click() : setError('Choisissez d\'abord le vendeur.')}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-          style={{ border: '2px dashed #10b981', borderRadius: 12, padding: '40px 24px', textAlign: 'center', cursor: 'pointer', background: '#f0fdf4' }}
+          style={{
+            border: `2px dashed ${vendeurCode ? '#10b981' : '#d1d5db'}`,
+            borderRadius: 12, padding: '36px 24px', textAlign: 'center',
+            cursor: vendeurCode ? 'pointer' : 'not-allowed',
+            background: vendeurCode ? '#f0fdf4' : '#f9fafb',
+          }}
         >
           <div style={{ fontSize: 36, marginBottom: 8 }}>📂</div>
-          <div style={{ color: '#065f46', fontWeight: 700, fontSize: 15 }}>Cliquer ou glisser le fichier CSV</div>
-          <div style={{ color: '#6ee7b7', fontSize: 12, marginTop: 4 }}>Ex : AlexV.csv, BRainville.csv…</div>
+          <div style={{ color: vendeurCode ? '#065f46' : '#9ca3af', fontWeight: 700, fontSize: 15 }}>
+            {vendeurCode
+              ? `Cliquer ou glisser le rapport de ${vendeurNom}`
+              : 'Choisissez d\'abord le vendeur ci-dessus'}
+          </div>
         </div>
         <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+
         {loading && <div style={{ marginTop: 16, color: '#10b981', fontWeight: 600 }}>Analyse en cours…</div>}
-        {error && <div style={{ marginTop: 16, color: '#ef4444', fontWeight: 600 }}>{error}</div>}
+        {error  && <div style={{ marginTop: 16, color: '#ef4444', fontWeight: 600 }}>{error}</div>}
       </div>
     </div>
   );
 
   // ── Étape 2 : Prévisualisation ──
-  if (step === 'preview' && diff) {
-    const parVendeur: Record<string, { nb: number; total: number }> = {};
-    parsed.forEach(r => {
-      const v = r.vendeur || '(sans vendeur)';
-      if (!parVendeur[v]) parVendeur[v] = { nb: 0, total: 0 };
-      parVendeur[v].nb++;
-      parVendeur[v].total += r.sous_total;
-    });
+  if (step === 'preview' && diff) return (
+    <div style={{ maxWidth: 700 }}>
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <span style={{ background: '#10b98120', color: '#10b981', padding: '6px 14px', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
+            {vendeurNom}
+          </span>
+          <span style={{ color: '#64748b', fontSize: 13 }}>{filename}</span>
+        </div>
 
-    return (
-      <div style={{ maxWidth: 900 }}>
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: 28, marginBottom: 16 }}>
-          <h2 style={{ margin: '0 0 4px', color: '#0f172a', fontSize: 18, fontWeight: 700 }}>Prévisualisation — {filename}</h2>
-          <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: 13 }}>{parsed.length} factures · Net {fmt$(totalNet)}</p>
-
-          {/* Stats globales */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Total lignes', val: String(parsed.length), color: '#0f172a' },
-              { label: 'Nouvelles', val: String(diff.nouveaux.length), color: '#16a34a' },
-              { label: 'Mises à jour', val: String(diff.doublons.length), color: '#f59e0b' },
-              { label: 'Net total', val: fmt$(totalNet), color: totalNet >= 0 ? '#16a34a' : '#ef4444' },
-            ].map(k => (
-              <div key={k.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 18px', border: '1px solid #e5e7eb', minWidth: 120 }}>
-                <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
-                <div style={{ color: k.color, fontSize: 18, fontWeight: 700 }}>{k.val}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Par vendeur */}
-          <h3 style={{ margin: '0 0 10px', fontSize: 14, color: '#374151', fontWeight: 700 }}>Répartition par vendeur</h3>
-          <div style={{ ...tableContainer, marginBottom: 20 }}>
-            <table style={tableStyle}>
-              <thead><tr style={tableHeadSticky}>
-                <th style={{ padding: '8px 14px', textAlign: 'left' }}>Vendeur</th>
-                <th style={{ padding: '8px 14px', textAlign: 'right' }}>Nb factures</th>
-                <th style={{ padding: '8px 14px', textAlign: 'right' }}>Total net</th>
-              </tr></thead>
-              <tbody>
-                {Object.entries(parVendeur).sort((a, b) => b[1].total - a[1].total).map(([v, s]) => (
-                  <tr key={v} style={{ borderTop: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '7px 14px', fontWeight: 600 }}>{v}</td>
-                    <td style={tdNum}>{s.nb}</td>
-                    <td style={{ ...tdNum, color: s.total >= 0 ? '#16a34a' : '#ef4444', fontWeight: 700 }}>{fmt$(s.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Erreurs de parsing */}
-          {parseErrors.length > 0 && (
-            <div style={{ background: '#fef3c7', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
-              <strong>{parseErrors.length} avertissement(s) :</strong>
-              <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>{parseErrors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul>
-              {parseErrors.length > 5 && <div>…et {parseErrors.length - 5} autres.</div>}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total lignes',  val: String(parsed.length),       color: '#0f172a' },
+            { label: 'Nouvelles',     val: String(diff.nouveaux.length), color: '#16a34a' },
+            { label: 'Mises à jour',  val: String(diff.doublons.length), color: '#f59e0b' },
+            { label: 'Net total',     val: fmt$(totalNet),               color: totalNet >= 0 ? '#16a34a' : '#ef4444' },
+          ].map(k => (
+            <div key={k.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 18px', border: '1px solid #e5e7eb', minWidth: 110 }}>
+              <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{k.label}</div>
+              <div style={{ color: k.color, fontSize: 18, fontWeight: 700 }}>{k.val}</div>
             </div>
-          )}
+          ))}
+        </div>
 
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button style={secondaryBtn} onClick={reset}>← Recommencer</button>
-            <button
-              style={{ ...confirmBtn, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
-              onClick={handleConfirm} disabled={loading}
-            >
-              {loading ? 'Import en cours…' : `✓ Importer ${diff.nouveaux.length + diff.doublons.length} factures`}
-            </button>
+        {parseErrors.length > 0 && (
+          <div style={{ background: '#fef3c7', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
+            <strong>{parseErrors.length} avertissement(s) :</strong>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>{parseErrors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul>
+            {parseErrors.length > 5 && <div>…et {parseErrors.length - 5} autres.</div>}
           </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button style={secondaryBtn} onClick={reset}>← Recommencer</button>
+          <button
+            style={{ ...confirmBtn, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
+            onClick={handleConfirm} disabled={loading}
+          >
+            {loading ? 'Import en cours…' : `✓ Importer ${diff.nouveaux.length + diff.doublons.length} factures pour ${vendeurNom}`}
+          </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
   // ── Étape 3 : Résultat ──
   if (step === 'done' && result) return (
@@ -793,11 +814,15 @@ function PiecesImporter() {
         ) : (
           <>
             <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
-            <h2 style={{ color: '#16a34a', margin: '0 0 8px' }}>Import réussi</h2>
-            <p style={{ color: '#374151', fontSize: 14 }}><strong>{result.inserted}</strong> factures importées depuis <em>{filename}</em>.</p>
+            <h2 style={{ color: '#16a34a', margin: '0 0 8px' }}>Import réussi — {vendeurNom}</h2>
+            <p style={{ color: '#374151', fontSize: 14 }}>
+              <strong>{result.inserted}</strong> factures importées depuis <em>{filename}</em>.
+            </p>
           </>
         )}
-        <button style={{ ...primaryBtn, marginTop: 16, background: '#10b981' }} onClick={reset}>Importer un autre fichier</button>
+        <button style={{ ...primaryBtn, marginTop: 16, background: '#10b981' }} onClick={reset}>
+          Importer un autre rapport
+        </button>
       </div>
     </div>
   );
