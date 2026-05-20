@@ -7,6 +7,7 @@ export interface HitracAggregate {
   prix_achat_reel: number;   // Σ Vehicle Purchase Cost
   cout_mo: number;           // Σ Vehicle Work Order Cost
   nb_lignes: number;         // Nombre de lignes HITRAC pour ce camion
+  date_achat: string | null; // Date de la première ligne Vehicle Purchase Cost (YYYY-MM-DD)
 }
 
 export interface DbVehicule {
@@ -18,6 +19,7 @@ export interface DbVehicule {
   marque: string | null;
   modele: string | null;
   annee: number | null;
+  date_achat: string | null;
 }
 
 export type ChangeKind = 'identique' | 'maj_mo' | 'maj_achat' | 'maj_achat_et_mo' | 'protege' | 'absent_hitrac';
@@ -36,6 +38,8 @@ export interface DiffRow {
   mo_db: number | null;
   mo_hitrac: number;
   mo_nouvelle: number | null;      // valeur qui sera écrite
+  // Date d'achat (depuis HITRAC — seulement sur les lignes Vehicle Purchase Cost)
+  date_achat_hitrac: string | null;
   // Synthèse
   kind: ChangeKind;
 }
@@ -89,12 +93,15 @@ function parseAmount(raw: string | null | undefined): number | null {
 
 export function parseHitracCSV(text: string): HitracAggregate[] {
   const lines = text.split(/\r?\n/);
-  const sums = new Map<string, { purchase: number; wo: number; n: number }>();
+  const sums = new Map<string, { purchase: number; wo: number; n: number; date_achat: string | null }>();
 
   const stockRegex = /Stock # (\d+)/;
   // "Vehicle Purchase Cost","3 000,00" ou "Vehicle Work Order Cost","629,24"
   const purchaseRegex = /"Vehicle Purchase Cost","([\d\s,.-]+)"/;
   const woRegex       = /"Vehicle Work Order Cost","([\d\s,.-]+)"/;
+  // Date d'achat : après le montant, document et vendeur → YYYY-MM-DD
+  // ex: "Vehicle Purchase Cost","3 000,00","PO 1-40833","12411831 Canada Inc.",2025-04-28,
+  const dateAchatRegex = /"Vehicle Purchase Cost","[^"]*","[^"]*","[^"]*",(\d{4}-\d{2}-\d{2})/;
 
   for (const line of lines) {
     const sm = line.match(stockRegex);
@@ -106,11 +113,16 @@ export function parseHitracCSV(text: string): HitracAggregate[] {
     if (!pm && !wm) continue;
 
     let entry = sums.get(stock);
-    if (!entry) { entry = { purchase: 0, wo: 0, n: 0 }; sums.set(stock, entry); }
+    if (!entry) { entry = { purchase: 0, wo: 0, n: 0, date_achat: null }; sums.set(stock, entry); }
 
     if (pm) {
       const v = parseAmount(pm[1]);
       if (v != null) entry.purchase += v;
+      // Extraire la date d'achat (on garde la première rencontrée)
+      if (!entry.date_achat) {
+        const dm = line.match(dateAchatRegex);
+        if (dm) entry.date_achat = dm[1];
+      }
     }
     if (wm) {
       const v = parseAmount(wm[1]);
@@ -122,10 +134,11 @@ export function parseHitracCSV(text: string): HitracAggregate[] {
   const out: HitracAggregate[] = [];
   for (const [stock, v] of sums.entries()) {
     out.push({
-      stock_numero: stock,
+      stock_numero:    stock,
       prix_achat_reel: Math.round(v.purchase * 100) / 100,
       cout_mo:         Math.round(v.wo       * 100) / 100,
       nb_lignes:       v.n,
+      date_achat:      v.date_achat,
     });
   }
   return out;
@@ -136,7 +149,7 @@ export function parseHitracCSV(text: string): HitracAggregate[] {
 export async function loadInventaireActif(): Promise<DbVehicule[]> {
   const { data, error } = await supabase
     .from('prod_ventes')
-    .select('stock_numero, prix_achat_reel, cout_mo, source, marque, modele, annee')
+    .select('stock_numero, prix_achat_reel, cout_mo, source, marque, modele, annee, date_achat')
     .eq('statut', 'inventaire')
     .in('source', ['eau', 'detail']);
 
@@ -165,6 +178,7 @@ export function calculateDiff(db: DbVehicule[], hitrac: HitracAggregate[]): Diff
         type: v.source, label,
         achat_db: v.prix_achat_reel, achat_hitrac: 0, achat_nouvelle: null, achat_protege: false,
         mo_db: v.cout_mo, mo_hitrac: 0, mo_nouvelle: null,
+        date_achat_hitrac: null,
         kind: 'absent_hitrac',
       });
       continue;
@@ -206,6 +220,7 @@ export function calculateDiff(db: DbVehicule[], hitrac: HitracAggregate[]): Diff
       stock_numero: v.stock_numero, type: v.type, label,
       achat_db: v.prix_achat_reel, achat_hitrac: h.prix_achat_reel, achat_nouvelle: achatNouvelle, achat_protege: achatProtege,
       mo_db: v.cout_mo, mo_hitrac: h.cout_mo, mo_nouvelle: moNouvelle,
+      date_achat_hitrac: h.date_achat ?? null,
       kind,
     });
   }
@@ -291,12 +306,27 @@ export async function executeImport({
     throw backupErr;
   }
 
-  // 4. Exécuter les UPDATE un par un (Supabase ne supporte pas UPDATE en batch avec WHERE différent)
+  // 4. Charger les date_achat actuelles pour ne pas écraser une vraie date
+  const stockNums = lignesAModifier.map(r => r.stock_numero);
+  const { data: dateRows } = await supabase
+    .from('prod_ventes')
+    .select('stock_numero, date_achat')
+    .in('stock_numero', stockNums)
+    .eq('statut', 'inventaire');
+  const dateAchatDB = new Map<string, string | null>(
+    (dateRows ?? []).map((x: any) => [x.stock_numero, x.date_achat])
+  );
+
+  // 5. Exécuter les UPDATE un par un (Supabase ne supporte pas UPDATE en batch avec WHERE différent)
   let nbAchatsModif = 0, nbMoModif = 0;
   for (const r of lignesAModifier) {
-    const update: { prix_achat_reel?: number; cout_mo?: number } = {};
+    const update: { prix_achat_reel?: number; cout_mo?: number; date_achat?: string } = {};
     if (r.achat_nouvelle !== null) { update.prix_achat_reel = r.achat_nouvelle; nbAchatsModif++; }
     if (r.mo_nouvelle    !== null) { update.cout_mo         = r.mo_nouvelle;    nbMoModif++; }
+    // Écrire date_achat seulement si HITRAC en a une ET que la DB n'en a pas encore
+    if (r.date_achat_hitrac && !dateAchatDB.get(r.stock_numero)) {
+      update.date_achat = r.date_achat_hitrac;
+    }
     const { error } = await supabase
       .from('prod_ventes')
       .update(update)
