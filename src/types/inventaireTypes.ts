@@ -54,6 +54,11 @@ export interface VehiculeInventaire {
   paiementDepot?: boolean;
   paiementComplet?: boolean;
   paiementPo?: boolean;
+  // Paiement — détails financiers (nouveaux champs 2026-05-20)
+  enFinancement?: boolean;      // client en attente d'approbation bancaire
+  montantDepot?: number;        // montant du dépôt reçu
+  dateDepot?: string;           // YYYY-MM-DD
+  modePaiementDepot?: string;   // 'virement' | 'cheque' | 'carte' | 'comptant' | 'po'
   roadMap?: RoadMapEtape[];
 }
 

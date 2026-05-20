@@ -46,6 +46,10 @@ export function fromDB(row: any): VehiculeInventaire {
     paiementDepot: row.paiement_depot ?? false,
     paiementComplet: row.paiement_complet ?? false,
     paiementPo: row.paiement_po ?? false,
+    enFinancement: row.en_financement ?? false,
+    montantDepot: row.montant_depot ?? undefined,
+    dateDepot: row.date_depot ?? undefined,
+    modePaiementDepot: row.mode_paiement_depot ?? undefined,
   };
 }
 

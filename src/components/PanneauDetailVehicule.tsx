@@ -173,6 +173,15 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const [showAddVendeur, setShowAddVendeur] = useState(false);
   const [nouveauVendeurNom, setNouveauVendeurNom] = useState('');
   const [savingReservoir, setSavingReservoir] = useState(false);
+  // Formulaire "Vendu" — prix obligatoire
+  const [showVenduForm, setShowVenduForm]   = useState(false);
+  const [prixVenduInput, setPrixVenduInput] = useState('');
+  const [savingVendu, setSavingVendu]       = useState(false);
+  // Formulaire "Dépôt reçu" — montant + mode obligatoires
+  const [showDepotForm, setShowDepotForm]       = useState(false);
+  const [montantDepotInput, setMontantDepotInput] = useState('');
+  const [modeDepotInput, setModeDepotInput]       = useState('');
+  const [savingDepot, setSavingDepot]             = useState(false);
 
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const isGestion = session?.role === 'gestion';
@@ -207,9 +216,64 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const toggleAsap         = (val: boolean)                                       => updateChamp('livraison_asap',  val);
   const setLavageEtat      = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('lavage_etat',     val);
   const setRetoucheEtat    = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('retouche_etat',   val);
-  const togglePaiementDepot   = (val: boolean) => updateChamp('paiement_depot',   val);
   const togglePaiementComplet = (val: boolean) => updateChamp('paiement_complet', val);
   const togglePaiementPo      = (val: boolean) => updateChamp('paiement_po',      val);
+
+  // ── Formulaire "Vendu" — prix de vente obligatoire ───────────
+  const handleClickVendu = () => {
+    if (etatCommercial === 'vendu') return; // déjà vendu, rien à faire
+    const prixActuel = finData?.prixDemande;
+    setPrixVenduInput(prixActuel ? String(Math.round(prixActuel)) : '');
+    setShowVenduForm(true);
+  };
+
+  const confirmerVendu = async () => {
+    const prix = parseFloat(prixVenduInput.replace(/\s/g, '').replace(/,/g, '.'));
+    if (!prix || prix <= 0) return;
+    setSavingVendu(true);
+    try {
+      await updatePrixDemande(v.numero, prix);
+      setLocalPrixDemande(v.numero, prix);
+      await mettreAJourCommercial(v.id, 'vendu', v.dateLivraisonPlanifiee ?? null, v.clientAcheteur ?? null);
+      setShowVenduForm(false);
+      setPrixVenduInput('');
+    } finally {
+      setSavingVendu(false);
+    }
+  };
+
+  // ── Formulaire "Dépôt reçu" — montant + mode obligatoires ────
+  const handleClickDepot = (actif: boolean) => {
+    if (actif) {
+      // Décocher : effacer les infos de dépôt
+      supabase.from('prod_inventaire').update({
+        paiement_depot: false, montant_depot: null, date_depot: null, mode_paiement_depot: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', v.id);
+      return;
+    }
+    setMontantDepotInput('');
+    setModeDepotInput('');
+    setShowDepotForm(true);
+  };
+
+  const confirmerDepot = async () => {
+    const montant = parseFloat(montantDepotInput.replace(/\s/g, '').replace(/,/g, '.'));
+    if (!montant || montant <= 0 || !modeDepotInput) return;
+    setSavingDepot(true);
+    try {
+      await supabase.from('prod_inventaire').update({
+        paiement_depot: true,
+        montant_depot: montant,
+        date_depot: new Date().toISOString().slice(0, 10),
+        mode_paiement_depot: modeDepotInput,
+        updated_at: new Date().toISOString(),
+      }).eq('id', v.id);
+      setShowDepotForm(false);
+    } finally {
+      setSavingDepot(false);
+    }
+  };
 
   const ajouterVendeur = async () => {
     if (!nouveauVendeurNom.trim()) return;
@@ -439,10 +503,10 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                 {([
                   { val: 'non-vendu' as EtatCommercial, label: 'Non vendu', icon: '○', color: '#6b7280' },
                   { val: 'reserve'   as EtatCommercial, label: 'Réservé',   icon: '🔒', color: '#f59e0b' },
-                  { val: 'vendu'     as EtatCommercial, label: 'Vendu',     icon: '✓', color: '#22c55e' },
+                  { val: 'vendu'     as EtatCommercial, label: 'Vendu',     icon: '✓', color: '#22c55e', requireForm: true },
                   { val: 'location'  as EtatCommercial, label: 'Location',  icon: '🔑', color: '#7c3aed' },
-                ]).map(({ val, label, icon, color }) => (
-                  <button key={val} onClick={() => changerEtatCommercial(val)}
+                ]).map(({ val, label, icon, color, requireForm }: any) => (
+                  <button key={val} onClick={() => requireForm && etatCommercial !== val ? handleClickVendu() : changerEtatCommercial(val)}
                     style={{
                       flex: 1, padding: '7px 3px', borderRadius: 8, cursor: 'pointer',
                       border: etatCommercial === val ? `2px solid ${color}` : '1px solid #e5e7eb',
@@ -457,6 +521,34 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                   </button>
                 ))}
               </div>
+              {/* Formulaire prix de vente (apparaît quand on clique "Vendu") */}
+              {showVenduForm && (
+                <div style={{ marginTop: 8, padding: 12, borderRadius: 8, background: '#f0fdf4', border: '2px solid #22c55e' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 8 }}>
+                    ✓ Prix de vente convenu *
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="number" min="0" step="1000"
+                      value={prixVenduInput}
+                      onChange={e => setPrixVenduInput(e.target.value)}
+                      placeholder="Ex: 185000"
+                      autoFocus
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #86efac', fontSize: 13, outline: 'none' }}
+                    />
+                    <button onClick={confirmerVendu} disabled={!prixVenduInput || savingVendu}
+                      style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: prixVenduInput ? '#22c55e' : '#e5e7eb', color: 'white', fontWeight: 700, fontSize: 12, cursor: prixVenduInput ? 'pointer' : 'not-allowed' }}>
+                      {savingVendu ? '...' : '✓ Confirmer'}
+                    </button>
+                    <button onClick={() => setShowVenduForm(false)}
+                      style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>Obligatoire — ce prix apparaîtra dans Inventaire & Projection</div>
+                </div>
+              )}
+
               {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <input type="text" defaultValue={v.clientAcheteur ?? ''} onBlur={e => changerClientAcheteur(e.target.value)}
@@ -513,17 +605,79 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                 </div>
               )}
 
-              {/* État paiement (multi-cochable) */}
+              {/* Case "En financement" — visible si Réservé */}
+              {etatCommercial === 'reserve' && (
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                  borderRadius: 6, cursor: 'pointer', marginTop: 6,
+                  border: `1px solid ${v.enFinancement ? '#3b82f6' : '#d1d5db'}`,
+                  background: v.enFinancement ? '#eff6ff' : 'white',
+                }}>
+                  <input type="checkbox" checked={v.enFinancement ?? false}
+                    onChange={e => updateChamp('en_financement', e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#3b82f6' }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: v.enFinancement ? '#1d4ed8' : '#374151' }}>
+                    🏦 En financement (approbation bancaire en cours)
+                  </span>
+                </label>
+              )}
+
+              {/* État paiement */}
               {(etatCommercial === 'reserve' || etatCommercial === 'vendu' || etatCommercial === 'location') && (
                 <div style={{ marginTop: 10, padding: 10, borderRadius: 6, background: 'white', border: '1px solid #e5e7eb' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     État paiement
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <CheckPaiement label="💵 Dépôt reçu" actif={v.paiementDepot ?? false}    color="#f59e0b" onChange={togglePaiementDepot} />
+                    <CheckPaiement label="💵 Dépôt reçu" actif={v.paiementDepot ?? false}    color="#f59e0b" onChange={handleClickDepot} />
                     <CheckPaiement label="✅ Payé complet" actif={v.paiementComplet ?? false} color="#22c55e" onChange={togglePaiementComplet} />
                     <CheckPaiement label="📋 PO reçu" actif={v.paiementPo ?? false}          color="#3b82f6" onChange={togglePaiementPo} />
                   </div>
+
+                  {/* Détails dépôt existant */}
+                  {v.paiementDepot && v.montantDepot && (
+                    <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, background: '#fffbeb', border: '1px solid #fde68a', fontSize: 12 }}>
+                      <span style={{ fontWeight: 700, color: '#92400e' }}>
+                        💵 {new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v.montantDepot)}
+                      </span>
+                      {v.modePaiementDepot && <span style={{ color: '#78350f', marginLeft: 8 }}>· {v.modePaiementDepot}</span>}
+                      {v.dateDepot && <span style={{ color: '#a16207', marginLeft: 8 }}>· {v.dateDepot}</span>}
+                    </div>
+                  )}
+
+                  {/* Formulaire dépôt */}
+                  {showDepotForm && (
+                    <div style={{ marginTop: 8, padding: 10, borderRadius: 6, background: '#fffbeb', border: '2px solid #f59e0b' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>💵 Détails du dépôt *</div>
+                      <input type="number" min="0" step="500" value={montantDepotInput}
+                        onChange={e => setMontantDepotInput(e.target.value)}
+                        placeholder="Montant du dépôt $" autoFocus
+                        style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 12, outline: 'none', marginBottom: 6, boxSizing: 'border-box' }} />
+                      <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                        {['Virement', 'Chèque', 'Carte', 'Comptant', 'PO'].map(mode => (
+                          <button key={mode} onClick={() => setModeDepotInput(mode)}
+                            style={{
+                              padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                              border: modeDepotInput === mode ? '2px solid #f59e0b' : '1px solid #d1d5db',
+                              background: modeDepotInput === mode ? '#fef3c7' : 'white',
+                              color: modeDepotInput === mode ? '#92400e' : '#6b7280',
+                            }}>
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={confirmerDepot} disabled={!montantDepotInput || !modeDepotInput || savingDepot}
+                          style={{ flex: 1, padding: '7px', borderRadius: 6, border: 'none', background: montantDepotInput && modeDepotInput ? '#f59e0b' : '#e5e7eb', color: 'white', fontWeight: 700, fontSize: 12, cursor: montantDepotInput && modeDepotInput ? 'pointer' : 'not-allowed' }}>
+                          {savingDepot ? '...' : '✓ Confirmer'}
+                        </button>
+                        <button onClick={() => setShowDepotForm(false)}
+                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

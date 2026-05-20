@@ -6,6 +6,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { nomVendeur } from '../services/piecesImportService';
 import type { PieceRow } from '../services/piecesImportService';
+import { VueEncombre } from './VueEncombre';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1790,7 +1791,7 @@ function VuePieces() {
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export function VueProfitabilite() {
-  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans' | 'pieces'>('ventes');
+  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans' | 'pieces' | 'encombre'>('ventes');
   const [invMeta, setInvMeta] = useState<InvMeta[]>([]);
 
   useEffect(() => {
@@ -1804,6 +1805,7 @@ export function VueProfitabilite() {
     { id: 'inventaire' as const, label: 'Inventaire & Projection', icon: '🔭' },
     { id: 'plans' as const,      label: 'Plans de vente',          icon: '📋' },
     { id: 'pieces' as const,     label: 'Ventes Pièces',           icon: '🔧' },
+    { id: 'encombre' as const,   label: 'Encombre du vendredi',    icon: '📅' },
   ];
 
   return (
@@ -1838,6 +1840,7 @@ export function VueProfitabilite() {
       {tab === 'inventaire' && <VueInventaire invMeta={invMeta} onGoToPlans={() => setTab('plans')} />}
       {tab === 'plans'      && <VuePlans invMeta={invMeta} />}
       {tab === 'pieces'     && <VuePieces />}
+      {tab === 'encombre'   && <VueEncombre />}
     </div>
   );
 }
