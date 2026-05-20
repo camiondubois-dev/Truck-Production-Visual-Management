@@ -8,35 +8,48 @@
 
     <!-- PWA — icône écran d'accueil iPhone -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" id="pwa-manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-    <!-- Titre + couleur + manifest selon la route -->
+    <!-- Titre + couleur + manifest selon la route
+         IMPORTANT : le manifest est injecté ICI (inline) pour que Safari
+         le lise AVANT tout autre script — sinon il prend le mauvais start_url -->
     <script>
       (function() {
         var p = window.location.pathname;
-        var title    = p.startsWith('/finance-mobile') ? 'Finances CD'
-                     : p.startsWith('/achats')         ? 'Achats CD'
-                     : p.startsWith('/terrain')        ? 'Terrain CD'
-                     : 'Camions Dubois';
-        var color    = p.startsWith('/finance-mobile') ? '#f59e0b'
-                     : p.startsWith('/achats')         ? '#10b981'
-                     : '#1e293b';
-        var manifest = p.startsWith('/finance-mobile') ? '/manifest-finance.json'
-                     : '/manifest.json';
-        // Manifest correct selon la route (évite que /finance-mobile ouvre /achats)
-        document.getElementById('pwa-manifest').setAttribute('href', manifest);
-        document.head.insertAdjacentHTML('beforeend',
+
+        var isFinance = p.startsWith('/finance-mobile');
+        var isAchats  = p.startsWith('/achats');
+        var isTerrain = p.startsWith('/terrain');
+
+        var title = isFinance ? 'Finances CD'
+                  : isAchats  ? 'Achats CD'
+                  : isTerrain ? 'Terrain CD'
+                  : 'Camions Dubois';
+
+        var color = isFinance ? '#f59e0b'
+                  : isAchats  ? '#10b981'
+                  : '#1e293b';
+
+        // Manifest seulement pour les routes PWA (pas pour l'app principale)
+        // Safari lit ce tag immédiatement — on injecte le bon dès le départ
+        if (isFinance) {
+          document.write('<link rel="manifest" href="/manifest-finance.json">');
+        } else if (isAchats) {
+          document.write('<link rel="manifest" href="/manifest.json">');
+        }
+
+        document.write(
           '<meta name="apple-mobile-web-app-title" content="' + title + '">' +
-          '<meta name="theme-color" content="' + color + '">');
+          '<meta name="theme-color" content="' + color + '">'
+        );
       })();
     </script>
 
-    <!-- Service Worker -->
+    <!-- Service Worker (seulement pour /achats) -->
     <script>
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && window.location.pathname.startsWith('/achats')) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
         });

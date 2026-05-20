@@ -3,7 +3,7 @@
 // Gère le cache offline + les notifications push
 // ════════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'achats-cd-v1';
+const CACHE_NAME = 'achats-cd-v2';
 
 // Assets à mettre en cache pour le mode offline
 const ASSETS_STATIQUES = [
