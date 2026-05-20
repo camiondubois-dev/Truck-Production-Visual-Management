@@ -29,9 +29,11 @@ self.addEventListener('activate', (event) => {
 
 // Stratégie : Network first, cache en fallback
 self.addEventListener('fetch', (event) => {
-  // Ne pas intercepter les requêtes Supabase / API
   const url = new URL(event.request.url);
+  // Ne pas intercepter les requêtes Supabase / API
   if (url.hostname !== self.location.hostname) return;
+  // Ne pas intercepter les routes hors /achats
+  if (!url.pathname.startsWith('/achats')) return;
 
   event.respondWith(
     fetch(event.request)
