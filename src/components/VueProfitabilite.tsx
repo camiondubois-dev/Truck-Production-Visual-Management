@@ -4,6 +4,7 @@ import {
   PieChart, Pie, LabelList, ComposedChart, Line,
 } from 'recharts';
 import { supabase } from '../lib/supabase';
+import { nomVendeur } from '../services/piecesImportService';
 import type { PieceRow } from '../services/piecesImportService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1382,7 +1383,7 @@ function VuePieces() {
     });
   }, []);
 
-  const allVendeurs = useMemo(() => unique(rows.map(r => r.vendeur || '(sans vendeur)')), [rows]);
+  const allVendeurs = useMemo(() => unique(rows.map(r => nomVendeur(r.vendeur))), [rows]);
 
   function toggleVendeur(v: string) {
     setSelectedVendeurs(prev => {
@@ -1395,7 +1396,7 @@ function VuePieces() {
   const filtered = useMemo(() => {
     let r = rows;
     if (selectedVendeurs.size > 0)
-      r = r.filter(x => selectedVendeurs.has(x.vendeur || '(sans vendeur)'));
+      r = r.filter(x => selectedVendeurs.has(nomVendeur(x.vendeur)));
     if (fAnnee) r = r.filter(x => String(x.annee_fiscale) === fAnnee);
     if (fDateDu) r = r.filter(x => x.date_vente >= fDateDu);
     if (fDateAu) r = r.filter(x => x.date_vente <= fDateAu);
@@ -1415,7 +1416,7 @@ function VuePieces() {
   const parVendeur = useMemo(() => {
     const map: Record<string, number> = {};
     filtered.forEach(r => {
-      const v = r.vendeur || '(sans vendeur)';
+      const v = nomVendeur(r.vendeur);
       map[v] = (map[v] ?? 0) + (r.sous_total ?? 0);
     });
     return Object.entries(map)
@@ -1580,7 +1581,7 @@ function VuePieces() {
               <td style={{ padding: '9px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.client || '—'}</td>
               <td style={{ padding: '9px 12px' }}>
                 <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-                  {r.vendeur || '(sans vendeur)'}
+                  {nomVendeur(r.vendeur)}
                 </span>
               </td>
               <td style={{ padding: '9px 12px', textAlign: 'right' }}>{r.annee_fiscale}</td>

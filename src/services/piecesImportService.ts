@@ -1,6 +1,21 @@
 import { supabase } from '../lib/supabase';
 import { anneeFiscale } from './hitracImportService';
 
+// ─── Mapping codes Hightrack → noms réels ─────────────────────────────────────
+
+export const VENDEURS: Record<string, string> = {
+  'avaliquette': 'Alex Valiquette',
+  'brainville':  'Bernard Rainville',
+  'jchamps':     'Jimmy Champs',
+  'xgemme':      'Xavier Gemme',
+  'pdoiron':     'Patrick Doiron',
+};
+
+export function nomVendeur(code: string): string {
+  if (!code) return '(sans vendeur)';
+  return VENDEURS[code.toLowerCase()] ?? code;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface PieceRow {
