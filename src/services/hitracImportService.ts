@@ -258,12 +258,17 @@ export async function executeImport({
   userEmail?: string;
   userNom?: string;
 }): Promise<ImportResult> {
-  // 1. Filtrer les lignes qui vont effectivement changer
+  // 1. Filtrer les lignes qui vont effectivement changer (prix ou MO)
   const lignesAModifier = diff.rows.filter(
     r => r.achat_nouvelle !== null || r.mo_nouvelle !== null
   );
 
-  if (lignesAModifier.length === 0) {
+  // Lignes avec une date HITRAC valide (peut inclure des "identique" dont seule la date manque)
+  const lignesAvecDate = diff.rows.filter(
+    r => !!r.date_achat_hitrac && r.kind !== 'absent_hitrac'
+  );
+
+  if (lignesAModifier.length === 0 && lignesAvecDate.length === 0) {
     throw new Error('Aucun changement à appliquer.');
   }
 
@@ -287,43 +292,45 @@ export async function executeImport({
   if (logErr || !logRow) throw logErr ?? new Error('Création du log échouée');
   const importId = logRow.id as string;
 
-  // 3. Backup des valeurs AVANT modification (pour les lignes qu'on modifie)
-  const backupRows = lignesAModifier.map(r => ({
-    import_id: importId,
-    stock_numero: r.stock_numero,
-    prix_achat_reel: r.achat_db,
-    cout_mo: r.mo_db,
-    prix_demande: null,  // pas modifié par cet import
-  }));
-
-  const { error: backupErr } = await supabase
-    .from('prod_ventes_backup')
-    .insert(backupRows);
-
-  if (backupErr) {
-    // Cleanup : si le backup échoue, on supprime le log
-    await supabase.from('prod_imports_log').delete().eq('id', importId);
-    throw backupErr;
+  // 3. Backup des valeurs AVANT modification (pour les lignes dont le prix/MO change)
+  if (lignesAModifier.length > 0) {
+    const backupRows = lignesAModifier.map(r => ({
+      import_id: importId,
+      stock_numero: r.stock_numero,
+      prix_achat_reel: r.achat_db,
+      cout_mo: r.mo_db,
+      prix_demande: null,
+    }));
+    const { error: backupErr } = await supabase
+      .from('prod_ventes_backup')
+      .insert(backupRows);
+    if (backupErr) {
+      await supabase.from('prod_imports_log').delete().eq('id', importId);
+      throw backupErr;
+    }
   }
 
-  // 4. Charger les date_achat actuelles pour ne pas écraser une vraie date
-  const stockNums = lignesAModifier.map(r => r.stock_numero);
+  // 4. Charger les date_achat actuelles pour TOUS les camions présents dans le rapport
+  //    (on ne veut jamais écraser une date déjà renseignée)
+  const tousLesStocks = diff.rows
+    .filter(r => r.kind !== 'absent_hitrac')
+    .map(r => r.stock_numero);
   const { data: dateRows } = await supabase
     .from('prod_ventes')
     .select('stock_numero, date_achat')
-    .in('stock_numero', stockNums)
+    .in('stock_numero', tousLesStocks)
     .eq('statut', 'inventaire');
   const dateAchatDB = new Map<string, string | null>(
     (dateRows ?? []).map((x: any) => [x.stock_numero, x.date_achat])
   );
 
-  // 5. Exécuter les UPDATE un par un (Supabase ne supporte pas UPDATE en batch avec WHERE différent)
+  // 5. Appliquer les UPDATE prix/MO
   let nbAchatsModif = 0, nbMoModif = 0;
   for (const r of lignesAModifier) {
     const update: { prix_achat_reel?: number; cout_mo?: number; date_achat?: string } = {};
     if (r.achat_nouvelle !== null) { update.prix_achat_reel = r.achat_nouvelle; nbAchatsModif++; }
     if (r.mo_nouvelle    !== null) { update.cout_mo         = r.mo_nouvelle;    nbMoModif++; }
-    // Écrire date_achat seulement si HITRAC en a une ET que la DB n'en a pas encore
+    // Écrire date_achat si HITRAC en a une ET que la DB n'en a pas encore
     if (r.date_achat_hitrac && !dateAchatDB.get(r.stock_numero)) {
       update.date_achat = r.date_achat_hitrac;
     }
@@ -332,10 +339,20 @@ export async function executeImport({
       .update(update)
       .eq('stock_numero', r.stock_numero)
       .eq('statut', 'inventaire');
-    if (error) {
-      console.error(`[hitracImport] UPDATE échec pour #${r.stock_numero}:`, error);
-      // On continue avec les autres — le backup permet de tout restaurer si nécessaire
-    }
+    if (error) console.error(`[hitracImport] UPDATE prix/MO échec #${r.stock_numero}:`, error);
+  }
+
+  // 6. Pour les camions "identique" (prix inchangé) : écrire date_achat si elle manque en DB
+  const stocksDejaTraites = new Set(lignesAModifier.map(r => r.stock_numero));
+  for (const r of lignesAvecDate) {
+    if (stocksDejaTraites.has(r.stock_numero)) continue; // déjà traité à l'étape 5
+    if (dateAchatDB.get(r.stock_numero)) continue;       // date déjà présente en DB
+    const { error } = await supabase
+      .from('prod_ventes')
+      .update({ date_achat: r.date_achat_hitrac! })
+      .eq('stock_numero', r.stock_numero)
+      .eq('statut', 'inventaire');
+    if (error) console.error(`[hitracImport] UPDATE date_achat échec #${r.stock_numero}:`, error);
   }
 
   return {
