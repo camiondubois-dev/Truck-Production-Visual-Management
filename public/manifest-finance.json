@@ -1,0 +1,21 @@
+{
+  "name": "Camion Dubois — Finances",
+  "short_name": "Finances CD",
+  "description": "Module finances — lecture seule — Camion Dubois",
+  "start_url": "/finance-mobile",
+  "scope": "/finance-mobile",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait",
+  "lang": "fr-CA",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance"]
+}

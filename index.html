@@ -8,22 +8,26 @@
 
     <!-- PWA — icône écran d'accueil iPhone -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" id="pwa-manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-    <!-- Titre + couleur de thème selon la route -->
+    <!-- Titre + couleur + manifest selon la route -->
     <script>
       (function() {
         var p = window.location.pathname;
-        var title = p.startsWith('/finance-mobile') ? 'Finances CD'
-                  : p.startsWith('/achats')         ? 'Achats CD'
-                  : p.startsWith('/terrain')        ? 'Terrain CD'
-                  : 'Camions Dubois';
-        var color = p.startsWith('/finance-mobile') ? '#f59e0b'
-                  : p.startsWith('/achats')         ? '#10b981'
-                  : '#1e293b';
+        var title    = p.startsWith('/finance-mobile') ? 'Finances CD'
+                     : p.startsWith('/achats')         ? 'Achats CD'
+                     : p.startsWith('/terrain')        ? 'Terrain CD'
+                     : 'Camions Dubois';
+        var color    = p.startsWith('/finance-mobile') ? '#f59e0b'
+                     : p.startsWith('/achats')         ? '#10b981'
+                     : '#1e293b';
+        var manifest = p.startsWith('/finance-mobile') ? '/manifest-finance.json'
+                     : '/manifest.json';
+        // Manifest correct selon la route (évite que /finance-mobile ouvre /achats)
+        document.getElementById('pwa-manifest').setAttribute('href', manifest);
         document.head.insertAdjacentHTML('beforeend',
           '<meta name="apple-mobile-web-app-title" content="' + title + '">' +
           '<meta name="theme-color" content="' + color + '">');
