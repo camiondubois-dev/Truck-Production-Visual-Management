@@ -662,8 +662,12 @@ function PiecesImporter() {
     setFilename(file.name);
     try {
       const text = await file.text();
-      const { rows, errors: pErrors } = parsePiecesCSV(text);
-      if (rows.length === 0) { setError('Aucune ligne valide trouvée dans le fichier.'); setLoading(false); return; }
+      const { rows, errors: pErrors, diagnostic } = parsePiecesCSV(text);
+      if (rows.length === 0) {
+        const msg = pErrors.length > 0 ? pErrors.join(' ') : 'Aucune ligne valide trouvée dans le fichier.';
+        setError(msg + (diagnostic ? `\n\n🔍 ${diagnostic}` : ''));
+        setLoading(false); return;
+      }
       // Écraser le vendeur de chaque ligne avec le vendeur sélectionné
       const rowsTagged = rows.map(r => ({ ...r, vendeur: vendeurCode }));
       setParseErrors(pErrors);
@@ -750,7 +754,16 @@ function PiecesImporter() {
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
 
         {loading && <div style={{ marginTop: 16, color: '#10b981', fontWeight: 600 }}>Analyse en cours…</div>}
-        {error  && <div style={{ marginTop: 16, color: '#ef4444', fontWeight: 600 }}>{error}</div>}
+        {error && (
+          <div style={{ marginTop: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px' }}>
+            {error.split('\n').map((line, i) => (
+              <div key={i} style={{ color: i === 0 ? '#dc2626' : '#6b7280', fontWeight: i === 0 ? 700 : 400, fontSize: i === 0 ? 13 : 11, marginTop: i > 0 ? 6 : 0 }}>{line}</div>
+            ))}
+            <div style={{ marginTop: 10, fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>
+              💡 Si modifié dans Excel : Fichier → Enregistrer sous → CSV UTF-8 (délimité par des virgules)
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

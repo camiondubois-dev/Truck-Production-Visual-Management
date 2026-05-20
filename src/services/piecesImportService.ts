@@ -44,7 +44,18 @@ export interface PiecesImportResult {
 //   "Source Name","Customer Company Name","Balance","Closed","Date",
 //   "Document #","Document Type","Salesperson","Subtotal","Customer Number","Store #"
 
-function parseCSVLine(line: string): string[] {
+function detectDelimiter(line: string): string {
+  // Compte les virgules vs points-virgules hors guillemets pour détecter le séparateur
+  let commas = 0, semis = 0, inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') inQ = !inQ;
+    else if (!inQ && line[i] === ',') commas++;
+    else if (!inQ && line[i] === ';') semis++;
+  }
+  return semis > commas ? ';' : ',';
+}
+
+function parseCSVLine(line: string, delimiter = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -53,7 +64,7 @@ function parseCSVLine(line: string): string[] {
     if (ch === '"') {
       if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
       else inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current);
       current = '';
     } else {
@@ -64,31 +75,45 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-export function parsePiecesCSV(text: string): { rows: PieceRow[]; errors: string[] } {
-  // Retirer le BOM UTF-8 si présent
-  const content = text.startsWith('﻿') ? text.slice(1) : text;
-  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+export function parsePiecesCSV(text: string): { rows: PieceRow[]; errors: string[]; diagnostic?: string } {
+  // Retirer le BOM UTF-8 et UTF-16 si présent
+  let content = text;
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
 
-  if (lines.length < 2) return { rows: [], errors: ['Fichier vide ou invalide.'] };
+  if (lines.length < 2) return { rows: [], errors: ['Fichier vide — aucune ligne détectée.'] };
+
+  // Détection automatique du séparateur (virgule ou point-virgule)
+  const delimiter = detectDelimiter(lines[0]);
 
   const errors: string[] = [];
   const rows: PieceRow[] = [];
 
   // Vérification entête
-  const header = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+  const header = parseCSVLine(lines[0], delimiter).map(h => h.toLowerCase().trim().replace(/^"|"$/g, ''));
   const idxDate    = header.findIndex(h => h === 'date');
-  const idxDoc     = header.findIndex(h => h.includes('document #') || h.includes('document#'));
+  const idxDoc     = header.findIndex(h => h.includes('document'));
   const idxVendeur = header.findIndex(h => h.includes('salesperson'));
-  const idxSub     = header.findIndex(h => h.includes('subtotal'));
-  const idxClient  = header.findIndex(h => h.includes('customer company'));
-  const idxClientN = header.findIndex(h => h.includes('customer number'));
+  const idxSub     = header.findIndex(h => h.includes('subtotal') || h.includes('total'));
+  const idxClient  = header.findIndex(h => h.includes('customer company') || h.includes('company'));
+  const idxClientN = header.findIndex(h => h.includes('customer number') || h.includes('number'));
+
+  const diagnostic = `Séparateur: "${delimiter}" · Colonnes détectées: [${header.join(' | ')}]`;
 
   if (idxDate < 0 || idxDoc < 0 || idxSub < 0) {
-    return { rows: [], errors: ['Colonnes manquantes — vérifier que c\'est un export Hightrack valide.'] };
+    return {
+      rows: [],
+      errors: [
+        `Colonnes requises introuvables. ${diagnostic}`,
+        'Astuce : si le fichier a été ouvert dans Excel, le réenregistrer en format CSV UTF-8.',
+      ],
+      diagnostic,
+    };
   }
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i]);
+    const cols = parseCSVLine(lines[i], delimiter);
     const date      = (cols[idxDate]    ?? '').trim();
     const docNum    = (cols[idxDoc]     ?? '').trim();
     const vendeur   = (cols[idxVendeur] ?? '').trim();
