@@ -696,6 +696,10 @@ function VueInventaire({
   const [simCouts, setSimCouts] = useState<Record<string, string>>({});
   const [editAchat, setEditAchat] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filterToSelection, setFilterToSelection] = useState(false);
+  const [quickInput, setQuickInput] = useState('');
+  const [quickError, setQuickError] = useState('');
+  const quickRef = useRef<HTMLInputElement>(null);
   const [fType, setFType] = useState('');
   const [fMarque, setFMarque] = useState('');
   const [fModele, setFModele] = useState('');
@@ -720,6 +724,31 @@ function VueInventaire({
         ? new Set()
         : new Set(filtered.map(r => r.stock_numero))
     );
+  }
+
+  function handleQuickAdd(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    const val = quickInput.trim();
+    if (!val) return;
+    const found = rows.find(r => r.stock_numero === val);
+    if (!found) {
+      setQuickError(`# ${val} introuvable`);
+      setTimeout(() => setQuickError(''), 2000);
+      return;
+    }
+    setSelected(prev => new Set([...prev, val]));
+    setQuickInput('');
+    setQuickError('');
+    quickRef.current?.focus();
+  }
+
+  function removeFromSelection(stock: string) {
+    setSelected(prev => { const n = new Set(prev); n.delete(stock); return n; });
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+    setFilterToSelection(false);
   }
 
   useEffect(() => {
@@ -798,19 +827,23 @@ function VueInventaire({
 
   const filtered = useMemo(() => {
     let r = rows;
-    if (fType) r = r.filter(x => x.type_vehicule === fType || x.type === fType);
-    if (fMarque) r = r.filter(x => x.marque === fMarque);
-    if (fModele) r = r.filter(x => x.modele === fModele);
-    if (fAnnee) r = r.filter(x => String(x.annee) === fAnnee);
-    if (fStock) r = r.filter(x => x.stock_numero.includes(fStock));
-    if (fAvecPrix) r = r.filter(x => x.prix_demande && x.prix_demande > 0);
+    if (filterToSelection && selected.size > 0) {
+      r = r.filter(x => selected.has(x.stock_numero));
+    } else {
+      if (fType) r = r.filter(x => x.type_vehicule === fType || x.type === fType);
+      if (fMarque) r = r.filter(x => x.marque === fMarque);
+      if (fModele) r = r.filter(x => x.modele === fModele);
+      if (fAnnee) r = r.filter(x => String(x.annee) === fAnnee);
+      if (fStock) r = r.filter(x => x.stock_numero.includes(fStock));
+      if (fAvecPrix) r = r.filter(x => x.prix_demande && x.prix_demande > 0);
+    }
     return [...r].sort((a, b) => {
       const va = (a as Record<string, unknown>)[sortCol] ?? 0;
       const vb = (b as Record<string, unknown>)[sortCol] ?? 0;
       const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [rows, fType, fMarque, fModele, fAnnee, fStock, fAvecPrix, sortCol, sortDir]);
+  }, [rows, filterToSelection, selected, fType, fMarque, fModele, fAnnee, fStock, fAvecPrix, sortCol, sortDir]);
 
   const totCoutAchat = filtered.reduce((s, r) => s + (r.cout_achat ?? 0), 0);
   const totMO = filtered.reduce((s, r) => s + (r.cout_total_depense ?? 0), 0);
@@ -894,6 +927,70 @@ function VueInventaire({
         Le <strong>Prix demandé</strong> se sauvegarde automatiquement en base de données quand tu quittes le champ. Les <strong>Coûts à venir</strong> sont locaux à cette session.
       </div>
 
+      {/* ── Sélection rapide ── */}
+      <div style={{ background: '#1a1917', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Sélection rapide :</span>
+          <div style={{ position: 'relative' }}>
+            <input
+              ref={quickRef}
+              value={quickInput}
+              onChange={e => { setQuickInput(e.target.value); setQuickError(''); }}
+              onKeyDown={handleQuickAdd}
+              placeholder="# Stock + Enter"
+              style={{
+                background: 'rgba(255,255,255,0.07)', border: `1px solid ${quickError ? '#ef4444' : 'rgba(255,255,255,0.15)'}`,
+                borderRadius: 7, color: 'white', padding: '6px 10px', fontSize: 13,
+                fontFamily: 'system-ui, sans-serif', width: 140, outline: 'none',
+              }}
+            />
+            {quickError && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 5, whiteSpace: 'nowrap', zIndex: 10 }}>
+                {quickError}
+              </div>
+            )}
+          </div>
+          {/* Chips des stocks sélectionnés */}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1 }}>
+            {[...selected].map(stock => (
+              <span key={stock} style={{
+                background: '#f59e0b20', border: '1px solid #f59e0b60',
+                borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700,
+                color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                {stock}
+                <span onClick={() => removeFromSelection(stock)} style={{ cursor: 'pointer', opacity: 0.7, fontSize: 13, lineHeight: 1 }}>×</span>
+              </span>
+            ))}
+            {selected.size === 0 && (
+              <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontStyle: 'italic' }}>Aucun camion sélectionné</span>
+            )}
+          </div>
+          {/* Boutons mode sélection */}
+          {selected.size > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
+              <button
+                onClick={() => setFilterToSelection(v => !v)}
+                style={{
+                  background: filterToSelection ? '#f59e0b' : 'rgba(245,158,11,0.1)',
+                  border: `1px solid ${filterToSelection ? '#f59e0b' : 'rgba(245,158,11,0.4)'}`,
+                  borderRadius: 7, color: filterToSelection ? 'white' : '#f59e0b',
+                  padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {filterToSelection ? '✓ Sélection seulement' : 'Voir sélection seulement'}
+              </button>
+              <button
+                onClick={clearSelection}
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.35)', padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}
+              >
+                Effacer
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* KPIs globaux */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: selected.size > 0 ? 12 : 24 }}>
         <KpiCard label="Véhicules" value={String(filtered.length)} sub={fAvecPrix ? 'avec prix demandé' : undefined} />
@@ -920,7 +1017,7 @@ function VueInventaire({
               📋 Enregistrer comme plan
             </button>
             <button
-              onClick={() => setSelected(new Set())}
+              onClick={clearSelection}
               style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: 'rgba(255,255,255,0.4)', padding: '9px 14px', fontSize: 12, cursor: 'pointer' }}
             >
               Désélectionner
