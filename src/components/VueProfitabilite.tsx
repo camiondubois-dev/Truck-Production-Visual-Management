@@ -1560,10 +1560,48 @@ function VuePieces() {
         <KpiCard label="Total retours $" value={fmt$(totalRetours)} color="#ef4444" />
       </div>
 
+      {/* ── Graphiques ── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+
+        {/* Par vendeur */}
+        <div style={{ flex: 1, minWidth: 260, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Vendeur</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart layout="vertical" data={parVendeur} margin={{ right: 100, left: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 11 }} width={100} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
+              <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                {parVendeur.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
+                <LabelList dataKey="total" position="right" formatter={(v: number) => fmt$(v)} style={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Par mois */}
+        <div style={{ flex: 2, minWidth: 300, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Mois</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={parMois} margin={{ right: 8, left: 4, bottom: 20, top: 24 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="mois" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
+              <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                {parMois.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
+                <LabelList dataKey="total" position="top" formatter={(v: number) => `${Math.round(v / 1000)}k`} style={{ fill: 'rgba(255,255,255,0.5)', fontSize: 9 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* ── Analyse des retours ── */}
       <div style={{ background: '#1a1917', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
         <div style={{ color: '#ef4444', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
-          Analyse des retours {selectedVendeurs.size > 0 ? `— sélection` : '— tous les vendeurs'}
+          Analyse des retours {selectedVendeurs.size > 0 ? '— sélection' : '— tous les vendeurs'}
         </div>
         {retoursParVendeur.length === 0 ? (
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Aucun retour dans la période sélectionnée.</div>
@@ -1602,49 +1640,12 @@ function VuePieces() {
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{nbRetours}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{fmt$(totalRetours)}</td>
                 <td style={{ padding: '8px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
-                  {totalPos > 0 ? (Math.abs(totalRetours) / (totalPos) * 100).toFixed(1) + ' %' : '—'}
+                  {totalPos > 0 ? (Math.abs(totalRetours) / totalPos * 100).toFixed(1) + ' %' : '—'}
                 </td>
               </tr>
             </tfoot>
           </table>
         )}
-      </div>
-
-      {/* ── Graphiques ── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-
-        {/* Par vendeur */}
-        <div style={{ flex: 1, minWidth: 260, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Vendeur</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart layout="vertical" data={parVendeur} margin={{ right: 60, left: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 11 }} width={100} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
-              <Bar dataKey="total" radius={[0, 4, 4, 0]}>
-                {parVendeur.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
-                <LabelList dataKey="total" position="right" formatter={(v: number) => fmt$(v)} style={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Par mois */}
-        <div style={{ flex: 2, minWidth: 300, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Mois</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={parMois} margin={{ right: 8, left: 4, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-              <XAxis dataKey="mois" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
-              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
-              <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                {parMois.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
       </div>
 
       {/* ── Tableau détail ── */}
