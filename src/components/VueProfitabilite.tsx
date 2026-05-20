@@ -221,6 +221,19 @@ function ModalCreerPlan({
       return { plan_id: plan.id, stock_numero: stock, prix_plan: prix };
     });
     await supabase.from('prod_plans_vente_vehicules').insert(vehicules);
+
+    // Écrire immédiatement le prix_demande dans prod_ventes pour chaque camion du plan
+    const avecPrix = vehicules.filter(v => v.prix_plan != null);
+    if (avecPrix.length > 0) {
+      await Promise.all(
+        avecPrix.map(v =>
+          supabase.from('prod_ventes')
+            .update({ prix_demande: v.prix_plan })
+            .eq('stock_numero', v.stock_numero)
+        )
+      );
+    }
+
     onCreated(plan.id);
   }
 
@@ -1338,7 +1351,7 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
   }
 
   async function activerPlan(plan: PlanResume) {
-    if (!confirm(`Activer "${plan.nom}" ? Cela va remplacer le prix demandé de ${plan.nb_vehicules} véhicule${plan.nb_vehicules > 1 ? 's' : ''}.`)) return;
+    if (!confirm(`Marquer "${plan.nom}" comme plan actif ? Les prix demandés seront confirmés dans l'inventaire.`)) return;
     setActivating(plan.id);
 
     // Charger les véhicules du plan
