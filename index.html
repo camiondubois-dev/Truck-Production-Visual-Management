@@ -6,13 +6,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Truck Production Visual Management</title>
 
-    <!-- PWA — Module Achats -->
+    <!-- PWA — icône écran d'accueil iPhone -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Achats CD" />
-    <meta name="theme-color" content="#10b981" />
+
+    <!-- Titre + couleur de thème selon la route -->
+    <script>
+      (function() {
+        var p = window.location.pathname;
+        var title = p.startsWith('/finance-mobile') ? 'Finances CD'
+                  : p.startsWith('/achats')         ? 'Achats CD'
+                  : p.startsWith('/terrain')        ? 'Terrain CD'
+                  : 'Camions Dubois';
+        var color = p.startsWith('/finance-mobile') ? '#f59e0b'
+                  : p.startsWith('/achats')         ? '#10b981'
+                  : '#1e293b';
+        document.head.insertAdjacentHTML('beforeend',
+          '<meta name="apple-mobile-web-app-title" content="' + title + '">' +
+          '<meta name="theme-color" content="' + color + '">');
+      })();
+    </script>
 
     <!-- Service Worker -->
     <script>
