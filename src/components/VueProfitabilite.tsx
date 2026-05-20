@@ -4,6 +4,7 @@ import {
   PieChart, Pie, LabelList, ComposedChart, Line,
 } from 'recharts';
 import { supabase } from '../lib/supabase';
+import type { PieceRow } from '../services/piecesImportService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1362,10 +1363,245 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
   );
 }
 
+// ── Vue Ventes Pièces ─────────────────────────────────────────────────────────
+
+function VuePieces() {
+  const [rows, setRows] = useState<PieceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedVendeurs, setSelectedVendeurs] = useState<Set<string>>(new Set());
+  const [fAnnee, setFAnnee] = useState('');
+  const [fDateDu, setFDateDu] = useState('');
+  const [fDateAu, setFDateAu] = useState('');
+  const [sortCol, setSortCol] = useState('date_vente');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  useEffect(() => {
+    supabase.from('prod_ventes_pieces').select('*').then(({ data }) => {
+      if (data) setRows(data as PieceRow[]);
+      setLoading(false);
+    });
+  }, []);
+
+  const allVendeurs = useMemo(() => unique(rows.map(r => r.vendeur || '(sans vendeur)')), [rows]);
+
+  function toggleVendeur(v: string) {
+    setSelectedVendeurs(prev => {
+      const next = new Set(prev);
+      next.has(v) ? next.delete(v) : next.add(v);
+      return next;
+    });
+  }
+
+  const filtered = useMemo(() => {
+    let r = rows;
+    if (selectedVendeurs.size > 0)
+      r = r.filter(x => selectedVendeurs.has(x.vendeur || '(sans vendeur)'));
+    if (fAnnee) r = r.filter(x => String(x.annee_fiscale) === fAnnee);
+    if (fDateDu) r = r.filter(x => x.date_vente >= fDateDu);
+    if (fDateAu) r = r.filter(x => x.date_vente <= fDateAu);
+    return [...r].sort((a, b) => {
+      const va = (a as Record<string, unknown>)[sortCol] ?? '';
+      const vb = (b as Record<string, unknown>)[sortCol] ?? '';
+      const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [rows, selectedVendeurs, fAnnee, fDateDu, fDateAu, sortCol, sortDir]);
+
+  const totalNet   = filtered.reduce((s, r) => s + (r.sous_total ?? 0), 0);
+  const totalPos   = filtered.filter(r => (r.sous_total ?? 0) > 0).reduce((s, r) => s + r.sous_total, 0);
+  const nbFactures = filtered.filter(r => (r.sous_total ?? 0) > 0).length;
+
+  // Graphique par vendeur
+  const parVendeur = useMemo(() => {
+    const map: Record<string, number> = {};
+    filtered.forEach(r => {
+      const v = r.vendeur || '(sans vendeur)';
+      map[v] = (map[v] ?? 0) + (r.sous_total ?? 0);
+    });
+    return Object.entries(map)
+      .map(([name, total]) => ({ name, total: Math.round(total) }))
+      .sort((a, b) => b.total - a.total);
+  }, [filtered]);
+
+  // Graphique par mois (format YYYY-MM)
+  const parMois = useMemo(() => {
+    const map: Record<string, number> = {};
+    filtered.forEach(r => {
+      const mois = r.date_vente?.slice(0, 7) ?? '?';
+      map[mois] = (map[mois] ?? 0) + (r.sous_total ?? 0);
+    });
+    return Object.entries(map)
+      .map(([mois, total]) => ({ mois, total: Math.round(total) }))
+      .sort((a, b) => a.mois.localeCompare(b.mois));
+  }, [filtered]);
+
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('desc'); }
+  }
+
+  const stickyTh: React.CSSProperties = {
+    position: 'sticky', top: 0, zIndex: 2,
+    background: '#141311', boxShadow: '0 1px 0 rgba(255,255,255,0.08)',
+  };
+  const Th = ({ col, label }: { col: string; label: string }) => (
+    <th onClick={() => toggleSort(col)} style={{
+      ...stickyTh, padding: '10px 12px', textAlign: 'right',
+      color: sortCol === col ? '#10b981' : 'rgba(255,255,255,0.4)',
+      fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
+    }}>
+      {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+    </th>
+  );
+
+  if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', padding: 32 }}>Chargement…</div>;
+
+  const hasFilters = selectedVendeurs.size > 0 || fAnnee || fDateDu || fDateAu;
+
+  return (
+    <div>
+      {/* ── Filtres ── */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+
+        {/* Chips vendeurs */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 600 }}>Vendeur :</span>
+          <button
+            onClick={() => setSelectedVendeurs(new Set())}
+            style={{
+              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              background: selectedVendeurs.size === 0 ? '#10b981' : 'rgba(255,255,255,0.06)',
+              border: selectedVendeurs.size === 0 ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.12)',
+              color: selectedVendeurs.size === 0 ? 'white' : 'rgba(255,255,255,0.5)',
+            }}
+          >Tous</button>
+          {allVendeurs.map(v => (
+            <button key={v} onClick={() => toggleVendeur(v)} style={{
+              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              background: selectedVendeurs.has(v) ? '#10b98120' : 'rgba(255,255,255,0.06)',
+              border: selectedVendeurs.has(v) ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.12)',
+              color: selectedVendeurs.has(v) ? '#10b981' : 'rgba(255,255,255,0.5)',
+            }}>{v}</button>
+          ))}
+        </div>
+
+        {/* Année fiscale */}
+        <Select
+          label="Année fiscale"
+          options={unique(rows.map(r => String(r.annee_fiscale)))}
+          value={fAnnee}
+          onChange={setFAnnee}
+        />
+
+        {/* Plage de dates */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Du</span>
+          <input type="date" value={fDateDu} onChange={e => setFDateDu(e.target.value)}
+            style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '7px 10px', fontSize: 13, colorScheme: 'dark' }} />
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Au</span>
+          <input type="date" value={fDateAu} onChange={e => setFDateAu(e.target.value)}
+            style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '7px 10px', fontSize: 13, colorScheme: 'dark' }} />
+        </div>
+
+        {hasFilters && (
+          <button onClick={() => { setSelectedVendeurs(new Set()); setFAnnee(''); setFDateDu(''); setFDateAu(''); }}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>
+            Effacer filtres
+          </button>
+        )}
+      </div>
+
+      {/* ── KPIs ── */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+        <KpiCard label="Factures" value={String(nbFactures)} />
+        <KpiCard label="Ventes brutes" value={fmt$(totalPos)} />
+        <KpiCard label="Net (avoirs inclus)" value={fmt$(totalNet)} color={totalNet >= 0 ? '#10b981' : '#ef4444'} />
+        <KpiCard label="Moy. / facture" value={nbFactures > 0 ? fmt$(totalPos / nbFactures) : '—'} />
+      </div>
+
+      {/* ── Graphiques ── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+
+        {/* Par vendeur */}
+        <div style={{ flex: 1, minWidth: 260, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Vendeur</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart layout="vertical" data={parVendeur} margin={{ right: 60, left: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 11 }} width={100} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
+              <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                {parVendeur.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
+                <LabelList dataKey="total" position="right" formatter={(v: number) => fmt$(v)} style={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Par mois */}
+        <div style={{ flex: 2, minWidth: 300, background: '#1a1917', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Ventes net / Mois</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={parMois} margin={{ right: 8, left: 4, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="mois" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+              <Tooltip formatter={(v: number) => fmt$(v)} contentStyle={{ background: '#1e1c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: 12 }} />
+              <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                {parMois.map((e, i) => <Cell key={i} fill={e.total >= 0 ? '#10b981' : '#ef4444'} fillOpacity={0.85} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ── Tableau détail ── */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Date</th>
+            <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Doc #</th>
+            <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Client</th>
+            <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 12 }}>Vendeur</th>
+            <Th col="annee_fiscale" label="AF" />
+            <Th col="sous_total" label="Montant" />
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(r => (
+            <tr key={r.document_numero}
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.8)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <td style={{ padding: '9px 12px' }}>{r.date_vente}</td>
+              <td style={{ padding: '9px 12px', fontWeight: 600, fontFamily: 'monospace' }}>{r.document_numero}</td>
+              <td style={{ padding: '9px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.client || '—'}</td>
+              <td style={{ padding: '9px 12px' }}>
+                <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                  {r.vendeur || '(sans vendeur)'}
+                </span>
+              </td>
+              <td style={{ padding: '9px 12px', textAlign: 'right' }}>{r.annee_fiscale}</td>
+              <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: (r.sous_total ?? 0) < 0 ? '#ef4444' : 'rgba(255,255,255,0.9)' }}>
+                {fmt$(r.sous_total)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {filtered.length === 0 && (
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '24px 12px', textAlign: 'center' }}>Aucun résultat</div>
+      )}
+    </div>
+  );
+}
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export function VueProfitabilite() {
-  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans'>('ventes');
+  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans' | 'pieces'>('ventes');
   const [invMeta, setInvMeta] = useState<InvMeta[]>([]);
 
   useEffect(() => {
@@ -1375,9 +1611,10 @@ export function VueProfitabilite() {
   }, []);
 
   const TABS = [
-    { id: 'ventes' as const,     label: 'Rapport Vente',         icon: '📊' },
+    { id: 'ventes' as const,     label: 'Rapport Vente',           icon: '📊' },
     { id: 'inventaire' as const, label: 'Inventaire & Projection', icon: '🔭' },
-    { id: 'plans' as const,      label: 'Plans de vente',         icon: '📋' },
+    { id: 'plans' as const,      label: 'Plans de vente',          icon: '📋' },
+    { id: 'pieces' as const,     label: 'Ventes Pièces',           icon: '🔧' },
   ];
 
   return (
@@ -1408,9 +1645,10 @@ export function VueProfitabilite() {
         </div>
       </div>
 
-      {tab === 'ventes' && <VueVentes invMeta={invMeta} />}
+      {tab === 'ventes'     && <VueVentes invMeta={invMeta} />}
       {tab === 'inventaire' && <VueInventaire invMeta={invMeta} onGoToPlans={() => setTab('plans')} />}
-      {tab === 'plans' && <VuePlans invMeta={invMeta} />}
+      {tab === 'plans'      && <VuePlans invMeta={invMeta} />}
+      {tab === 'pieces'     && <VuePieces />}
     </div>
   );
 }
