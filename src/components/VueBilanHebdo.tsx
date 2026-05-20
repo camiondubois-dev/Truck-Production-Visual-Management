@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// VueEncombre — Onglet "Encombre du vendredi"
+// VueBilanHebdo — Onglet "Bilan hebdomadaire"
 // Tableau de bord stratégique hebdomadaire
 // ════════════════════════════════════════════════════════════════
 
@@ -128,7 +128,7 @@ function badgeStatut(row: PipelineRow) {
 
 // ─── Composant principal ───────────────────────────────────────────────────────
 
-export function VueEncombre() {
+export function VueBilanHebdo() {
   const { monday, prevMonday, today, monDate } = getWeekBounds();
   const fy = currentFY();
 
@@ -253,7 +253,7 @@ export function VueEncombre() {
       setSoldes(soldeData ?? []);
 
     } catch (err) {
-      console.error('[VueEncombre] Erreur chargement:', err);
+      console.error('[VueBilanHebdo] Erreur chargement:', err);
     } finally {
       setLoading(false);
     }
@@ -319,7 +319,7 @@ export function VueEncombre() {
 
       {/* ── En-tête semaine ────────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>📅 ENCOMBRE DU VENDREDI</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>📅 BILAN HEBDOMADAIRE</div>
         <div style={{ fontSize: 18, fontWeight: 800 }}>{labelSemaine(monDate)}</div>
       </div>
 
@@ -377,7 +377,7 @@ export function VueEncombre() {
       {/* Saisie nouveau solde */}
       <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 16, marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>
-          Saisir le solde de ce vendredi
+          Saisir le solde de cette semaine
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -439,9 +439,9 @@ export function VueEncombre() {
               </thead>
               <tbody>
                 {vendusPipeline.map(r => {
-                  const prix   = r.prix_demande ?? 0;
-                  const depot  = r.paiement_depot ? (r.montant_depot ?? 0) : 0;
-                  const solde  = Math.max(prix - depot, 0);
+                  const prix  = r.prix_demande ?? 0;
+                  const depot = r.paiement_depot ? (r.montant_depot ?? 0) : 0;
+                  const solde = Math.max(prix - depot, 0);
                   return (
                     <tr key={r.id}>
                       <TD bold color="#f59e0b">#{r.numero}</TD>
@@ -450,7 +450,7 @@ export function VueEncombre() {
                       <TD>{r.vendeur_nom ?? '—'}</TD>
                       <TD right bold>{fmt$(prix || null)}</TD>
                       <TD right color="#f59e0b">{r.paiement_depot ? fmt$(r.montant_depot) : '—'}</TD>
-                      <TD>{r.modePaiementDepot ?? r.mode_paiement_depot ?? '—'}</TD>
+                      <TD>{r.mode_paiement_depot ?? '—'}</TD>
                       <TD right bold color="#f87171">{fmt$(solde || null)}</TD>
                       <TD>{badgeStatut(r)}</TD>
                     </tr>
@@ -538,10 +538,10 @@ export function VueEncombre() {
       {/* ── Analyse globale AF courant ───────────────────────────── */}
       <SectionTitle>📊 Analyse globale — AF {fy} (à ce jour)</SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 8 }}>
-        <KpiBox label="🚚 CA camions YTD"   value={fmt$(ytdVentes.ca)}    sub={`${ytdVentes.nb} camion${ytdVentes.nb !== 1 ? 's' : ''}`} />
-        <KpiBox label="📈 Marge YTD"        value={fmt$(ytdVentes.marge)} color={ytdVentes.marge > 0 ? '#4ade80' : '#f87171'}
+        <KpiBox label="🚚 CA camions YTD"    value={fmt$(ytdVentes.ca)}    sub={`${ytdVentes.nb} camion${ytdVentes.nb !== 1 ? 's' : ''}`} />
+        <KpiBox label="📈 Marge YTD"         value={fmt$(ytdVentes.marge)} color={ytdVentes.marge > 0 ? '#4ade80' : '#f87171'}
           sub={ytdVentes.ca > 0 ? `${(ytdVentes.marge / ytdVentes.ca * 100).toFixed(1)} %` : undefined} />
-        <KpiBox label="🔧 Pièces YTD (brut)" value={fmt$(ytdPieces.ca)}  sub={`${ytdPieces.nb} factures`} />
+        <KpiBox label="🔧 Pièces YTD (brut)" value={fmt$(ytdPieces.ca)}   sub={`${ytdPieces.nb} factures`} />
         <KpiBox label="💰 Total revenus YTD" value={fmt$(ytdVentes.ca + ytdPieces.ca)} color="#f59e0b" bold />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>

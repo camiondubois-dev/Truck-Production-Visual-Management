@@ -6,7 +6,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { nomVendeur } from '../services/piecesImportService';
 import type { PieceRow } from '../services/piecesImportService';
-import { VueEncombre } from './VueEncombre';
+import { VueBilanHebdo } from './VueBilanHebdo';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1805,7 +1805,7 @@ export function VueProfitabilite() {
     { id: 'inventaire' as const, label: 'Inventaire & Projection', icon: '🔭' },
     { id: 'plans' as const,      label: 'Plans de vente',          icon: '📋' },
     { id: 'pieces' as const,     label: 'Ventes Pièces',           icon: '🔧' },
-    { id: 'encombre' as const,   label: 'Encombre du vendredi',    icon: '📅' },
+    { id: 'encombre' as const,   label: 'Bilan hebdomadaire',       icon: '📅' },
   ];
 
   return (
@@ -1840,7 +1840,7 @@ export function VueProfitabilite() {
       {tab === 'inventaire' && <VueInventaire invMeta={invMeta} onGoToPlans={() => setTab('plans')} />}
       {tab === 'plans'      && <VuePlans invMeta={invMeta} />}
       {tab === 'pieces'     && <VuePieces />}
-      {tab === 'encombre'   && <VueEncombre />}
+      {tab === 'encombre'   && <VueBilanHebdo />}
     </div>
   );
 }
