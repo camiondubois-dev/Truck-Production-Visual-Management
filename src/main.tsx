@@ -9,6 +9,7 @@ import { MoteurProvider } from './contexts/MoteurContext';
 import { AchatProvider } from './contexts/AchatContext';
 import App from './App.tsx';
 import AchatsApp from './AchatsApp';
+import FinanceApp from './FinanceApp';
 import { VueTerrain } from './components/VueTerrain';
 import './index.css';
 
@@ -32,8 +33,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 const path = window.location.pathname;
-const isTerrainRoute = path.startsWith('/terrain');
-const isAchatsRoute  = path.startsWith('/achats');
+const isTerrainRoute  = path.startsWith('/terrain');
+const isAchatsRoute   = path.startsWith('/achats');
+const isFinanceRoute  = path.startsWith('/finance-mobile');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -56,6 +58,11 @@ createRoot(document.getElementById('root')!).render(
             </AchatProvider>
           </InventaireProvider>
         </AuthProvider>
+      </ErrorBoundary>
+    ) : isFinanceRoute ? (
+      // ── Route /finance-mobile : module Finance lecture seule ─
+      <ErrorBoundary>
+        <FinanceApp />
       </ErrorBoundary>
     ) : (
       // ── App principale : production ─────────────────────────
