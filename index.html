@@ -20,19 +20,19 @@
         var isTerrain    = p.startsWith('/terrain');
         var isProduction = !isFinance && !isAchats && !isTerrain;
 
-        var title = isFinance    ? 'Finances CD'
-                  : isAchats    ? 'Achats CD'
-                  : isTerrain   ? 'Terrain CD'
-                  : 'Production CD';
+        var title = isFinance ? 'Finances CD'
+                  : isAchats  ? 'Achats CD'
+                  : isTerrain ? 'Production CD'
+                  : 'Camions Dubois';
 
-        var color = isFinance    ? '#f59e0b'
-                  : isAchats    ? '#10b981'
-                  : isProduction ? '#dc2626'
+        var color = isFinance ? '#f59e0b'
+                  : isAchats  ? '#10b981'
+                  : isTerrain ? '#dc2626'
                   : '#1e293b';
 
-        var icon = isFinance    ? '/icon-finance.png'
-                 : isAchats    ? '/icon-achats.png'
-                 : isProduction ? '/icon-production.png'
+        var icon = isFinance ? '/icon-finance.png'
+                 : isAchats  ? '/icon-achats.png'
+                 : isTerrain ? '/icon-production.png'
                  : '/apple-touch-icon.png';
 
         // Icône écran d'accueil
@@ -43,7 +43,7 @@
           document.write('<link rel="manifest" href="/manifest-finance.json">');
         } else if (isAchats) {
           document.write('<link rel="manifest" href="/manifest.json">');
-        } else if (isProduction) {
+        } else if (isTerrain) {
           document.write('<link rel="manifest" href="/manifest-production.json">');
         }
 
