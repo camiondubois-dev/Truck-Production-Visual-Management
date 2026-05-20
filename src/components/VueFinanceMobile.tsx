@@ -535,6 +535,241 @@ function TabPieces() {
   );
 }
 
+// ─── Onglet Plans de vente ─────────────────────────────────────────────────────
+
+interface MobilePlan {
+  id: string;
+  nom: string;
+  statut: 'brouillon' | 'actif' | 'archive';
+  date_creation: string;
+  date_activation: string | null;
+  nb_vehicules: number;
+  prix_total_projete: number;
+  nb_vendus: number;
+  revenus_realises: number;
+  vehicules: MobilePlanVeh[];
+}
+
+interface MobilePlanVeh {
+  stock_numero: string;
+  prix_plan: number | null;
+  marque: string;
+  modele: string;
+  annee: number | null;
+  vendu: boolean;
+  prix_vente_reel: number | null;
+}
+
+function TabPlans() {
+  const [plans,   setPlans]   = useState<MobilePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => { charger(); }, []);
+
+  async function charger() {
+    setLoading(true);
+    const [
+      { data: plansData },
+      { data: vehData },
+      { data: ventesData },
+      { data: invData },
+    ] = await Promise.all([
+      supabase.from('prod_plans_vente').select('*').order('date_creation', { ascending: false }),
+      supabase.from('prod_plans_vente_vehicules').select('plan_id, stock_numero, prix_plan'),
+      supabase.from('prod_ventes').select('stock_numero, prix_vente, statut'),
+      supabase.from('prod_inventaire').select('numero, marque, modele, annee'),
+    ]);
+
+    if (!plansData) { setLoading(false); return; }
+
+    const venduSet = new Set(
+      (ventesData ?? [])
+        .filter((v: any) => v.statut === 'vendu')
+        .map((v: any) => v.stock_numero)
+    );
+    const ventesPrix: Record<string, number> = {};
+    (ventesData ?? []).forEach((v: any) => { if (v.prix_vente) ventesPrix[v.stock_numero] = v.prix_vente; });
+
+    const invMap: Record<string, { marque: string; modele: string; annee: number | null }> = {};
+    (invData ?? []).forEach((r: any) => { invMap[r.numero] = { marque: r.marque ?? '', modele: r.modele ?? '', annee: r.annee ?? null }; });
+
+    const result: MobilePlan[] = (plansData as any[]).map(p => {
+      const planVeh = ((vehData ?? []) as any[]).filter(v => v.plan_id === p.id);
+      const vehicules: MobilePlanVeh[] = planVeh.map((v: any) => ({
+        stock_numero: v.stock_numero,
+        prix_plan: v.prix_plan,
+        marque: invMap[v.stock_numero]?.marque ?? '',
+        modele: invMap[v.stock_numero]?.modele ?? '',
+        annee: invMap[v.stock_numero]?.annee ?? null,
+        vendu: venduSet.has(v.stock_numero),
+        prix_vente_reel: ventesPrix[v.stock_numero] ?? null,
+      }));
+      const vendus = vehicules.filter(v => v.vendu);
+      return {
+        id: p.id,
+        nom: p.nom,
+        statut: p.statut,
+        date_creation: p.date_creation,
+        date_activation: p.date_activation,
+        nb_vehicules: vehicules.length,
+        prix_total_projete: vehicules.reduce((s, v) => s + (v.prix_plan ?? 0), 0),
+        nb_vendus: vendus.length,
+        revenus_realises: vendus.reduce((s, v) => s + (v.prix_vente_reel ?? 0), 0),
+        vehicules,
+      };
+    });
+
+    setPlans(result);
+    setLoading(false);
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>⏳ Chargement…</div>;
+
+  const planActif   = plans.find(p => p.statut === 'actif');
+  const brouillons  = plans.filter(p => p.statut === 'brouillon');
+
+  if (plans.length === 0) {
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+        Aucun plan de vente créé.<br />
+        <span style={{ fontSize: 12 }}>Crée un plan dans l'onglet Plans de vente sur ordinateur.</span>
+      </div>
+    );
+  }
+
+  function PlanCard({ plan }: { plan: MobilePlan }) {
+    const reste = plan.prix_total_projete - plan.revenus_realises;
+    const pctAvancement = plan.nb_vehicules > 0 ? (plan.nb_vendus / plan.nb_vehicules) * 100 : 0;
+    const isOpen = expanded === plan.id;
+
+    const statutColor = plan.statut === 'actif' ? AMBER : plan.statut === 'brouillon' ? '#60a5fa' : 'rgba(255,255,255,0.3)';
+    const statutLabel = plan.statut === 'actif' ? '✅ ACTIF' : plan.statut === 'brouillon' ? '📝 BROUILLON' : '📦 ARCHIVÉ';
+
+    return (
+      <div style={{
+        background: plan.statut === 'actif' ? 'rgba(245,158,11,0.07)' : CARD_BG,
+        border: `1px solid ${plan.statut === 'actif' ? 'rgba(245,158,11,0.3)' : BORDER}`,
+        borderRadius: 12, marginBottom: 12, overflow: 'hidden',
+      }}>
+        {/* En-tête */}
+        <div
+          onClick={() => setExpanded(isOpen ? null : plan.id)}
+          style={{ padding: '14px 16px', cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
+              <div style={{ fontSize: 11, color: statutColor, fontWeight: 800, marginBottom: 2 }}>{statutLabel}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {plan.nom}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+                {plan.nb_vendus}/{plan.nb_vehicules} camions vendus
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: AMBER }}>{fmt$(plan.prix_total_projete)}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>projeté</div>
+            </div>
+          </div>
+
+          {/* Barre de progression */}
+          <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 6, overflow: 'hidden', marginBottom: 8 }}>
+            <div style={{ height: '100%', width: `${pctAvancement}%`, background: pctAvancement >= 100 ? GREEN : AMBER, borderRadius: 4, transition: 'width 0.4s' }} />
+          </div>
+
+          {/* KPIs compacts */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Réalisé', value: fmt$(plan.revenus_realises), color: GREEN },
+              { label: 'Restant', value: fmt$(reste > 0 ? reste : 0),  color: reste > 0 ? RED : GREEN },
+              { label: 'Avancement', value: `${Math.round(pctAvancement)} %`, color: pctAvancement >= 100 ? GREEN : AMBER },
+            ].map(k => (
+              <div key={k.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>{k.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: k.color }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 8 }}>
+            {isOpen ? '▲ Masquer les camions' : '▼ Voir les camions'}
+          </div>
+        </div>
+
+        {/* Liste des camions */}
+        {isOpen && (
+          <div style={{ borderTop: `1px solid ${BORDER}`, padding: '0 16px 12px' }}>
+            {plan.vehicules.map(v => (
+              <div key={v.stock_numero} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '9px 0', borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                opacity: v.vendu ? 0.55 : 1,
+              }}>
+                <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: v.vendu ? GREEN : AMBER }}>
+                      #{v.stock_numero}
+                    </span>
+                    {v.vendu && <span style={{ fontSize: 9, fontWeight: 800, background: 'rgba(74,222,128,0.15)', color: GREEN, padding: '1px 5px', borderRadius: 8 }}>VENDU</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {[v.annee, v.marque, v.modele].filter(Boolean).join(' ') || '—'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: v.vendu ? GREEN : 'white' }}>
+                    {v.vendu ? fmt$(v.prix_vente_reel) : fmt$(v.prix_plan)}
+                  </div>
+                  {v.vendu && v.prix_plan && (
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>
+                      prévu {fmt$(v.prix_plan)}
+                    </div>
+                  )}
+                  {!v.vendu && (
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>projeté</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 16 }}>
+      {/* Plan actif en tête */}
+      {planActif && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+            Plan actif
+          </div>
+          <PlanCard plan={planActif} />
+        </>
+      )}
+
+      {!planActif && (
+        <div style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#93c5fd' }}>
+          Aucun plan actif. Active un plan depuis l'ordinateur pour l'afficher ici.
+        </div>
+      )}
+
+      {/* Brouillons */}
+      {brouillons.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '16px 0 10px' }}>
+            Brouillons ({brouillons.length})
+          </div>
+          {brouillons.map(p => <PlanCard key={p.id} plan={p} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Onglet Info ───────────────────────────────────────────────────────────────
 
 function TabInfo({ onLogout }: { onLogout: () => void }) {
@@ -556,7 +791,8 @@ function TabInfo({ onLogout }: { onLogout: () => void }) {
         <div style={{ fontSize: 13, lineHeight: '26px' }}>
           📊 Rapport de ventes (camions)<br />
           🏭 Inventaire &amp; projection<br />
-          🔧 Ventes de pièces
+          🔧 Ventes de pièces<br />
+          📋 Plans de vente
         </div>
       </div>
 
@@ -577,11 +813,12 @@ function TabInfo({ onLogout }: { onLogout: () => void }) {
 
 // ─── Navigation ────────────────────────────────────────────────────────────────
 
-type Tab = 'ventes' | 'inventaire' | 'pieces' | 'info';
+type Tab = 'ventes' | 'inventaire' | 'pieces' | 'plans' | 'info';
 const TABS: { id: Tab; emoji: string; label: string }[] = [
   { id: 'ventes',     emoji: '📊', label: 'Ventes'     },
   { id: 'inventaire', emoji: '🏭', label: 'Inventaire' },
   { id: 'pieces',     emoji: '🔧', label: 'Pièces'     },
+  { id: 'plans',      emoji: '📋', label: 'Plans'      },
   { id: 'info',       emoji: '⚙️', label: 'Info'       },
 ];
 
@@ -594,6 +831,7 @@ export function VueFinanceMobile({ onLogout }: { onLogout: () => void }) {
     ventes:     'Rapport de ventes',
     inventaire: 'Inventaire & Projection',
     pieces:     'Ventes de pièces',
+    plans:      'Plans de vente',
     info:       'Information',
   };
 
@@ -621,6 +859,7 @@ export function VueFinanceMobile({ onLogout }: { onLogout: () => void }) {
         {tab === 'ventes'     && <TabVentes />}
         {tab === 'inventaire' && <TabInventaire />}
         {tab === 'pieces'     && <TabPieces />}
+        {tab === 'plans'      && <TabPlans />}
         {tab === 'info'       && <TabInfo onLogout={onLogout} />}
       </div>
 
