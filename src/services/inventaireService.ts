@@ -108,6 +108,20 @@ export const inventaireService = {
       .from('prod_inventaire')
       .insert(toDB(v));
     if (error) throw error;
+
+    // Synchroniser dans prod_ventes pour que age_jours et les coûts soient visibles
+    const vehiculeLabel = [v.annee, v.marque, v.modele].filter(Boolean).join(' ') || v.numero;
+    await supabase.from('prod_ventes').upsert({
+      stock_numero:    v.numero,
+      statut:          'inventaire',
+      source:          v.type === 'eau' ? 'eau' : 'detail',
+      source_priorite: 3,
+      vehicule:        vehiculeLabel,
+      marque:          v.marque ?? null,
+      modele:          v.modele ?? null,
+      annee:           v.annee ?? null,
+      date_achat:      v.dateImport ?? new Date().toISOString(),
+    }, { onConflict: 'stock_numero', ignoreDuplicates: true });
   },
 
   async importerPlusieurs(vehicules: VehiculeInventaire[]): Promise<void> {
@@ -115,6 +129,21 @@ export const inventaireService = {
       .from('prod_inventaire')
       .upsert(vehicules.map(toDB), { onConflict: 'numero' });
     if (error) throw error;
+
+    // Synchroniser dans prod_ventes (ignoreDuplicates = ne pas écraser les vendus)
+    const venteRows = vehicules.map(v => ({
+      stock_numero:    v.numero,
+      statut:          'inventaire',
+      source:          v.type === 'eau' ? 'eau' : 'detail',
+      source_priorite: 3,
+      vehicule:        [v.annee, v.marque, v.modele].filter(Boolean).join(' ') || v.numero,
+      marque:          v.marque ?? null,
+      modele:          v.modele ?? null,
+      annee:           v.annee ?? null,
+      date_achat:      v.dateImport ?? new Date().toISOString(),
+    }));
+    await supabase.from('prod_ventes')
+      .upsert(venteRows, { onConflict: 'stock_numero', ignoreDuplicates: true });
   },
 
   async marquerEnProduction(id: string, jobId: string): Promise<void> {
