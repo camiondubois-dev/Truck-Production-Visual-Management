@@ -1423,10 +1423,14 @@ function VuePieces() {
   }, [rows, selectedVendeurs, fAnnee, fDateDu, fDateAu, sortCol, sortDir]);
 
   const totalNet   = filtered.reduce((s, r) => s + (r.sous_total ?? 0), 0);
-  const totalPos   = filtered.filter(r => (r.sous_total ?? 0) > 0).reduce((s, r) => s + r.sous_total, 0);
-  const nbFactures = filtered.filter(r => (r.sous_total ?? 0) > 0).length;
+  const ventes     = filtered.filter(r => (r.sous_total ?? 0) > 0);
+  const retours    = filtered.filter(r => (r.sous_total ?? 0) < 0);
+  const totalPos   = ventes.reduce((s, r) => s + r.sous_total, 0);
+  const nbFactures = ventes.length;
+  const nbRetours  = retours.length;
+  const totalRetours = retours.reduce((s, r) => s + r.sous_total, 0); // valeur négative
 
-  // Graphique par vendeur
+  // Graphique par vendeur (ventes nettes)
   const parVendeur = useMemo(() => {
     const map: Record<string, number> = {};
     filtered.forEach(r => {
@@ -1437,6 +1441,26 @@ function VuePieces() {
       .map(([name, total]) => ({ name, total: Math.round(total) }))
       .sort((a, b) => b.total - a.total);
   }, [filtered]);
+
+  // Retours par vendeur (toujours sur tous les rows, pas seulement filtered)
+  const retoursParVendeur = useMemo(() => {
+    // Appliquer tous les filtres sauf le chip vendeur pour avoir le tableau complet
+    let base = rows;
+    if (fAnnee) base = base.filter(x => String(x.annee_fiscale) === fAnnee);
+    if (fDateDu) base = base.filter(x => x.date_vente >= fDateDu);
+    if (fDateAu) base = base.filter(x => x.date_vente <= fDateAu);
+
+    const map: Record<string, { nb: number; montant: number }> = {};
+    base.filter(r => (r.sous_total ?? 0) < 0).forEach(r => {
+      const v = nomVendeur(r.vendeur);
+      if (!map[v]) map[v] = { nb: 0, montant: 0 };
+      map[v].nb++;
+      map[v].montant += r.sous_total ?? 0;
+    });
+    return Object.entries(map)
+      .map(([nom, s]) => ({ nom, nb: s.nb, montant: s.montant }))
+      .sort((a, b) => a.montant - b.montant); // du plus grand retour au plus petit
+  }, [rows, fAnnee, fDateDu, fDateAu]);
 
   // Graphique par mois (format YYYY-MM)
   const parMois = useMemo(() => {
@@ -1532,6 +1556,58 @@ function VuePieces() {
         <KpiCard label="Ventes brutes" value={fmt$(totalPos)} />
         <KpiCard label="Net (avoirs inclus)" value={fmt$(totalNet)} color={totalNet >= 0 ? '#10b981' : '#ef4444'} />
         <KpiCard label="Moy. / facture" value={nbFactures > 0 ? fmt$(totalPos / nbFactures) : '—'} />
+        <KpiCard label="Nb retours" value={String(nbRetours)} color={nbRetours > 0 ? '#ef4444' : 'rgba(255,255,255,0.5)'} />
+        <KpiCard label="Total retours $" value={fmt$(totalRetours)} color="#ef4444" />
+      </div>
+
+      {/* ── Analyse des retours ── */}
+      <div style={{ background: '#1a1917', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+        <div style={{ color: '#ef4444', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+          Analyse des retours {selectedVendeurs.size > 0 ? `— sélection` : '— tous les vendeurs'}
+        </div>
+        {retoursParVendeur.length === 0 ? (
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Aucun retour dans la période sélectionnée.</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 11 }}>Vendeur</th>
+                <th style={{ padding: '6px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 11 }}>Nb retours</th>
+                <th style={{ padding: '6px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 11 }}>Montant retourné</th>
+                <th style={{ padding: '6px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontSize: 11 }}>% des ventes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {retoursParVendeur.map(r => {
+                const ventesVendeur = parVendeur.find(v => v.name === r.nom)?.total ?? 0;
+                const pct = ventesVendeur > 0 ? Math.abs(r.montant) / (ventesVendeur + Math.abs(r.montant)) * 100 : 0;
+                return (
+                  <tr key={r.nom} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.04)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{r.nom}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{r.nb}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{fmt$(r.montant)}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', color: pct > 10 ? '#ef4444' : pct > 5 ? '#f59e0b' : 'rgba(255,255,255,0.5)' }}>
+                      {pct.toFixed(1)} %
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.5)', fontWeight: 700, fontSize: 12 }}>TOTAL SÉLECTION</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{nbRetours}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{fmt$(totalRetours)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                  {totalPos > 0 ? (Math.abs(totalRetours) / (totalPos) * 100).toFixed(1) + ' %' : '—'}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
 
       {/* ── Graphiques ── */}
