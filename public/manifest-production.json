@@ -1,0 +1,21 @@
+{
+  "name": "Camion Dubois — Production",
+  "short_name": "Production CD",
+  "description": "Gestion production & opérations — Camion Dubois",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "orientation": "portrait",
+  "lang": "fr-CA",
+  "icons": [
+    {
+      "src": "/icon-production.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}

@@ -6,38 +6,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Truck Production Visual Management</title>
 
-    <!-- PWA — icône écran d'accueil iPhone -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- PWA — icône + manifest selon la route
+         document.write() est synchrone : Safari lit le bon tag immédiatement -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-
-    <!-- Titre + couleur + manifest selon la route
-         IMPORTANT : le manifest est injecté ICI (inline) pour que Safari
-         le lise AVANT tout autre script — sinon il prend le mauvais start_url -->
     <script>
       (function() {
         var p = window.location.pathname;
 
-        var isFinance = p.startsWith('/finance-mobile');
-        var isAchats  = p.startsWith('/achats');
-        var isTerrain = p.startsWith('/terrain');
+        var isFinance    = p.startsWith('/finance-mobile');
+        var isAchats     = p.startsWith('/achats');
+        var isTerrain    = p.startsWith('/terrain');
+        var isProduction = !isFinance && !isAchats && !isTerrain;
 
-        var title = isFinance ? 'Finances CD'
-                  : isAchats  ? 'Achats CD'
-                  : isTerrain ? 'Terrain CD'
-                  : 'Camions Dubois';
+        var title = isFinance    ? 'Finances CD'
+                  : isAchats    ? 'Achats CD'
+                  : isTerrain   ? 'Terrain CD'
+                  : 'Production CD';
 
-        var color = isFinance ? '#f59e0b'
-                  : isAchats  ? '#10b981'
+        var color = isFinance    ? '#f59e0b'
+                  : isAchats    ? '#10b981'
+                  : isProduction ? '#1e40af'
                   : '#1e293b';
 
-        // Manifest seulement pour les routes PWA (pas pour l'app principale)
-        // Safari lit ce tag immédiatement — on injecte le bon dès le départ
+        var icon = isFinance    ? '/icon-finance.png'
+                 : isAchats    ? '/icon-achats.png'
+                 : isProduction ? '/icon-production.png'
+                 : '/apple-touch-icon.png';
+
+        // Icône écran d'accueil
+        document.write('<link rel="apple-touch-icon" href="' + icon + '">');
+
+        // Manifest (start_url correct par route)
         if (isFinance) {
           document.write('<link rel="manifest" href="/manifest-finance.json">');
         } else if (isAchats) {
           document.write('<link rel="manifest" href="/manifest.json">');
+        } else if (isProduction) {
+          document.write('<link rel="manifest" href="/manifest-production.json">');
         }
 
         document.write(
