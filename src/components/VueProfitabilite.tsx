@@ -801,7 +801,7 @@ function VueInventaire({
 
   async function savePrixDemande(stock: string, value: string) {
     const prix = parseFloat(value) || null;
-    await supabase.from('prod_couts_vehicule')
+    await supabase.from('prod_ventes')
       .update({ prix_demande: prix })
       .eq('stock_numero', stock);
     setRows(prev => prev.map(r => r.stock_numero === stock ? { ...r, prix_demande: prix } : r));
@@ -812,7 +812,7 @@ function VueInventaire({
     // Protégé : on n'écrase pas si déjà en BD (même règle que l'import)
     const row = rows.find(r => r.stock_numero === stock);
     if (row?.prix_achat_reel && row.prix_achat_reel > 0 && !value) return; // pas d'effacement
-    await supabase.from('prod_couts_vehicule')
+    await supabase.from('prod_ventes')
       .update({ prix_achat_reel: prix })
       .eq('stock_numero', stock);
     // Recalcule cout_total_depense localement (cost_purchased - prix_achat_reel)
@@ -1351,7 +1351,7 @@ function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
       // Mettre à jour prix_demande pour chaque stock
       await Promise.all(
         (veh as { stock_numero: string; prix_plan: number | null }[]).map(v =>
-          supabase.from('prod_couts_vehicule')
+          supabase.from('prod_ventes')
             .update({ prix_demande: v.prix_plan })
             .eq('stock_numero', v.stock_numero)
         )
