@@ -30,6 +30,7 @@ interface VenteRapport {
   prix_vente: number;
   marge_profit: number | null;
   pct_profit: number | null;
+  jours_inventaire: number | null;
   type?: string;
 }
 
@@ -366,6 +367,8 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
   const totalVente = filtered.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
   const totalProfit = filtered.reduce((s, r) => s + (r.marge_profit ?? 0), 0);
   const margeMoy = totalVente > 0 ? (totalProfit / totalVente) * 100 : 0;
+  const avecJours = filtered.filter(r => r.jours_inventaire != null);
+  const avgJours = avecJours.length > 0 ? Math.round(avecJours.reduce((s, r) => s + (r.jours_inventaire ?? 0), 0) / avecJours.length) : null;
 
   const profitParMarque = useMemo(() => {
     const map: Record<string, number> = {};
@@ -471,6 +474,11 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
         <KpiCard label="Vente total" value={fmt$(totalVente)} />
         <KpiCard label="Profit total" value={fmt$(totalProfit)} color={profitColor(totalProfit)} />
         <KpiCard label="Marge de profit" value={fmtPct(margeMoy)} color={profitColor(margeMoy)} />
+        <KpiCard
+          label="Jours inv. moyen"
+          value={avgJours != null ? `${avgJours} j` : '—'}
+          color={avgJours == null ? undefined : avgJours <= 60 ? '#4ade80' : avgJours <= 120 ? '#f59e0b' : '#ef4444'}
+        />
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'stretch' }}>
@@ -650,6 +658,7 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
               <Th col="prix_vente" label="Prix vente" />
               <Th col="marge_profit" label="Profit" />
               <Th col="pct_profit" label="Marge %" />
+              <Th col="jours_inventaire" label="Jours inv." />
             </tr>
           </thead>
           <tbody>
@@ -675,6 +684,15 @@ function VueVentes({ invMeta }: { invMeta: InvMeta[] }) {
                   <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.prix_vente)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: profitColor(r.marge_profit) }}>{fmt$(r.marge_profit)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', color: profitColor(r.pct_profit) }}>{fmtPct(r.pct_profit)}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, color:
+                    r.jours_inventaire == null ? 'rgba(255,255,255,0.3)'
+                    : r.jours_inventaire <= 60  ? '#4ade80'
+                    : r.jours_inventaire <= 120 ? '#f59e0b'
+                    : r.jours_inventaire <= 180 ? '#fb923c'
+                    : '#ef4444'
+                  }}>
+                    {r.jours_inventaire != null ? `${r.jours_inventaire} j` : '—'}
+                  </td>
                 </tr>
               ))}
           </tbody>

@@ -77,6 +77,7 @@ interface VenteWeekRow {
   stock_numero: string;
   vehicule: string;
   client: string;
+  jours_inventaire: number | null;
 }
 
 interface PieceWeekRow {
@@ -208,14 +209,14 @@ export function VueBilanHebdo() {
       // 7. Camions vendus financier — cette semaine
       const { data: vwData } = await supabase
         .from('prod_rapport_profitabilite')
-        .select('date_vente, prix_vente, marge_profit, stock_numero, vehicule, client')
+        .select('date_vente, prix_vente, marge_profit, stock_numero, vehicule, client, jours_inventaire')
         .gte('date_vente', monday);
       setVentesWeek(vwData ?? []);
 
       // 8. Camions vendus financier — semaine précédente
       const { data: vpData } = await supabase
         .from('prod_rapport_profitabilite')
-        .select('date_vente, prix_vente, marge_profit, stock_numero, vehicule, client')
+        .select('date_vente, prix_vente, marge_profit, stock_numero, vehicule, client, jours_inventaire')
         .gte('date_vente', prevMonday)
         .lt('date_vente', monday);
       setVentesPrev(vpData ?? []);
@@ -278,6 +279,10 @@ export function VueBilanHebdo() {
   const piecesCA_W    = piecesWeek.reduce((s, r) => s + Math.max(r.sous_total, 0), 0);
   const ventesCA_W    = ventesWeek.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
   const ventesMarge_W = ventesWeek.reduce((s, r) => s + (r.marge_profit ?? 0), 0);
+  const avecJoursW    = ventesWeek.filter(r => r.jours_inventaire != null);
+  const avgJoursW     = avecJoursW.length > 0 ? Math.round(avecJoursW.reduce((s, r) => s + (r.jours_inventaire ?? 0), 0) / avecJoursW.length) : null;
+  const avecJoursP    = ventesPrev.filter(r => r.jours_inventaire != null);
+  const avgJoursP     = avecJoursP.length > 0 ? Math.round(avecJoursP.reduce((s, r) => s + (r.jours_inventaire ?? 0), 0) / avecJoursP.length) : null;
   const depotsCA_W    = depotsWeek.reduce((s, r) => s + (r.montant_depot ?? 0), 0);
   const totalW        = piecesCA_W + depotsCA_W + ventesCA_W;
 
@@ -387,6 +392,25 @@ export function VueBilanHebdo() {
           prevSub={`${depotsPrev.length} dépôt${depotsPrev.length !== 1 ? 's' : ''}`}
         />
 
+        {/* Jours en inventaire moyen */}
+        {(avgJoursW != null || avgJoursP != null) && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding: '14px 20px', background: 'rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>📅 Jours en inv. moyen</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: avgJoursW == null ? 'rgba(255,255,255,0.3)' : avgJoursW <= 60 ? '#4ade80' : avgJoursW <= 120 ? '#f59e0b' : '#ef4444' }}>
+                {avgJoursW != null ? `${avgJoursW} j` : '—'}
+              </div>
+              {ventesWeek.length > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{ventesWeek.length} camion{ventesWeek.length !== 1 ? 's' : ''}</div>}
+            </div>
+            <div style={{ padding: '14px 20px', background: 'transparent', borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginBottom: 2 }}>Semaine préc.</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'rgba(255,255,255,0.4)' }}>
+                {avgJoursP != null ? `${avgJoursP} j` : '—'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Total */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: 'rgba(245,158,11,0.08)', borderTop: '1px solid rgba(245,158,11,0.2)' }}>
           <div style={{ padding: '14px 20px' }}>
@@ -419,7 +443,8 @@ export function VueBilanHebdo() {
                 <TH>Client</TH>
                 <TH right>Prix vente</TH>
                 <TH right>Marge</TH>
-                <TH>Date</TH>
+                <TH right>Jours inv.</TH>
+                <TH>Date vente</TH>
               </tr>
             </thead>
             <tbody>
@@ -430,6 +455,9 @@ export function VueBilanHebdo() {
                   <TD>{r.client || '—'}</TD>
                   <TD right bold color="#4ade80">{fmt$(r.prix_vente)}</TD>
                   <TD right color={r.marge_profit > 0 ? '#4ade80' : '#f87171'}>{fmt$(r.marge_profit)}</TD>
+                  <TD right color={r.jours_inventaire == null ? undefined : r.jours_inventaire <= 60 ? '#4ade80' : r.jours_inventaire <= 120 ? '#f59e0b' : '#ef4444'}>
+                    {r.jours_inventaire != null ? `${r.jours_inventaire} j` : '—'}
+                  </TD>
                   <TD>{fmtDate(r.date_vente)}</TD>
                 </tr>
               ))}
@@ -437,6 +465,9 @@ export function VueBilanHebdo() {
                 <TD bold colSpan={3}>TOTAL</TD>
                 <TD right bold color="#4ade80">{fmt$(ventesCA_W)}</TD>
                 <TD right bold color="#4ade80">{fmt$(ventesMarge_W)}</TD>
+                <TD right bold color={avgJoursW == null ? undefined : avgJoursW <= 60 ? '#4ade80' : avgJoursW <= 120 ? '#f59e0b' : '#ef4444'}>
+                  {avgJoursW != null ? `moy. ${avgJoursW} j` : '—'}
+                </TD>
                 <TD>{''}</TD>
               </tr>
             </tbody>

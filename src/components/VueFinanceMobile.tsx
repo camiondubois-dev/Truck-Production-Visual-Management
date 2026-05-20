@@ -81,8 +81,9 @@ interface VenteRow {
   cout_mo:          number | null;
   cout_total:       number | null;
   prix_vente:       number | null;
-  marge_profit:     number | null;
-  pct_profit:       number | null;
+  marge_profit:      number | null;
+  pct_profit:        number | null;
+  jours_inventaire:  number | null;
 }
 
 interface InvRow {
@@ -217,7 +218,7 @@ function TabVentes() {
 
   useEffect(() => {
     setLoading(true);
-    const fields = 'annee_fiscale,date_vente,client,stock_numero,marque,modele,annee,type_vente_label,prix_achat_reel,cout_mo,cout_total,prix_vente,marge_profit,pct_profit';
+    const fields = 'annee_fiscale,date_vente,client,stock_numero,marque,modele,annee,type_vente_label,prix_achat_reel,cout_mo,cout_total,prix_vente,marge_profit,pct_profit,jours_inventaire';
     Promise.all([
       fetchAll<VenteRow>('prod_rapport_profitabilite', fields, q => q.eq('annee_fiscale', fy).order('date_vente', { ascending: false })),
       fetchAll<VenteRow>('prod_rapport_profitabilite', fields, q => q.eq('annee_fiscale', fy - 1)),
@@ -298,6 +299,11 @@ function TabVentes() {
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 3, display: 'flex', gap: 8 }}>
                           <span>Achat {fmt$(r.prix_achat_reel)}</span>
                           <span>M.O. {fmt$(r.cout_mo)}</span>
+                          {r.jours_inventaire != null && (
+                            <span style={{ color: r.jours_inventaire <= 60 ? '#4ade80' : r.jours_inventaire <= 120 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                              📅 {r.jours_inventaire} j inv.
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
