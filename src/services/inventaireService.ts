@@ -7,6 +7,14 @@ const generateUUID = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+/**
+ * Un numéro de stock de camion valide est purement numérique et comporte ≥ 4 chiffres.
+ * Rejette les WO ("1-XXXXX", "WO-XXXXX"), codes alphanumériques, etc.
+ */
+export function estStockCamionValide(numero: string | null | undefined): boolean {
+  return /^\d{4,}$/.test((numero ?? '').trim());
+}
+
 export function fromDB(row: any): VehiculeInventaire {
   return {
     id: row.id,
@@ -110,6 +118,8 @@ export const inventaireService = {
     if (error) throw error;
 
     // Synchroniser dans prod_ventes pour que age_jours et les coûts soient visibles
+    // Guard : on n'enregistre jamais un WO ou un numéro non-numérique dans prod_ventes
+    if (!estStockCamionValide(v.numero)) return;
     const vehiculeLabel = [v.annee, v.marque, v.modele].filter(Boolean).join(' ') || v.numero;
     await supabase.from('prod_ventes').upsert({
       stock_numero:    v.numero,
@@ -132,7 +142,8 @@ export const inventaireService = {
     if (error) throw error;
 
     // Synchroniser dans prod_ventes (ignoreDuplicates = ne pas écraser les vendus)
-    const venteRows = vehicules.map(v => ({
+    // Guard : exclure les WO et tout numéro non-numérique (ex: "1-XXXXX")
+    const venteRows = vehicules.filter(v => estStockCamionValide(v.numero)).map(v => ({
       stock_numero:    v.numero,
       statut:          'inventaire',
       source:          v.type === 'eau' ? 'eau' : 'detail',

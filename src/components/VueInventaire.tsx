@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
-import { fromDB as inventaireFromDB } from '../services/inventaireService';
+import { fromDB as inventaireFromDB, estStockCamionValide } from '../services/inventaireService';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
@@ -333,7 +333,9 @@ export function VueInventaire() {
       const workbook = XLSX.read(buffer);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
-      const nouveaux: VehiculeInventaire[] = rows.filter(row => row.numero && row.type).map(row => ({
+      const rowsValides = rows.filter(row => row.numero && row.type && estStockCamionValide(String(row.numero)));
+      const nbExclus = rows.filter(row => row.numero && row.type && !estStockCamionValide(String(row.numero))).length;
+      const nouveaux: VehiculeInventaire[] = rowsValides.map(row => ({
         id: generateVehId(), statut: 'disponible' as const, dateImport: new Date().toISOString(),
         numero: String(row.numero), type: row.type as 'eau' | 'client' | 'detail',
         variante: row.variante || undefined, marque: row.marque || undefined,
@@ -343,7 +345,8 @@ export function VueInventaire() {
         vehicule: row.vehicule || undefined, descriptionTravail: row.descriptionTravail || undefined,
         descriptionTravaux: row.descriptionTravaux || undefined,
       }));
-      if (nouveaux.length === 0) { setErreurImport('Aucun véhicule valide trouvé.'); return; }
+      if (nouveaux.length === 0) { setErreurImport('Aucun véhicule valide trouvé.' + (nbExclus > 0 ? ` ${nbExclus} entrée(s) exclue(s) (WO/non-numériques).` : '')); return; }
+      if (nbExclus > 0) setErreurImport(`⚠️ ${nbExclus} entrée(s) WO ou non-numériques exclue(s) automatiquement.`);
       importerVehicules(nouveaux);
     } catch (err) { setErreurImport('Erreur lors de la lecture du fichier Excel.'); }
     e.target.value = '';

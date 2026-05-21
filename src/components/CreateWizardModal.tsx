@@ -5,6 +5,7 @@ import { TOUTES_STATIONS_COMMUNES, PIPELINE_EAU_USAGE, PIPELINE_EAU_NEUF, PIPELI
 import { useInventaire } from '../contexts/InventaireContext';
 import { useClients } from '../contexts/ClientContext';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
+import { estStockCamionValide } from '../services/inventaireService';
 import { AutocompleteInput } from './AutocompleteInput';
 import { MARQUES_LISTE, MARQUES_CAMIONS, ANNEES_LISTE } from '../data/camionData';
 
@@ -1004,6 +1005,11 @@ const [etape, setEtape] = useState(1);
   const handleCreer = async () => {
    if (!form.type) return;
 if (form.type !== 'client' && !form.numero) return;
+    // Guard : pour les camions eau/détail, le numéro doit être numérique (rejette les WO)
+    if ((form.type === 'eau' || form.type === 'detail') && !estStockCamionValide(form.numero)) {
+      alert(`Le numéro de stock "${form.numero}" n'est pas valide. Un camion eau ou détail doit avoir un numéro purement numérique (ex: 34750).`);
+      return;
+    }
 
     const id = generateId();
     const now = new Date().toISOString();
