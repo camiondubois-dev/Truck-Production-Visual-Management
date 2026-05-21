@@ -431,7 +431,7 @@ function TabInventaire() {
   useEffect(() => {
     fetchAll<InvRow>(
       'prod_inventaire_couts',
-      'stock_numero,type_vehicule,date_achat,age_jours,cout_achat,cout_total_depense,cout_total_investi,prix_achat_reel,prix_demande,marque,modele,annee',
+      'stock_numero,type_vehicule,date_achat,age_jours,cout_achat,cout_total_depense,prix_achat_reel,prix_demande,marque,modele,annee',
       q => q.order('cout_achat', { ascending: false }),
     ).then(data => { setRows(data); setLoading(false); });
   }, []);
@@ -529,7 +529,7 @@ function TabInventaire() {
         const r = selectedInv;
         const achat  = r.prix_achat_reel    ?? 0;
         const mo     = r.cout_total_depense ?? 0;
-        const total  = r.cout_total_investi ?? (achat + mo);
+        const total  = achat + mo;
         const profit = r.prix_demande ? r.prix_demande - total : null;
         const pct    = r.prix_demande && r.prix_demande > 0 && profit != null
           ? (profit / r.prix_demande) * 100 : null;
