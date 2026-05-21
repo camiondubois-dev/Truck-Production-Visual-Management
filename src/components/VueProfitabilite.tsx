@@ -906,7 +906,7 @@ function VueInventaire({
       const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [rows, filterToSelection, selected, fType, fMarque, fModele, fAnnee, fStock, fAvecPrix, sortCol, sortDir]);
+  }, [rows, filterToSelection, selected, fType, fMarque, fModele, fAnnee, fStock, fAvecPrix, fPaiement, sortCol, sortDir]);
 
   const totCoutAchat = filtered.reduce((s, r) => s + (r.cout_achat ?? 0), 0);
   const totMO = filtered.reduce((s, r) => s + (r.cout_total_depense ?? 0), 0);
