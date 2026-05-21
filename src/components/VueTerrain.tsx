@@ -280,15 +280,12 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
 const APP_KEY_TERRAIN = 'terrain';
 
 // ─── Validation PIN terrain (100 % local, zéro Supabase Auth) ────────────────
-// VITE_TERRAIN_PIN  → accès production (mécanos, etc.) — pas de données financières
-// VITE_FINANCE_PIN  → accès gestionnaire = tout + données financières
-// Retourne: 'gestion' | 'terrain' | null
-function validerPinTerrain(pin: string): 'gestion' | 'terrain' | null {
-  const financePin = import.meta.env.VITE_FINANCE_PIN  as string | undefined;
-  const terrainPin = import.meta.env.VITE_TERRAIN_PIN  as string | undefined;
-  if (financePin && pin === financePin) return 'gestion';
-  if (terrainPin && pin === terrainPin) return 'terrain';
-  return null;
+// Accepte le PIN Finance OU le PIN Terrain — les deux ouvrent l'accès complet.
+// (On rebranchera les deux niveaux d'accès plus tard, calmement.)
+function validerPinTerrain(pin: string): boolean {
+  const financePin = import.meta.env.VITE_FINANCE_PIN as string | undefined;
+  const terrainPin = import.meta.env.VITE_TERRAIN_PIN as string | undefined;
+  return (!!financePin && pin === financePin) || (!!terrainPin && pin === terrainPin);
 }
 
 function EcranPin({ onSuccess }: { onSuccess: () => void }) {
@@ -307,23 +304,18 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
   }, []);
 
   // ── Succès commun (PIN ou Face ID) ──────────────────────────────
-  // niveau: 'gestion' = accès financier, 'terrain' = production seulement
-  const handleSuccess = (niveau: 'gestion' | 'terrain' = 'terrain') => {
+  const handleSuccess = () => {
     sessionStorage.setItem('terrain_pin_ok', '1');
-    sessionStorage.setItem('terrain_niveau', niveau);
     onSuccess();
   };
 
   // ── Validation PIN locale (zéro Supabase Auth) ────────────────────
   const validerPin = (code: string) => {
-    const niveau = validerPinTerrain(code);
-    if (niveau) {
+    if (validerPinTerrain(code)) {
       if (bioSupport && !bioRegistred) {
-        // Mémoriser le niveau pour l'utiliser après l'activation Face ID
-        sessionStorage.setItem('terrain_niveau_pending', niveau);
         setOffrirBio(true);
       } else {
-        handleSuccess(niveau);
+        handleSuccess();
       }
     } else {
       setDigits('');
@@ -338,9 +330,7 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
     const ok = await authenticateWithBiometric(APP_KEY_TERRAIN);
     setLoading(false);
     if (ok) {
-      // Le niveau était stocké lors de l'enregistrement du Face ID
-      const niveau = (localStorage.getItem('terrain_faceid_niveau') as 'gestion' | 'terrain') ?? 'terrain';
-      handleSuccess(niveau);
+      handleSuccess();
     } else {
       setErreur('Face ID non reconnu — entre ton code PIN');
       setModePIN(true);
@@ -350,16 +340,12 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
   // ── Activation Face ID après PIN réussi ──────────────────────────
   const activerFaceId = async () => {
     const ok = await registerBiometric(APP_KEY_TERRAIN);
-    const niveau = (sessionStorage.getItem('terrain_niveau_pending') as 'gestion' | 'terrain') ?? 'terrain';
     if (ok) {
       setBioRegistred(true);
       setBioSupport(true);
-      // Mémoriser le niveau associé à ce Face ID pour les prochaines connexions
-      localStorage.setItem('terrain_faceid_niveau', niveau);
     }
-    sessionStorage.removeItem('terrain_niveau_pending');
     setOffrirBio(false);
-    handleSuccess(niveau);
+    handleSuccess();
   };
 
   const handleDigit = (d: string) => {
@@ -380,12 +366,7 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
         <button onClick={activerFaceId} style={{ width: '100%', maxWidth: 280, padding: '16px', borderRadius: 14, border: 'none', background: '#f97316', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer', marginTop: 8 }}>
           ✅ Activer Face ID
         </button>
-        <button onClick={() => {
-          const niveau = (sessionStorage.getItem('terrain_niveau_pending') as 'gestion' | 'terrain') ?? 'terrain';
-          sessionStorage.removeItem('terrain_niveau_pending');
-          setOffrirBio(false);
-          handleSuccess(niveau);
-        }} style={{ width: '100%', maxWidth: 280, padding: '14px', borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => { setOffrirBio(false); handleSuccess(); }} style={{ width: '100%', maxWidth: 280, padding: '14px', borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
           Non merci
         </button>
       </div>
@@ -622,12 +603,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   onClose: () => void;
   onMisAJour: (updated: VehiculeInventaire) => void;
 }) {
-  // Terrain : niveau d'accès stocké en sessionStorage après validation PIN.
-  // 'gestion' = PIN Finance → données financières visibles. Sinon production seulement.
+  // Terrain (PIN) → pas de AuthProvider → on affiche tout. Desktop → gestion seulement.
   const auth = useAuthOptional();
-  const isGestion = auth
-    ? auth.profile?.role === 'gestion'  // app principale (desktop)
-    : sessionStorage.getItem('terrain_niveau') === 'gestion'; // app terrain (PIN)
+  const isGestion = !auth || auth.profile?.role === 'gestion';
   const finStockNumeros = useMemo(() => isGestion && v.numero ? [v.numero] : [], [isGestion, v.numero]);
   const { dataByNumero: finMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(finStockNumeros);
   const finData = finMap[v.numero];
@@ -1492,11 +1470,9 @@ function EcranConnexion({ onConnecte }: { onConnecte: () => void }) {
 // ─── Export principal ────────────────────────────────────────────────────────
 
 export function VueTerrain() {
-  const [ecran, setEcran] = useState<Ecran>(() => {
-    const pinOk    = sessionStorage.getItem('terrain_pin_ok') === '1';
-    const niveauOk = sessionStorage.getItem('terrain_niveau') !== null;
-    return pinOk && niveauOk ? 'ok' : 'pin';
-  });
+  const [ecran, setEcran] = useState<Ecran>(() =>
+    sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
+  );
   const [authReady, setAuthReady] = useState(false);
 
   // Connexion Supabase partagée (compte TV) — nécessaire pour accéder aux données
