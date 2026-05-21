@@ -1,15 +1,40 @@
 // ════════════════════════════════════════════════════════════════
 // Finance Mobile — Écran de connexion PIN fixe
 // PIN configuré via VITE_FINANCE_PIN (variable d'environnement)
+// rideau=true → écran noir "Touche pour reprendre" (absence < 60 s)
 // ════════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
 
 const COULEUR = '#f59e0b'; // amber / gold
 
-export function FinancePinLogin({ onLogged }: { onLogged: () => void }) {
+export function FinancePinLogin({ onLogged, rideau = false }: { onLogged: () => void; rideau?: boolean }) {
   const [pin, setPin]       = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
+
+  // ── Mode rideau : écran noir discret, un tap suffit pour reprendre ──
+  if (rideau) {
+    return (
+      <div
+        onClick={onLogged}
+        style={{
+          width: '100vw', height: '100dvh',
+          background: '#000',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          gap: 16, cursor: 'pointer', userSelect: 'none',
+        }}
+      >
+        <div style={{ fontSize: 52 }}>🔒</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.05em' }}>
+          FINANCES
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+          Touche pour reprendre
+        </div>
+      </div>
+    );
+  }
 
   const correctPin = import.meta.env.VITE_FINANCE_PIN as string | undefined;
   const pinLen     = correctPin?.length ?? 6;
