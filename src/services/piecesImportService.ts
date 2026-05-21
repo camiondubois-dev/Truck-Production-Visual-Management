@@ -75,50 +75,70 @@ function parseCSVLine(line: string, delimiter = ','): string[] {
   return result;
 }
 
-export function parsePiecesCSV(text: string): { rows: PieceRow[]; errors: string[]; diagnostic?: string } {
+export type ModeFichierPieces = 'counterperson' | 'salesperson';
+
+export interface ParsePiecesResult {
+  rows:         PieceRow[];
+  errors:       string[];
+  diagnostic?:  string;
+  modeFichier:  ModeFichierPieces;
+  nbExclus:     number;         // lignes filtrées (vendeur non reconnu)
+  exclusDetails: { code: string; nb: number; total: number }[];  // détail des exclusions
+}
+
+// Codes valides des vendeurs au comptoir
+const VENDEURS_CONNUS = new Set(Object.keys(VENDEURS));
+
+export function parsePiecesCSV(text: string): ParsePiecesResult {
   // Retirer le BOM UTF-8 et UTF-16 si présent
   let content = text;
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
 
-  if (lines.length < 2) return { rows: [], errors: ['Fichier vide — aucune ligne détectée.'] };
+  const vide: ParsePiecesResult = { rows: [], errors: ['Fichier vide — aucune ligne détectée.'], modeFichier: 'salesperson', nbExclus: 0, exclusDetails: [] };
+  if (lines.length < 2) return vide;
 
   // Détection automatique du séparateur (virgule ou point-virgule)
   const delimiter = detectDelimiter(lines[0]);
 
   const errors: string[] = [];
   const rows: PieceRow[] = [];
+  const exclusMap: Record<string, { nb: number; total: number }> = {};
 
   // Vérification entête
   const header = parseCSVLine(lines[0], delimiter).map(h => h.toLowerCase().trim().replace(/^"|"$/g, ''));
-  const idxDate    = header.findIndex(h => h === 'date');
-  const idxDoc     = header.findIndex(h => h.includes('document'));
-  const idxVendeur = header.findIndex(h => h.includes('salesperson'));
-  const idxSub     = header.findIndex(h => h.includes('subtotal') || h.includes('total'));
-  const idxClient  = header.findIndex(h => h.includes('customer company') || h.includes('company'));
-  const idxClientN = header.findIndex(h => h.includes('customer number') || h.includes('number'));
+  const idxDate        = header.findIndex(h => h === 'date');
+  const idxDoc         = header.findIndex(h => h.includes('document'));
+  const idxSub         = header.findIndex(h => h.includes('subtotal') || h.includes('total'));
+  const idxClient      = header.findIndex(h => h.includes('customer company') || h.includes('company'));
+  const idxClientN     = header.findIndex(h => h.includes('customer number') || h.includes('number'));
 
-  const diagnostic = `Séparateur: "${delimiter}" · Colonnes détectées: [${header.join(' | ')}]`;
+  // Nouveau format : Counterperson > Salesperson
+  const idxCounter     = header.findIndex(h => h === 'counterperson');
+  const idxSalesperson = header.findIndex(h => h === 'salesperson');
+  const modeFichier: ModeFichierPieces = idxCounter >= 0 ? 'counterperson' : 'salesperson';
+  const idxVendeur = modeFichier === 'counterperson' ? idxCounter : idxSalesperson;
+
+  const diagnostic = `Mode: ${modeFichier} · Séparateur: "${delimiter}" · Colonnes: [${header.join(' | ')}]`;
 
   if (idxDate < 0 || idxDoc < 0 || idxSub < 0) {
     return {
-      rows: [],
-      errors: [
+      rows: [], errors: [
         `Colonnes requises introuvables. ${diagnostic}`,
         'Astuce : si le fichier a été ouvert dans Excel, le réenregistrer en format CSV UTF-8.',
       ],
-      diagnostic,
+      modeFichier, nbExclus: 0, exclusDetails: [], diagnostic,
     };
   }
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i], delimiter);
-    const date      = (cols[idxDate]    ?? '').trim();
-    const docNum    = (cols[idxDoc]     ?? '').trim();
-    const vendeur   = (cols[idxVendeur] ?? '').trim();
-    const subtotal  = (cols[idxSub]     ?? '').trim();
-    const client    = (cols[idxClient]  ?? '').trim();
+    const cols     = parseCSVLine(lines[i], delimiter);
+    const date     = (cols[idxDate]    ?? '').trim();
+    const docNum   = (cols[idxDoc]     ?? '').trim();
+    const vendeur  = (cols[idxVendeur] ?? '').trim().toLowerCase();
+    const subtotal = (cols[idxSub]     ?? '').trim();
+    const client   = (cols[idxClient]  ?? '').trim();
     const clientNum = (cols[idxClientN] ?? '').trim();
 
     if (!date || !docNum) {
@@ -129,6 +149,14 @@ export function parsePiecesCSV(text: string): { rows: PieceRow[]; errors: string
     const sousTotal = parseFloat(subtotal.replace(',', '.'));
     if (isNaN(sousTotal)) {
       errors.push(`Ligne ${i + 1} (doc ${docNum}) : montant invalide "${subtotal}".`);
+      continue;
+    }
+
+    // En mode Counterperson : filtrer aux vendeurs connus seulement
+    if (modeFichier === 'counterperson' && !VENDEURS_CONNUS.has(vendeur)) {
+      if (!exclusMap[vendeur]) exclusMap[vendeur] = { nb: 0, total: 0 };
+      exclusMap[vendeur].nb++;
+      exclusMap[vendeur].total += sousTotal;
       continue;
     }
 
@@ -143,7 +171,11 @@ export function parsePiecesCSV(text: string): { rows: PieceRow[]; errors: string
     });
   }
 
-  return { rows, errors };
+  const exclusDetails = Object.entries(exclusMap)
+    .sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total))
+    .map(([code, v]) => ({ code, ...v }));
+
+  return { rows, errors, diagnostic, modeFichier, nbExclus: exclusDetails.reduce((s, e) => s + e.nb, 0), exclusDetails };
 }
 
 // ─── Base de données ──────────────────────────────────────────────────────────
