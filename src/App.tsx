@@ -84,14 +84,13 @@ export default function App() {
       }
       return <VueTV />;
     }
+    // Pas de session TV sélectionnée → ce compte TV ne devrait pas être ici.
+    // Déconnexion automatique pour libérer le compte gestion de l'utilisateur.
+    supabase.auth.signOut().then(() => window.location.reload());
     return (
-      <TVConnexion
-        onConnecte={() => window.location.reload()}
-        onRetourAdmin={async () => {
-          await supabase.auth.signOut();
-          window.location.reload();
-        }}
-      />
+      <div style={{ width: '100vw', height: '100dvh', background: '#0f0e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+        Reconnexion…
+      </div>
     );
   }
 

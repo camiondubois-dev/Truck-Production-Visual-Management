@@ -1488,8 +1488,16 @@ export function VueTerrain() {
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
 
-  // Pas de connexion Supabase partagée ici — le client principal reste anon.
-  // La validation du PIN passe par un client temporaire isolé (validerPinTerrain).
+  // Nettoyage automatique : si le compte TV a été connecté par erreur (ancienne version),
+  // on le déconnecte immédiatement → le client Supabase revient en mode anon, les données chargent.
+  useEffect(() => {
+    const TV_EMAIL = import.meta.env.VITE_TV_EMAIL as string | undefined;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email && TV_EMAIL && session.user.email === TV_EMAIL) {
+        supabase.auth.signOut();
+      }
+    });
+  }, []);
 
   if (ecran === 'pin')   return <EcranPin onSuccess={() => setEcran('ok')} />;
   if (ecran === 'login') return <EcranConnexion onConnecte={() => setEcran('ok')} />;
