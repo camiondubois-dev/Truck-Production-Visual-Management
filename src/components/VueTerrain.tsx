@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
-import { createClient } from '@supabase/supabase-js';
+// (pas d'import supplémentaire — on utilise le client supabase anon existant)
 import { isBiometricSupported, isBiometricRegistered, registerBiometric, authenticateWithBiometric, removeBiometric } from '../hooks/useBiometric';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
@@ -279,30 +279,11 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
 
 const APP_KEY_TERRAIN = 'terrain';
 
-// ─── Validation PIN terrain via Supabase (client isolé) ────────────────────────
-// Utilise un client SÉPARÉ du client principal → n'affecte JAMAIS les requêtes données
-// Le compte TV sert uniquement à appeler le RPC get_profile_by_pin.
+// ─── Validation PIN terrain ──────────────────────────────────────────────────
+// Appelle directement le RPC get_profile_by_pin avec la clé anon.
+// Aucun compte TV, aucun changement d'état auth → le client principal reste intact.
 async function validerPinTerrain(pin: string): Promise<boolean> {
-  const url = import.meta.env.VITE_SUPABASE_URL as string;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-  const tvEmail    = import.meta.env.VITE_TV_EMAIL    as string | undefined;
-  const tvPassword = import.meta.env.VITE_TV_PASSWORD as string | undefined;
-
-  // Client temporaire sans persistance de session → totalement isolé du client principal
-  const tempClient = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  // Connexion compte TV sur ce client temporaire seulement
-  if (tvEmail && tvPassword) {
-    const { error } = await tempClient.auth.signInWithPassword({ email: tvEmail, password: tvPassword });
-    if (error) {
-      console.error('[terrain-pin] connexion compte TV échouée:', error.message);
-      return false;
-    }
-  }
-
-  const { data, error } = await tempClient.rpc('get_profile_by_pin', { p_pin: pin });
+  const { data, error } = await supabase.rpc('get_profile_by_pin', { p_pin: pin });
   if (error) {
     console.error('[terrain-pin] get_profile_by_pin:', error.message);
     return false;
