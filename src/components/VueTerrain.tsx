@@ -1475,23 +1475,20 @@ export function VueTerrain() {
   const [ecran,     setEcran]     = useState<Ecran>(() =>
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
-  const [authReady, setAuthReady] = useState(false);
+  // authReady est nécessaire uniquement pour l'écran PIN (loginWithPin a besoin du compte TV)
+  // Si l'utilisateur est déjà authentifié (ecran='ok'), on saute l'attente.
+  const [authReady, setAuthReady] = useState(() =>
+    sessionStorage.getItem('terrain_pin_ok') === '1'
+  );
 
   // Connexion Supabase partagé (compte TV) au démarrage — nécessaire pour loginWithPin
   useEffect(() => {
+    if (authReady) return; // déjà prêt (session terrain existante)
     ensureSharedAuth().then(() => setAuthReady(true));
   }, []);
 
-  // Vérifier la session Supabase quand on passe à l'écran principal
-  useEffect(() => {
-    if (ecran !== 'ok') return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) setEcran('login');
-    });
-  }, [ecran]);
-
-  // Écran de chargement pendant la connexion Supabase
-  if (!authReady && ecran === 'pin') {
+  // Écran de chargement uniquement si on doit entrer le PIN et que Supabase n'est pas prêt
+  if (!authReady) {
     return (
       <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
         Connexion au serveur…
