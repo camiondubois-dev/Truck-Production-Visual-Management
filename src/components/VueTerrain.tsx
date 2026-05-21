@@ -810,23 +810,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           </div>
         )}
 
-        {/* ── DIAGNOSTIC TEMPORAIRE (à retirer après debug) ── */}
-        {isGestion && !finData && (
-          <div style={{ margin: '0 20px 16px', padding: 12, borderRadius: 10, background: '#fef3c7', border: '1px solid #fbbf24', fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Diagnostic finances</div>
-            <div>• auth (useAuthOptional): {String(auth)}</div>
-            <div>• isGestion: {String(isGestion)}</div>
-            <div>• stock numéro: {v.numero}</div>
-            <div>• finStockNumeros: [{finStockNumeros.join(',')}]</div>
-            <div>• finMap keys: [{Object.keys(finMap).join(',')}]</div>
-            <div>• finData: {finData === undefined ? 'undefined' : JSON.stringify(finData)}</div>
-            <div style={{ marginTop: 6, fontSize: 11, fontStyle: 'italic' }}>
-              Si finMap est vide → useFinancialData n'a rien retourné de prod_ventes.
-              Soit pas de ligne pour ce stock, soit accès refusé.
-            </div>
-          </div>
-        )}
-
         {/* ── Type & Variante ── */}
         <div style={{ margin: '0 20px 16px', padding: '14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type & Variante</div>

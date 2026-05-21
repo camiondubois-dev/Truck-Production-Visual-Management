@@ -32,23 +32,52 @@ export function useFinancialData(stockNumeros: string[]): {
     let cancelled = false;
     setLoading(true);
 
-    supabase
-      .from('prod_ventes')
-      .select('stock_numero, prix_achat_reel, cout_mo, cout_total_investi, prix_demande')
-      .in('stock_numero', stockNumeros)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error('[useFinancialData] fetch error:', error);
-        } else if (data) {
-          const map: FinancialMap = {};
-          for (const row of data) {
-            map[row.stock_numero] = row as FinancialData;
-          }
-          setDataByNumero(map);
-        }
-        setLoading(false);
-      });
+    // On utilise les VUES (accessibles via le compte TV) au lieu de prod_ventes directement.
+    // - prod_inventaire_couts : camions en inventaire
+    // - prod_rapport_profitabilite : camions vendus
+    Promise.all([
+      supabase
+        .from('prod_inventaire_couts')
+        .select('stock_numero, prix_achat_reel, cout_total_depense, cout_achat, prix_demande')
+        .in('stock_numero', stockNumeros),
+      supabase
+        .from('prod_rapport_profitabilite')
+        .select('stock_numero, prix_achat_reel, cout_mo, cout_total')
+        .in('stock_numero', stockNumeros),
+    ]).then(([invRes, ventRes]) => {
+      if (cancelled) return;
+      if (invRes.error)  console.error('[useFinancialData] inventaire_couts:', invRes.error);
+      if (ventRes.error) console.error('[useFinancialData] rapport_profitabilite:', ventRes.error);
+
+      const map: FinancialMap = {};
+
+      // Camions en inventaire
+      for (const row of (invRes.data ?? [])) {
+        const r = row as any;
+        map[r.stock_numero] = {
+          stock_numero:       r.stock_numero,
+          prix_achat_reel:    r.prix_achat_reel ?? r.cout_achat ?? null,
+          cout_mo:            r.cout_total_depense ?? null,
+          cout_total_investi: (r.cout_achat ?? 0) + (r.cout_total_depense ?? 0) || null,
+          prix_demande:       r.prix_demande ?? null,
+        };
+      }
+
+      // Camions vendus (écrase si jamais présent dans les deux)
+      for (const row of (ventRes.data ?? [])) {
+        const r = row as any;
+        map[r.stock_numero] = {
+          stock_numero:       r.stock_numero,
+          prix_achat_reel:    r.prix_achat_reel ?? null,
+          cout_mo:            r.cout_mo ?? null,
+          cout_total_investi: r.cout_total ?? null,
+          prix_demande:       map[r.stock_numero]?.prix_demande ?? null,
+        };
+      }
+
+      setDataByNumero(map);
+      setLoading(false);
+    });
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
