@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
-import { loginWithPin, ensureSharedAuth } from '../hooks/useAchatsAuth';
+import { createClient } from '@supabase/supabase-js';
 import { isBiometricSupported, isBiometricRegistered, registerBiometric, authenticateWithBiometric, removeBiometric } from '../hooks/useBiometric';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
@@ -279,6 +279,37 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
 
 const APP_KEY_TERRAIN = 'terrain';
 
+// ─── Validation PIN terrain via Supabase (client isolé) ────────────────────────
+// Utilise un client SÉPARÉ du client principal → n'affecte JAMAIS les requêtes données
+// Le compte TV sert uniquement à appeler le RPC get_profile_by_pin.
+async function validerPinTerrain(pin: string): Promise<boolean> {
+  const url = import.meta.env.VITE_SUPABASE_URL as string;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const tvEmail    = import.meta.env.VITE_TV_EMAIL    as string | undefined;
+  const tvPassword = import.meta.env.VITE_TV_PASSWORD as string | undefined;
+
+  // Client temporaire sans persistance de session → totalement isolé du client principal
+  const tempClient = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // Connexion compte TV sur ce client temporaire seulement
+  if (tvEmail && tvPassword) {
+    const { error } = await tempClient.auth.signInWithPassword({ email: tvEmail, password: tvPassword });
+    if (error) {
+      console.error('[terrain-pin] connexion compte TV échouée:', error.message);
+      return false;
+    }
+  }
+
+  const { data, error } = await tempClient.rpc('get_profile_by_pin', { p_pin: pin });
+  if (error) {
+    console.error('[terrain-pin] get_profile_by_pin:', error.message);
+    return false;
+  }
+  return Array.isArray(data) && data.length > 0;
+}
+
 function EcranPin({ onSuccess }: { onSuccess: () => void }) {
   const [digits,       setDigits]       = useState('');
   const [erreur,       setErreur]       = useState('');
@@ -305,8 +336,8 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
     setLoading(true);
     setErreur('');
     try {
-      const session = await loginWithPin(code);
-      if (session) {
+      const ok = await validerPinTerrain(code);
+      if (ok) {
         // Offrir d'activer Face ID si disponible et pas encore configuré
         if (bioSupport && !bioRegistred) {
           setOffrirBio(true);
@@ -1472,29 +1503,12 @@ function EcranConnexion({ onConnecte }: { onConnecte: () => void }) {
 // ─── Export principal ────────────────────────────────────────────────────────
 
 export function VueTerrain() {
-  const [ecran,     setEcran]     = useState<Ecran>(() =>
+  const [ecran, setEcran] = useState<Ecran>(() =>
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
-  // authReady est nécessaire uniquement pour l'écran PIN (loginWithPin a besoin du compte TV)
-  // Si l'utilisateur est déjà authentifié (ecran='ok'), on saute l'attente.
-  const [authReady, setAuthReady] = useState(() =>
-    sessionStorage.getItem('terrain_pin_ok') === '1'
-  );
 
-  // Connexion Supabase partagé (compte TV) au démarrage — nécessaire pour loginWithPin
-  useEffect(() => {
-    if (authReady) return; // déjà prêt (session terrain existante)
-    ensureSharedAuth().then(() => setAuthReady(true));
-  }, []);
-
-  // Écran de chargement uniquement si on doit entrer le PIN et que Supabase n'est pas prêt
-  if (!authReady) {
-    return (
-      <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
-        Connexion au serveur…
-      </div>
-    );
-  }
+  // Pas de connexion Supabase partagée ici — le client principal reste anon.
+  // La validation du PIN passe par un client temporaire isolé (validerPinTerrain).
 
   if (ecran === 'pin')   return <EcranPin onSuccess={() => setEcran('ok')} />;
   if (ecran === 'login') return <EcranConnexion onConnecte={() => setEcran('ok')} />;
