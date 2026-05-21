@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { PageConnexion } from './components/PageConnexion';
 import { VueDepartement } from './components/VueDepartement';
@@ -47,6 +47,14 @@ export default function App() {
   // Tracking activité — log chaque changement d'onglet
   useActiviteTracker(profile?.nom, profile?.role, currentTab);
 
+  // Nettoyage : si le compte TV s'est connecté par erreur (bug ancien ensureSharedAuth)
+  // et qu'aucune session TV n'est sélectionnée → déconnexion automatique
+  useEffect(() => {
+    if (profile?.role === 'tv' && !getTVSession()) {
+      supabase.auth.signOut().then(() => window.location.reload());
+    }
+  }, [profile]);
+
   // Persiste l'onglet courant pour survivre au refresh
   const handleTabChange = (id: string) => {
     setCurrentTab(id as Tab);
@@ -84,9 +92,7 @@ export default function App() {
       }
       return <VueTV />;
     }
-    // Pas de session TV sélectionnée → ce compte TV ne devrait pas être ici.
-    // Déconnexion automatique pour libérer le compte gestion de l'utilisateur.
-    supabase.auth.signOut().then(() => window.location.reload());
+    // Pas de session TV sélectionnée → useEffect ci-dessus gère la déconnexion
     return (
       <div style={{ width: '100vw', height: '100dvh', background: '#0f0e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
         Reconnexion…
