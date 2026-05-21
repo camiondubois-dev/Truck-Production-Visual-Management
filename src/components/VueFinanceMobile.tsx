@@ -63,6 +63,16 @@ function groupByWeek(rows: { date_vente: string | null; val: number }[]): { labe
     .map(([date, total]) => ({ date, label: date.slice(5).replace('-', '/'), total }));
 }
 
+/** Récupère la photo d'un camion depuis prod_inventaire (lazy, pour les drawers). */
+async function fetchPhotoUrl(stockNumero: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('prod_inventaire')
+    .select('photo_url')
+    .eq('numero', stockNumero)
+    .maybeSingle();
+  return (data as any)?.photo_url ?? null;
+}
+
 async function fetchAll<T>(
   table: string,
   fields: string,
@@ -231,6 +241,13 @@ function TabVentes() {
   const [fy,            setFy]            = useState(currentFY());
   const [viewMode,      setViewMode]      = useState<'list' | 'chart'>('list');
   const [selectedVente, setSelectedVente] = useState<VenteRow | null>(null);
+  const [drawerPhoto,   setDrawerPhoto]   = useState<string | null>(null);
+
+  // Fetch photo lazily quand un camion est sélectionné
+  useEffect(() => {
+    if (!selectedVente) { setDrawerPhoto(null); return; }
+    fetchPhotoUrl(selectedVente.stock_numero).then(setDrawerPhoto);
+  }, [selectedVente]);
 
   useEffect(() => {
     setLoading(true);
@@ -366,6 +383,18 @@ function TabVentes() {
             >
               <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2, margin: '10px auto 18px' }} />
 
+              {/* Photo du camion */}
+              {drawerPhoto && (
+                <div style={{ marginBottom: 14, borderRadius: 12, overflow: 'hidden', maxHeight: 200 }}>
+                  <img
+                    src={drawerPhoto}
+                    alt="Photo camion"
+                    style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              )}
+
               {/* En-tête */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: AMBER, fontWeight: 800 }}>#{r.stock_numero} · {r.type_vente_label ?? '—'}</div>
@@ -427,6 +456,13 @@ function TabInventaire() {
   const [rows,        setRows]        = useState<InvRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [selectedInv, setSelectedInv] = useState<InvRow | null>(null);
+  const [drawerPhoto, setDrawerPhoto] = useState<string | null>(null);
+
+  // Fetch photo lazily quand un camion est sélectionné
+  useEffect(() => {
+    if (!selectedInv) { setDrawerPhoto(null); return; }
+    fetchPhotoUrl(selectedInv.stock_numero).then(setDrawerPhoto);
+  }, [selectedInv]);
 
   useEffect(() => {
     fetchAll<InvRow>(
@@ -576,7 +612,19 @@ function TabInventaire() {
               onClick={e => e.stopPropagation()}
             >
               {/* Poignée */}
-              <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2, margin: '10px auto 18px' }} />
+              <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2, margin: '10px auto 14px' }} />
+
+              {/* Photo du camion */}
+              {drawerPhoto && (
+                <div style={{ marginBottom: 14, borderRadius: 12, overflow: 'hidden', maxHeight: 200, marginLeft: -16, marginRight: -16 }}>
+                  <img
+                    src={drawerPhoto}
+                    alt="Photo camion"
+                    style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              )}
 
               {/* En-tête */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -821,6 +869,7 @@ interface MobilePlanVeh {
   annee: number | null;
   vendu: boolean;
   prix_vente_reel: number | null;
+  photo_url: string | null;
 }
 
 function TabPlans() {
@@ -841,7 +890,7 @@ function TabPlans() {
       supabase.from('prod_plans_vente').select('*').order('date_creation', { ascending: false }),
       supabase.from('prod_plans_vente_vehicules').select('plan_id, stock_numero, prix_plan'),
       supabase.from('prod_ventes').select('stock_numero, prix_vente, statut'),
-      supabase.from('prod_inventaire').select('numero, marque, modele, annee'),
+      supabase.from('prod_inventaire').select('numero, marque, modele, annee, photo_url'),
     ]);
 
     if (!plansData) { setLoading(false); return; }
@@ -854,8 +903,8 @@ function TabPlans() {
     const ventesPrix: Record<string, number> = {};
     (ventesData ?? []).forEach((v: any) => { if (v.prix_vente) ventesPrix[v.stock_numero] = v.prix_vente; });
 
-    const invMap: Record<string, { marque: string; modele: string; annee: number | null }> = {};
-    (invData ?? []).forEach((r: any) => { invMap[r.numero] = { marque: r.marque ?? '', modele: r.modele ?? '', annee: r.annee ?? null }; });
+    const invMap: Record<string, { marque: string; modele: string; annee: number | null; photo_url: string | null }> = {};
+    (invData ?? []).forEach((r: any) => { invMap[r.numero] = { marque: r.marque ?? '', modele: r.modele ?? '', annee: r.annee ?? null, photo_url: r.photo_url ?? null }; });
 
     const result: MobilePlan[] = (plansData as any[]).map(p => {
       const planVeh = ((vehData ?? []) as any[]).filter(v => v.plan_id === p.id);
@@ -867,6 +916,7 @@ function TabPlans() {
         annee: invMap[v.stock_numero]?.annee ?? null,
         vendu: venduSet.has(v.stock_numero),
         prix_vente_reel: ventesPrix[v.stock_numero] ?? null,
+        photo_url: invMap[v.stock_numero]?.photo_url ?? null,
       }));
       const vendus = vehicules.filter(v => v.vendu);
       return {
@@ -968,8 +1018,17 @@ function TabPlans() {
               <div key={v.stock_numero} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '9px 0', borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                opacity: v.vendu ? 0.55 : 1,
+                opacity: v.vendu ? 0.55 : 1, gap: 10,
               }}>
+                {/* Miniature photo */}
+                {v.photo_url && (
+                  <img
+                    src={v.photo_url}
+                    alt=""
+                    style={{ width: 48, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: v.vendu ? GREEN : AMBER }}>
