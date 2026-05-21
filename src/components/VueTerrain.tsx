@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
-import { TERRAIN_PIN } from '../config/terrain';
+import { loginWithPin, ensureSharedAuth } from '../hooks/useAchatsAuth';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
 import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
@@ -274,92 +274,109 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
   );
 }
 
-// ─── PIN ────────────────────────────────────────────────────────────────────
+// ─── PIN (validé via Supabase — même système que l'app Achats) ──────────────
 
 function EcranPin({ onSuccess }: { onSuccess: () => void }) {
-  const [digits, setDigits] = useState('');
-  const [erreur, setErreur] = useState(false);
+  const [digits,  setDigits]  = useState('');
+  const [erreur,  setErreur]  = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const pinLen = TERRAIN_PIN.length || 4; // longueur dynamique selon la variable d'env
+  const MAX_LEN = 6;
 
-  const valider = (code: string) => {
-    if (!TERRAIN_PIN) {
-      // Variable d'environnement non configurée
-      setErreur(true);
+  const valider = async (code: string) => {
+    setLoading(true);
+    setErreur(false);
+    try {
+      const session = await loginWithPin(code);
+      if (session) {
+        sessionStorage.setItem('terrain_pin_ok', '1');
+        onSuccess();
+      } else {
+        setDigits('');
+        setErreur(true);
+      }
+    } catch {
       setDigits('');
-      return;
-    }
-    if (code === TERRAIN_PIN) {
-      sessionStorage.setItem('terrain_pin_ok', '1');
-      onSuccess();
-    } else {
-      setTimeout(() => { setDigits(''); setErreur(true); }, 400);
+      setErreur(true);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDigit = (d: string) => {
-    if (digits.length >= pinLen) return;
-    const next = digits + d;
+    if (loading || digits.length >= MAX_LEN) return;
     setErreur(false);
-    setDigits(next);
-    // Auto-validation dès que le bon nombre de chiffres est atteint
-    if (next.length === pinLen) {
-      setTimeout(() => valider(next), 120);
-    }
+    setDigits(prev => prev + d);
+  };
+
+  const handleBackspace = () => {
+    if (loading) return;
+    setErreur(false);
+    setDigits(prev => prev.slice(0, -1));
   };
 
   return (
     <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="Camions Dubois" style={{ height: 60, marginBottom: 20, filter: 'brightness(0) invert(1)' }} />
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>Vue Terrain</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>🚛 Vue Terrain</div>
       <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 40 }}>Entrez votre code d'accès</div>
 
-      {/* Cercles indicateurs — longueur dynamique */}
+      {/* Cercles indicateurs */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        {Array.from({ length: pinLen }).map((_, i) => (
+        {Array.from({ length: MAX_LEN }).map((_, i) => (
           <div key={i} style={{
             width: 18, height: 18, borderRadius: '50%',
             background: digits.length > i ? (erreur ? '#ef4444' : '#f97316') : 'rgba(255,255,255,0.2)',
-            transition: 'background 0.2s',
+            border: `2px solid ${digits.length > i ? (erreur ? '#ef4444' : '#f97316') : 'rgba(255,255,255,0.2)'}`,
+            transition: 'all 0.15s',
             transform: i === digits.length - 1 ? 'scale(1.2)' : 'scale(1)',
           }} />
         ))}
       </div>
 
       {erreur && (
-        <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>
-          {!TERRAIN_PIN ? '⚠️ PIN non configuré (VITE_TERRAIN_PIN manquant)' : 'Code incorrect'}
-        </div>
+        <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>⚠️ Code incorrect</div>
+      )}
+      {loading && (
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>⏳ Vérification…</div>
       )}
 
       {/* Pavé numérique */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: 240, marginTop: 16 }}>
-        {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
+        {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((d, i) => (
           <button key={i}
-            onClick={() => d === '⌫' ? (setErreur(false), setDigits(p => p.slice(0,-1))) : d ? handleDigit(d) : undefined}
-            disabled={!d}
-            style={{ padding: '18px 0', borderRadius: 14, border: 'none', background: d ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'white', fontSize: 22, fontWeight: 600, cursor: d ? 'pointer' : 'default', opacity: d ? 1 : 0 }}>
+            onClick={() => {
+              if (d === '⌫') handleBackspace();
+              else if (d === 'C') { setDigits(''); setErreur(false); }
+              else handleDigit(d);
+            }}
+            disabled={loading}
+            style={{
+              padding: '18px 0', borderRadius: 14, border: 'none',
+              background: d === 'C' || d === '⌫' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)',
+              color: 'white', fontSize: 22, fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.5 : 1,
+            }}>
             {d}
           </button>
         ))}
       </div>
 
-      {/* Bouton Entrer (utile si PIN > 4 chiffres) */}
-      {pinLen > 4 && (
-        <button
-          onClick={() => { if (digits.length >= 4) valider(digits); }}
-          disabled={digits.length < 4}
-          style={{
-            marginTop: 20, width: 240, padding: '16px', borderRadius: 14, border: 'none',
-            background: digits.length >= 4 ? '#f97316' : 'rgba(255,255,255,0.08)',
-            color: digits.length >= 4 ? 'white' : 'rgba(255,255,255,0.3)',
-            fontSize: 16, fontWeight: 800,
-            cursor: digits.length >= 4 ? 'pointer' : 'not-allowed',
-            transition: 'all 0.15s',
-          }}>
-          → Entrer
-        </button>
-      )}
+      {/* Bouton Entrer */}
+      <button
+        onClick={() => { if (digits.length >= 4 && !loading) valider(digits); }}
+        disabled={digits.length < 4 || loading}
+        style={{
+          marginTop: 20, width: 240, padding: '16px', borderRadius: 14, border: 'none',
+          background: digits.length >= 4 && !loading ? '#f97316' : 'rgba(255,255,255,0.08)',
+          color: digits.length >= 4 && !loading ? 'white' : 'rgba(255,255,255,0.3)',
+          fontSize: 16, fontWeight: 800,
+          cursor: digits.length >= 4 && !loading ? 'pointer' : 'not-allowed',
+          transition: 'all 0.15s',
+        }}>
+        {loading ? '⏳ Vérification…' : '→ Entrer'}
+      </button>
     </div>
   );
 }
@@ -1337,16 +1354,32 @@ function EcranConnexion({ onConnecte }: { onConnecte: () => void }) {
 // ─── Export principal ────────────────────────────────────────────────────────
 
 export function VueTerrain() {
-  const [ecran, setEcran] = useState<Ecran>(() =>
+  const [ecran,     setEcran]     = useState<Ecran>(() =>
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
+  const [authReady, setAuthReady] = useState(false);
 
+  // Connexion Supabase partagé (compte TV) au démarrage — nécessaire pour loginWithPin
+  useEffect(() => {
+    ensureSharedAuth().then(() => setAuthReady(true));
+  }, []);
+
+  // Vérifier la session Supabase quand on passe à l'écran principal
   useEffect(() => {
     if (ecran !== 'ok') return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) setEcran('login');
     });
   }, [ecran]);
+
+  // Écran de chargement pendant la connexion Supabase
+  if (!authReady && ecran === 'pin') {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+        Connexion au serveur…
+      </div>
+    );
+  }
 
   if (ecran === 'pin')   return <EcranPin onSuccess={() => setEcran('ok')} />;
   if (ecran === 'login') return <EcranConnexion onConnecte={() => setEcran('ok')} />;
