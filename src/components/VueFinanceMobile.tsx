@@ -466,9 +466,13 @@ function TabInventaire() {
           </div>
 
           {rows.map(r => {
-            const achat = r.prix_achat_reel    ?? 0;
-            const mo    = r.cout_total_depense ?? 0;
-            const total = achat + mo;
+            const achat  = r.prix_achat_reel    ?? 0;
+            const mo     = r.cout_total_depense ?? 0;
+            const total  = achat + mo;
+            const profit = r.prix_demande != null ? r.prix_demande - total : null;
+            const pctProj = r.prix_demande != null && r.prix_demande > 0 && profit != null
+              ? (profit / r.prix_demande) * 100 : null;
+            const profitColor = profit == null ? 'white' : profit >= 0 ? GREEN : RED;
 
             return (
               <div
@@ -481,6 +485,7 @@ function TabInventaire() {
                   transition: 'border-color 0.15s',
                 }}
               >
+                {/* Ligne principale : infos gauche / coûts droite */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1 }}>
@@ -518,6 +523,28 @@ function TabInventaire() {
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>→ détails</div>
                   </div>
                 </div>
+
+                {/* Bande profit projeté — centrée, visible uniquement si prix demandé connu */}
+                {profit != null && (
+                  <div style={{
+                    marginTop: 10, paddingTop: 8,
+                    borderTop: `1px solid rgba(255,255,255,0.07)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: profitColor }}>
+                      {fmt$(profit)}
+                    </span>
+                    {pctProj != null && (
+                      <span style={{
+                        fontSize: 13, fontWeight: 800, color: profitColor,
+                        background: `${profitColor}20`, borderRadius: 6, padding: '2px 9px',
+                      }}>
+                        {pctProj.toFixed(1)} %
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)' }}>proj.</span>
+                  </div>
+                )}
               </div>
             );
           })}
