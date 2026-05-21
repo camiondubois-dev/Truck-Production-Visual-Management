@@ -4,6 +4,7 @@ import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
 import { loginWithPin, ensureSharedAuth } from '../hooks/useAchatsAuth';
+import { isBiometricSupported, isBiometricRegistered, registerBiometric, authenticateWithBiometric, removeBiometric } from '../hooks/useBiometric';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
 import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
@@ -276,45 +277,159 @@ function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }
 
 // ─── PIN (validé via Supabase — même système que l'app Achats) ──────────────
 
+const APP_KEY_TERRAIN = 'terrain';
+
 function EcranPin({ onSuccess }: { onSuccess: () => void }) {
-  const [digits,  setDigits]  = useState('');
-  const [erreur,  setErreur]  = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [digits,       setDigits]       = useState('');
+  const [erreur,       setErreur]       = useState('');
+  const [loading,      setLoading]      = useState(false);
+  const [bioRegistred, setBioRegistred] = useState(() => isBiometricRegistered(APP_KEY_TERRAIN));
+  const [bioSupport,   setBioSupport]   = useState(false);
+  const [offrirBio,    setOffrirBio]    = useState(false); // modal "Activer Face ID ?"
+  const [modePIN,      setModePIN]      = useState(!isBiometricRegistered(APP_KEY_TERRAIN));
 
   const MAX_LEN = 6;
 
-  const valider = async (code: string) => {
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupport);
+  }, []);
+
+  // ── Succès commun (PIN ou Face ID) ──────────────────────────────
+  const handleSuccess = () => {
+    sessionStorage.setItem('terrain_pin_ok', '1');
+    onSuccess();
+  };
+
+  // ── Validation PIN via Supabase ──────────────────────────────────
+  const validerPin = async (code: string) => {
     setLoading(true);
-    setErreur(false);
+    setErreur('');
     try {
       const session = await loginWithPin(code);
       if (session) {
-        sessionStorage.setItem('terrain_pin_ok', '1');
-        onSuccess();
+        // Offrir d'activer Face ID si disponible et pas encore configuré
+        if (bioSupport && !bioRegistred) {
+          setOffrirBio(true);
+        } else {
+          handleSuccess();
+        }
       } else {
         setDigits('');
-        setErreur(true);
+        setErreur('Code incorrect');
       }
     } catch {
       setDigits('');
-      setErreur(true);
+      setErreur('Erreur de connexion');
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Authentification Face ID ─────────────────────────────────────
+  const lancerFaceId = async () => {
+    setLoading(true);
+    setErreur('');
+    const ok = await authenticateWithBiometric(APP_KEY_TERRAIN);
+    setLoading(false);
+    if (ok) {
+      handleSuccess();
+    } else {
+      setErreur('Face ID non reconnu — entre ton code PIN');
+      setModePIN(true);
+    }
+  };
+
+  // ── Activation Face ID après PIN réussi ──────────────────────────
+  const activerFaceId = async () => {
+    const ok = await registerBiometric(APP_KEY_TERRAIN);
+    if (ok) {
+      setBioRegistred(true);
+      setBioSupport(true);
+    }
+    setOffrirBio(false);
+    handleSuccess();
+  };
+
   const handleDigit = (d: string) => {
     if (loading || digits.length >= MAX_LEN) return;
-    setErreur(false);
+    setErreur('');
     setDigits(prev => prev + d);
   };
 
-  const handleBackspace = () => {
-    if (loading) return;
-    setErreur(false);
-    setDigits(prev => prev.slice(0, -1));
-  };
+  // ── Modal "Activer Face ID ?" ────────────────────────────────────
+  if (offrirBio) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+        <div style={{ fontSize: 64 }}>🔒</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: 'white', textAlign: 'center' }}>Activer Face ID ?</div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.5 }}>
+          La prochaine fois, tu pourras déverrouiller l'app avec ton visage — sans taper de code.
+        </div>
+        <button onClick={activerFaceId} style={{ width: '100%', maxWidth: 280, padding: '16px', borderRadius: 14, border: 'none', background: '#f97316', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer', marginTop: 8 }}>
+          ✅ Activer Face ID
+        </button>
+        <button onClick={() => { setOffrirBio(false); handleSuccess(); }} style={{ width: '100%', maxWidth: 280, padding: '14px', borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          Non merci
+        </button>
+      </div>
+    );
+  }
 
+  // ── Écran Face ID (par défaut si déjà enregistré) ───────────────
+  if (bioRegistred && !modePIN) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 0 }}>
+        <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="Camions Dubois" style={{ height: 60, marginBottom: 20, filter: 'brightness(0) invert(1)' }} />
+        <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>🚛 Vue Terrain</div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 40 }}>Déverrouille avec Face ID</div>
+
+        {/* Bouton Face ID principal */}
+        <button
+          onClick={lancerFaceId}
+          disabled={loading}
+          style={{
+            width: 100, height: 100, borderRadius: '50%', border: '2px solid rgba(249,115,22,0.5)',
+            background: loading ? 'rgba(249,115,22,0.1)' : 'rgba(249,115,22,0.15)',
+            color: 'white', fontSize: 44, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s', marginBottom: 16,
+            boxShadow: '0 0 30px rgba(249,115,22,0.2)',
+          }}
+        >
+          {loading ? '⏳' : '🔒'}
+        </button>
+
+        {loading
+          ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Vérification…</div>
+          : <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>Appuie pour Face ID</div>
+        }
+
+        {erreur && (
+          <div style={{ marginTop: 12, fontSize: 13, color: '#ef4444', textAlign: 'center', maxWidth: 260 }}>
+            ⚠️ {erreur}
+          </div>
+        )}
+
+        {/* Lien "Utiliser le code PIN" */}
+        <button
+          onClick={() => { setModePIN(true); setErreur(''); }}
+          style={{ marginTop: 32, background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          Utiliser le code PIN
+        </button>
+
+        {/* Désactiver Face ID */}
+        <button
+          onClick={() => { removeBiometric(APP_KEY_TERRAIN); setBioRegistred(false); setModePIN(true); }}
+          style={{ marginTop: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', fontSize: 11, cursor: 'pointer' }}
+        >
+          Désactiver Face ID
+        </button>
+      </div>
+    );
+  }
+
+  // ── Écran PIN ────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <img src="/logo-camions-dubois-_-noir-bleu-1.png" alt="Camions Dubois" style={{ height: 60, marginBottom: 20, filter: 'brightness(0) invert(1)' }} />
@@ -334,20 +449,16 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
         ))}
       </div>
 
-      {erreur && (
-        <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>⚠️ Code incorrect</div>
-      )}
-      {loading && (
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>⏳ Vérification…</div>
-      )}
+      {erreur && <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>⚠️ {erreur}</div>}
+      {loading && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>⏳ Vérification…</div>}
 
       {/* Pavé numérique */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: 240, marginTop: 16 }}>
         {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((d, i) => (
           <button key={i}
             onClick={() => {
-              if (d === '⌫') handleBackspace();
-              else if (d === 'C') { setDigits(''); setErreur(false); }
+              if (d === '⌫') { setErreur(''); setDigits(p => p.slice(0,-1)); }
+              else if (d === 'C') { setErreur(''); setDigits(''); }
               else handleDigit(d);
             }}
             disabled={loading}
@@ -355,8 +466,7 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
               padding: '18px 0', borderRadius: 14, border: 'none',
               background: d === 'C' || d === '⌫' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)',
               color: 'white', fontSize: 22, fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.5 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1,
             }}>
             {d}
           </button>
@@ -365,7 +475,7 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
 
       {/* Bouton Entrer */}
       <button
-        onClick={() => { if (digits.length >= 4 && !loading) valider(digits); }}
+        onClick={() => { if (digits.length >= 4 && !loading) validerPin(digits); }}
         disabled={digits.length < 4 || loading}
         style={{
           marginTop: 20, width: 240, padding: '16px', borderRadius: 14, border: 'none',
@@ -377,6 +487,14 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
         }}>
         {loading ? '⏳ Vérification…' : '→ Entrer'}
       </button>
+
+      {/* Retour Face ID si déjà enregistré */}
+      {bioRegistred && (
+        <button onClick={() => { setModePIN(false); setErreur(''); setDigits(''); }}
+          style={{ marginTop: 16, background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+          🔒 Utiliser Face ID
+        </button>
+      )}
     </div>
   );
 }
