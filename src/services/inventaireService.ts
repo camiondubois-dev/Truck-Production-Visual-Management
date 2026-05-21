@@ -118,8 +118,9 @@ export const inventaireService = {
     if (error) throw error;
 
     // Synchroniser dans prod_ventes pour que age_jours et les coûts soient visibles
+    // Guard : les jobs client ne vont JAMAIS dans prod_ventes (c'est pour eau/détail seulement)
     // Guard : on n'enregistre jamais un WO ou un numéro non-numérique dans prod_ventes
-    if (!estStockCamionValide(v.numero)) return;
+    if (v.type === 'client' || !estStockCamionValide(v.numero)) return;
     const vehiculeLabel = [v.annee, v.marque, v.modele].filter(Boolean).join(' ') || v.numero;
     await supabase.from('prod_ventes').upsert({
       stock_numero:    v.numero,
@@ -142,8 +143,8 @@ export const inventaireService = {
     if (error) throw error;
 
     // Synchroniser dans prod_ventes (ignoreDuplicates = ne pas écraser les vendus)
-    // Guard : exclure les WO et tout numéro non-numérique (ex: "1-XXXXX")
-    const venteRows = vehicules.filter(v => estStockCamionValide(v.numero)).map(v => ({
+    // Guard : exclure les jobs client (prod_ventes = eau/détail seulement) et les WO/non-numériques
+    const venteRows = vehicules.filter(v => v.type !== 'client' && estStockCamionValide(v.numero)).map(v => ({
       stock_numero:    v.numero,
       statut:          'inventaire',
       source:          v.type === 'eau' ? 'eau' : 'detail',
