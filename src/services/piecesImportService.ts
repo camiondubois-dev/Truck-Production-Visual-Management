@@ -11,6 +11,13 @@ export const VENDEURS: Record<string, string> = {
   'pdoiron':     'Patrick Doiron',
 };
 
+// Alias iTrack → code canonique (variantes de noms dans le rapport Counterperson)
+const VENDEUR_ALIAS: Record<string, string> = {
+  'dgemme - pieces': 'xgemme',
+  'dgemme-pieces':   'xgemme',
+  'dgemme':          'xgemme',
+};
+
 export function nomVendeur(code: string): string {
   if (!code) return '(sans vendeur)';
   return VENDEURS[code.toLowerCase()] ?? code;
@@ -136,7 +143,8 @@ export function parsePiecesCSV(text: string): ParsePiecesResult {
     const cols     = parseCSVLine(lines[i], delimiter);
     const date     = (cols[idxDate]    ?? '').trim();
     const docNum   = (cols[idxDoc]     ?? '').trim();
-    const vendeur  = (cols[idxVendeur] ?? '').trim().toLowerCase();
+    const vendeurRaw = (cols[idxVendeur] ?? '').trim().toLowerCase();
+    const vendeur    = VENDEUR_ALIAS[vendeurRaw] ?? vendeurRaw;
     const subtotal = (cols[idxSub]     ?? '').trim();
     const client   = (cols[idxClient]  ?? '').trim();
     const clientNum = (cols[idxClientN] ?? '').trim();
