@@ -48,6 +48,21 @@ function groupByMonth(rows: { date_vente: string | null; val: number }[]): Recor
   return r;
 }
 
+function groupByWeek(rows: { date_vente: string | null; val: number }[]): { label: string; date: string; total: number }[] {
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    if (!row.date_vente) continue;
+    const d = new Date(row.date_vente + 'T12:00:00');
+    const day = d.getDay(); // 0=dim
+    d.setDate(d.getDate() - day + (day === 0 ? -6 : 1)); // lundi de la semaine
+    const key = d.toISOString().slice(0, 10);
+    map[key] = (map[key] ?? 0) + row.val;
+  }
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, total]) => ({ date, label: date.slice(5).replace('-', '/'), total }));
+}
+
 async function fetchAll<T>(
   table: string,
   fields: string,
@@ -210,11 +225,12 @@ function ComparisonChart({
 // ─── Onglet Ventes ─────────────────────────────────────────────────────────────
 
 function TabVentes() {
-  const [rowsCurr, setRowsCurr] = useState<VenteRow[]>([]);
-  const [rowsPrev, setRowsPrev] = useState<VenteRow[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [fy,       setFy]       = useState(currentFY());
-  const [viewMode, setViewMode] = useState<'list' | 'chart'>('list');
+  const [rowsCurr,      setRowsCurr]      = useState<VenteRow[]>([]);
+  const [rowsPrev,      setRowsPrev]      = useState<VenteRow[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [fy,            setFy]            = useState(currentFY());
+  const [viewMode,      setViewMode]      = useState<'list' | 'chart'>('list');
+  const [selectedVente, setSelectedVente] = useState<VenteRow | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -276,16 +292,21 @@ function TabVentes() {
           ) : (
             <>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
-                {rowsCurr.length} ventes · AF{fy}
+                {rowsCurr.length} ventes · AF{fy} · Appuie sur un camion pour les détails
               </div>
               {rowsCurr.map(r => {
                 const margeColor = (r.marge_profit ?? 0) >= 0 ? GREEN : RED;
-                const total = (r.prix_achat_reel ?? 0) + (r.cout_mo ?? 0);
+                const pct = r.pct_profit ?? 0;
                 return (
-                  <div key={r.stock_numero} style={{
-                    background: CARD_BG, border: `1px solid ${BORDER}`,
-                    borderRadius: 10, padding: '12px 14px', marginBottom: 8,
-                  }}>
+                  <div
+                    key={r.stock_numero}
+                    onClick={() => setSelectedVente(r)}
+                    style={{
+                      background: CARD_BG, border: `1px solid ${BORDER}`,
+                      borderRadius: 10, padding: '12px 14px', marginBottom: 8,
+                      cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
                         <div style={{ fontSize: 11, color: AMBER, fontWeight: 700 }}>#{r.stock_numero}</div>
@@ -295,30 +316,25 @@ function TabVentes() {
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
                           {r.date_vente?.slice(0, 10)} · {r.client ?? '—'}
                         </div>
-                        {/* Coûts détaillés */}
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 3, display: 'flex', gap: 8 }}>
-                          <span>Achat {fmt$(r.prix_achat_reel)}</span>
-                          <span>M.O. {fmt$(r.cout_mo)}</span>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 3 }}>
+                          {r.type_vente_label ?? '—'}
                           {r.jours_inventaire != null && (
-                            <span style={{ color: r.jours_inventaire <= 60 ? '#4ade80' : r.jours_inventaire <= 120 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                              📅 {r.jours_inventaire} j inv.
+                            <span style={{ marginLeft: 8, color: r.jours_inventaire <= 60 ? GREEN : r.jours_inventaire <= 120 ? AMBER : RED, fontWeight: 700 }}>
+                              📅 {r.jours_inventaire} j
                             </span>
                           )}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700 }}>{fmt$(r.prix_vente)}</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: margeColor }}>
-                          {fmt$(r.marge_profit)}
+                        <div style={{ fontSize: 12, fontWeight: 600, color: margeColor }}>{fmt$(r.marge_profit)}</div>
+                        <div style={{
+                          fontSize: 13, fontWeight: 800, color: margeColor,
+                          background: `${margeColor}18`, borderRadius: 6,
+                          padding: '2px 7px', marginTop: 3,
+                        }}>
+                          {pct.toFixed(1)} %
                         </div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
-                          {fmtPct(r.pct_profit)} · {r.type_vente_label ?? '—'}
-                        </div>
-                        {total > 0 && (
-                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>
-                            Coût total {fmt$(total)}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -328,6 +344,79 @@ function TabVentes() {
           )}
         </>
       )}
+
+      {/* ── Drawer détail vente ── */}
+      {selectedVente && (() => {
+        const r = selectedVente;
+        const margeColor = (r.marge_profit ?? 0) >= 0 ? GREEN : RED;
+        const pct = r.pct_profit ?? 0;
+        const total = (r.prix_achat_reel ?? 0) + (r.cout_mo ?? 0);
+        const jouColor = r.jours_inventaire == null ? 'rgba(255,255,255,0.4)'
+          : r.jours_inventaire <= 60  ? GREEN
+          : r.jours_inventaire <= 120 ? AMBER : RED;
+
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)' }}
+            onClick={() => setSelectedVente(null)}
+          >
+            <div
+              style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#0f172a', borderRadius: '20px 20px 0 0', padding: '8px 16px 80px', maxHeight: '90dvh', overflowY: 'auto' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2, margin: '10px auto 18px' }} />
+
+              {/* En-tête */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: AMBER, fontWeight: 800 }}>#{r.stock_numero} · {r.type_vente_label ?? '—'}</div>
+                <div style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2, marginTop: 2 }}>
+                  {[r.annee, r.marque, r.modele].filter(Boolean).join(' ') || '—'}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+                  Vendu le {r.date_vente?.slice(0, 10) ?? '—'} · {r.client ?? '—'}
+                </div>
+              </div>
+
+              {/* % Profitabilité — mis en évidence */}
+              <div style={{
+                background: `${margeColor}15`, border: `2px solid ${margeColor}55`,
+                borderRadius: 14, padding: '16px', marginBottom: 16, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>Profitabilité</div>
+                <div style={{ fontSize: 42, fontWeight: 900, color: margeColor, lineHeight: 1 }}>
+                  {pct.toFixed(1)} %
+                </div>
+                <div style={{ fontSize: 13, color: margeColor, fontWeight: 700, marginTop: 6 }}>
+                  {fmt$(r.marge_profit)} de profit
+                </div>
+              </div>
+
+              {/* KPIs coûts */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <KpiCard label="Prix de vente"    value={fmt$(r.prix_vente)}       color="white" />
+                <KpiCard label="Coût total"        value={fmt$(r.cout_total ?? total)} />
+                <KpiCard label="Coût d'achat"     value={fmt$(r.prix_achat_reel)}  />
+                <KpiCard label="Main-d'œuvre"     value={fmt$(r.cout_mo)}          color={AMBER} />
+              </div>
+
+              {/* Jours en inventaire */}
+              {r.jours_inventaire != null && (
+                <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>📅 Jours en inventaire</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: jouColor }}>{r.jours_inventaire} jours</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => setSelectedVente(null)}
+                style={{ display: 'block', width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -335,37 +424,45 @@ function TabVentes() {
 // ─── Onglet Inventaire ─────────────────────────────────────────────────────────
 
 function TabInventaire() {
-  const [rows,    setRows]    = useState<InvRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows,        setRows]        = useState<InvRow[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [selectedInv, setSelectedInv] = useState<InvRow | null>(null);
 
   useEffect(() => {
     fetchAll<InvRow>(
       'prod_inventaire_couts',
-      'stock_numero,type_vehicule,date_achat,age_jours,cout_achat,cout_total_depense,prix_achat_reel,prix_demande,marque,modele,annee',
+      'stock_numero,type_vehicule,date_achat,age_jours,cout_achat,cout_total_depense,cout_total_investi,prix_achat_reel,prix_demande,marque,modele,annee',
       q => q.order('cout_achat', { ascending: false }),
     ).then(data => { setRows(data); setLoading(false); });
   }, []);
 
-  const totalAchat   = rows.reduce((s, r) => s + (r.prix_achat_reel     ?? 0), 0);
-  const totalMO      = rows.reduce((s, r) => s + (r.cout_total_depense   ?? 0), 0);
+  const totalAchat   = rows.reduce((s, r) => s + (r.prix_achat_reel   ?? 0), 0);
+  const totalMO      = rows.reduce((s, r) => s + (r.cout_total_depense ?? 0), 0);
   const totalInvesti = totalAchat + totalMO;
   const moyAge       = rows.length > 0
     ? Math.round(rows.reduce((s, r) => s + (r.age_jours ?? 0), 0) / rows.length) : 0;
+
+  function ageColor(j: number | null) {
+    if (j == null) return 'rgba(255,255,255,0.4)';
+    if (j > 365) return RED;
+    if (j > 180) return AMBER;
+    return GREEN;
+  }
 
   return (
     <div style={{ padding: 16 }}>
       {loading ? <Spinner /> : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <KpiCard label="En inventaire"  value={String(rows.length)} />
-            <KpiCard label="Âge moyen"      value={`${moyAge} j`} />
-            <KpiCard label="Total investi"  value={fmt$(totalInvesti)} color={AMBER}
+            <KpiCard label="En inventaire" value={String(rows.length)} />
+            <KpiCard label="Âge moyen"     value={`${moyAge} j`} />
+            <KpiCard label="Total investi" value={fmt$(totalInvesti)} color={AMBER}
               sub={`Achat ${fmt$(totalAchat)} + MO ${fmt$(totalMO)}`} />
-            <KpiCard label="M.O. dépensée"  value={fmt$(totalMO)} />
+            <KpiCard label="M.O. dépensée" value={fmt$(totalMO)} />
           </div>
 
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
-            {rows.length} camions en stock
+            {rows.length} camions en stock · Appuie sur un camion pour les détails
           </div>
 
           {rows.map(r => {
@@ -374,20 +471,36 @@ function TabInventaire() {
             const total = achat + mo;
 
             return (
-              <div key={r.stock_numero} style={{
-                background: CARD_BG, border: `1px solid ${BORDER}`,
-                borderRadius: 10, padding: '12px 14px', marginBottom: 8,
-              }}>
+              <div
+                key={r.stock_numero}
+                onClick={() => setSelectedInv(r)}
+                style={{
+                  background: CARD_BG, border: `1px solid ${BORDER}`,
+                  borderRadius: 10, padding: '12px 14px', marginBottom: 8,
+                  cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                  transition: 'border-color 0.15s',
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
-                    <div style={{ fontSize: 11, color: AMBER, fontWeight: 700 }}>#{r.stock_numero}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1 }}>
+                      <span style={{ fontSize: 11, color: AMBER, fontWeight: 700 }}>#{r.stock_numero}</span>
+                      {r.age_jours != null && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                          borderRadius: 8, background: `${ageColor(r.age_jours)}22`,
+                          color: ageColor(r.age_jours),
+                        }}>
+                          {r.age_jours} j
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {r.annee} {r.marque} {r.modele}
                     </div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
                       {r.date_achat?.slice(0, 10) ?? '—'}
                       {r.type_vehicule ? ` · ${r.type_vehicule}` : ''}
-                      {r.age_jours != null ? ` · ${r.age_jours} j` : ''}
                     </div>
                     {r.prix_demande != null && (
                       <div style={{ fontSize: 10, color: '#60a5fa', marginTop: 2 }}>
@@ -396,23 +509,13 @@ function TabInventaire() {
                     )}
                   </div>
 
-                  {/* Colonne droite : achat + MO + total */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
-                      Achat {fmt$(achat)}
-                    </div>
-                    {mo > 0 && (
-                      <div style={{ fontSize: 11, color: AMBER }}>
-                        + M.O. {fmt$(mo)}
-                      </div>
-                    )}
-                    <div style={{
-                      fontSize: 14, fontWeight: 800, color: 'white',
-                      borderTop: '1px solid rgba(255,255,255,0.1)',
-                      marginTop: 4, paddingTop: 4,
-                    }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Achat {fmt$(achat)}</div>
+                    {mo > 0 && <div style={{ fontSize: 11, color: AMBER }}>+ M.O. {fmt$(mo)}</div>}
+                    <div style={{ fontSize: 14, fontWeight: 800, color: 'white', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4, paddingTop: 4 }}>
                       {fmt$(total)}
                     </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>→ détails</div>
                   </div>
                 </div>
               </div>
@@ -420,6 +523,104 @@ function TabInventaire() {
           })}
         </>
       )}
+
+      {/* ── Drawer détail camion inventaire ── */}
+      {selectedInv && (() => {
+        const r = selectedInv;
+        const achat  = r.prix_achat_reel    ?? 0;
+        const mo     = r.cout_total_depense ?? 0;
+        const total  = r.cout_total_investi ?? (achat + mo);
+        const profit = r.prix_demande ? r.prix_demande - total : null;
+        const pct    = r.prix_demande && r.prix_demande > 0 && profit != null
+          ? (profit / r.prix_demande) * 100 : null;
+        const profitColor = profit == null ? 'white' : profit >= 0 ? GREEN : RED;
+
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)' }}
+            onClick={() => setSelectedInv(null)}
+          >
+            <div
+              style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                background: '#0f172a', borderRadius: '20px 20px 0 0',
+                padding: '8px 16px 80px', maxHeight: '90dvh', overflowY: 'auto',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Poignée */}
+              <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2, margin: '10px auto 18px' }} />
+
+              {/* En-tête */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: AMBER, fontWeight: 800, marginBottom: 2 }}>#{r.stock_numero}</div>
+                  <div style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.2 }}>
+                    {[r.annee, r.marque, r.modele].filter(Boolean).join(' ') || '—'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+                    Type : <span style={{ color: r.type_vehicule === 'eau' ? '#0ea5e9' : '#22c55e', fontWeight: 700 }}>{r.type_vehicule ?? '—'}</span>
+                  </div>
+                </div>
+                {r.age_jours != null && (
+                  <div style={{ background: `${ageColor(r.age_jours)}18`, border: `1px solid ${ageColor(r.age_jours)}44`, borderRadius: 10, padding: '8px 12px', textAlign: 'center', flexShrink: 0, marginLeft: 10 }}>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: ageColor(r.age_jours), lineHeight: 1 }}>{r.age_jours}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>jours stock</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Date achat */}
+              {r.date_achat && (
+                <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Date d'achat</span>
+                  <span style={{ fontSize: 14, fontWeight: 700 }}>{r.date_achat.slice(0, 10)}</span>
+                </div>
+              )}
+
+              {/* Coûts */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <KpiCard label="Coût d'achat"   value={fmt$(achat)} />
+                <KpiCard label="M.O. + Pièces"  value={fmt$(mo)}    color={mo > 0 ? AMBER : undefined} />
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid rgba(255,255,255,0.12)`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>Total investi</span>
+                <span style={{ fontSize: 18, fontWeight: 900, color: 'white' }}>{fmt$(total)}</span>
+              </div>
+
+              {/* Prix demandé + profitabilité */}
+              {r.prix_demande ? (
+                <>
+                  <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>Prix demandé</span>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: GREEN }}>{fmt$(r.prix_demande)}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                    <KpiCard label="Profit projeté" value={fmt$(profit)} color={profitColor} />
+                    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>Marge projetée</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: profitColor, lineHeight: 1 }}>
+                        {pct != null ? `${pct.toFixed(1)}%` : '—'}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
+                  Aucun prix demandé — marge non calculable
+                </div>
+              )}
+
+              <button
+                onClick={() => setSelectedInv(null)}
+                style={{ display: 'block', width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -431,7 +632,7 @@ function TabPieces() {
   const [rowsPrev, setRowsPrev] = useState<PieceRow[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [fy,       setFy]       = useState(currentFY());
-  const [viewMode, setViewMode] = useState<'chart' | 'vendeurs'>('chart');
+  const [viewMode, setViewMode] = useState<'chart' | 'semaines' | 'vendeurs'>('chart');
 
   useEffect(() => {
     setLoading(true);
@@ -469,16 +670,16 @@ function TabPieces() {
     <div style={{ padding: 16 }}>
       <FySelector fy={fy} onChange={setFy} />
 
-      {/* Toggle graphique / vendeurs */}
+      {/* Toggle graphique / semaines / vendeurs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        {(['chart', 'vendeurs'] as const).map(mode => (
+        {(['chart', 'semaines', 'vendeurs'] as const).map(mode => (
           <button key={mode} onClick={() => setViewMode(mode)} style={{
             flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
             background: viewMode === mode ? 'rgba(255,255,255,0.15)' : CARD_BG,
             color: viewMode === mode ? 'white' : 'rgba(255,255,255,0.4)',
-            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
           }}>
-            {mode === 'chart' ? '📊 Graphique' : '👤 Vendeurs'}
+            {mode === 'chart' ? '📅 Mensuel' : mode === 'semaines' ? '📆 Semaines' : '👤 Vendeurs'}
           </button>
         ))}
       </div>
@@ -500,7 +701,42 @@ function TabPieces() {
               </div>
               <ComparisonChart prev={monthlyPrev} curr={monthlyVentes} fyPrev={fy - 1} fyCurr={fy} />
             </>
-          ) : (
+          ) : viewMode === 'semaines' ? (() => {
+            const semaines = groupByWeek(
+              rowsCurr.map(r => ({ date_vente: r.date_vente, val: Math.max(r.sous_total, 0) }))
+            );
+            // Dernières 16 semaines seulement
+            const display = semaines.slice(-16);
+            const maxVal  = Math.max(...display.map(s => s.total), 1);
+            return (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>
+                  Ventes brutes par semaine — AF{fy} {semaines.length > 16 ? `(16 dernières sur ${semaines.length})` : ''}
+                </div>
+                <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 14px 10px' }}>
+                  {display.length === 0 && (
+                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
+                      Aucune donnée pour cette période
+                    </div>
+                  )}
+                  {display.map(s => {
+                    const pct = (s.total / maxVal) * 100;
+                    return (
+                      <div key={s.date} style={{ marginBottom: 9 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>Sem. {s.label}</span>
+                          <span style={{ fontSize: 10, color: AMBER, fontWeight: 700 }}>{fmt$(s.total)}</span>
+                        </div>
+                        <div style={{ height: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.max(pct, 1)}%`, height: '100%', background: AMBER, borderRadius: 3, transition: 'width 0.4s' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })() : (
             <>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>
                 Par vendeur · AF{fy}
