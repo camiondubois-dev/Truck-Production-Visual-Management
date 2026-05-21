@@ -746,6 +746,14 @@ function VueInventaire({
   const [sortCol, setSortCol] = useState<string>('stock_numero');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showModal, setShowModal] = useState(false);
+  const [tauxInteret, setTauxInteret] = useState(8);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   function toggleSelect(stock: string) {
     setSelected(prev => {
@@ -870,6 +878,13 @@ function VueInventaire({
     return (p / prix) * 100;
   }
 
+  // Intérêt simple quotidien : Base × Taux × Jours ÷ 365
+  function calcInteret(row: InventaireRow): number | null {
+    const base = row.cout_total_investi ?? ((row.cout_achat ?? 0) + (row.cout_total_depense ?? 0));
+    if (!base || !row.age_jours || row.age_jours <= 0) return null;
+    return base * (tauxInteret / 100) * row.age_jours / 365;
+  }
+
   const filtered = useMemo(() => {
     let r = rows;
     if (filterToSelection && selected.size > 0) {
@@ -898,6 +913,7 @@ function VueInventaire({
   const totProfitProj = filtered.reduce((s, r) => s + (profitProj(r) ?? 0), 0);
   const totPrixSim = filtered.reduce((s, r) => s + (getSimPrix(r.stock_numero, r) ?? 0), 0);
   const margeProjMoy = totPrixSim > 0 ? (totProfitProj / totPrixSim) * 100 : 0;
+  const totInteret = filtered.reduce((s, r) => s + (calcInteret(r) ?? 0), 0);
 
   const selectedRows = filtered.filter(r => selected.has(r.stock_numero));
   const selProfitProj = selectedRows.reduce((s, r) => s + (profitProj(r) ?? 0), 0);
@@ -1067,6 +1083,9 @@ function VueInventaire({
         <KpiCard label="M.O. + Pièces total" value={fmt$(totMO)} />
         <KpiCard label="Profit projeté" value={fmt$(totProfitProj)} color={profitColor(totProfitProj)} />
         <KpiCard label="Marge projetée" value={fmtPct(margeProjMoy)} color={profitColor(margeProjMoy)} />
+        {isDesktop && (
+          <KpiCard label="Coût intérêts" value={fmt$(totInteret)} color="#f87171" sub={`@ ${tauxInteret} % / an`} />
+        )}
       </div>
 
       {/* KPIs sélection */}
@@ -1092,6 +1111,38 @@ function VueInventaire({
               Désélectionner
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Taux d'intérêt — desktop uniquement */}
+      {isDesktop && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: '#1a1917', border: '1px solid rgba(248,113,113,0.25)',
+          borderRadius: 8, padding: '8px 16px', marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 18 }}>🏦</span>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Taux d'intérêt annuel :
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={0.5}
+            value={tauxInteret}
+            onChange={e => setTauxInteret(Math.max(0, Math.min(50, parseFloat(e.target.value) || 0)))}
+            style={{
+              background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.4)',
+              borderRadius: 6, color: '#f87171', padding: '4px 8px',
+              fontSize: 14, fontWeight: 700, fontFamily: 'system-ui, sans-serif',
+              width: 64, textAlign: 'right',
+            }}
+          />
+          <span style={{ color: '#f87171', fontWeight: 700, fontSize: 14 }}>%</span>
+          <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, marginLeft: 4 }}>
+            — Intérêt simple : Coût total × taux × jours ÷ 365
+          </span>
         </div>
       )}
 
@@ -1128,6 +1179,11 @@ function VueInventaire({
               <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                 Prix demandé 💾
               </th>
+              {isDesktop && (
+                <th style={{ ...stickyTh, padding: '10px 12px', textAlign: 'right', color: '#f87171', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>
+                  Intérêts 🏦
+                </th>
+              )}
               <Th col="profit_proj" label="Profit projeté" />
               <Th col="marge_proj" label="Marge %" />
             </tr>
@@ -1222,6 +1278,14 @@ function VueInventaire({
                       title={hasPrix ? `Sauvegardé: ${fmt$(prixDemande)}` : 'Entrer un prix pour sauvegarder'}
                     />
                   </td>
+                  {isDesktop && (() => {
+                    const inter = calcInteret(r);
+                    return (
+                      <td style={{ padding: '9px 12px', textAlign: 'right', color: inter != null ? '#f87171' : 'rgba(255,255,255,0.2)', fontWeight: inter != null ? 600 : 400 }}>
+                        {inter != null ? fmt$(inter) : '—'}
+                      </td>
+                    );
+                  })()}
                   <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: profitColor(pp) }}>{fmt$(pp)}</td>
                   <td style={{ padding: '9px 12px', textAlign: 'right', color: profitColor(mp) }}>{fmtPct(mp)}</td>
                 </tr>
@@ -1249,6 +1313,11 @@ function VueInventaire({
               <td style={{ padding: '11px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 700, borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
                 {fmt$(filtered.reduce((s, r) => s + (getSimPrix(r.stock_numero, r) ?? 0), 0))}
               </td>
+              {isDesktop && (
+                <td style={{ padding: '11px 12px', textAlign: 'right', fontWeight: 700, color: '#f87171' }}>
+                  {fmt$(totInteret)}
+                </td>
+              )}
               <td style={{ padding: '11px 12px', textAlign: 'right', fontWeight: 700, color: profitColor(totProfitProj) }}>
                 {fmt$(totProfitProj)}
               </td>
