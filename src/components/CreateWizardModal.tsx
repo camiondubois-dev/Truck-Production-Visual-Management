@@ -35,6 +35,7 @@ interface FormState {
   inventaireId?: string;
   clientId?: string;
   email?: string;
+  prixAchat: string;
 }
 
 const FORM_DEFAUT: FormState = {
@@ -50,6 +51,7 @@ const FORM_DEFAUT: FormState = {
   inventaireId: undefined,
   clientId: undefined,
   email: '',
+  prixAchat: '',
 };
 
 interface WizardCreationProps {
@@ -715,6 +717,27 @@ function Etape2ClientDetail({ form, setF }: { form: FormState; setF: (p: Partial
                 placeholder="389" />
             </FormRow>
           </div>
+          {/* Prix d'achat — camion détail */}
+          <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
+            <FormRow label="💰 Prix d'achat réel du camion">
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#92400e', fontWeight: 700, fontSize: 14 }}>$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={form.prixAchat}
+                  onChange={e => setF({ prixAchat: e.target.value })}
+                  placeholder="0"
+                  style={{ ...inputStyle, paddingLeft: 24, fontWeight: 700, fontSize: 15, color: '#92400e', background: 'white' }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+                Ce montant sera enregistré dans la base de données comme prix d'achat réel.
+              </div>
+            </FormRow>
+          </div>
+
           <FormRow label="Commentaires / Travaux à effectuer">
             <textarea value={form.descriptionTravaux} onChange={e => setF({ descriptionTravaux: e.target.value })}
               placeholder="Ex: Vérifier les coulisses d'huile..." rows={3}
@@ -808,6 +831,27 @@ function Etape3Eau({ form, setF }: { form: FormState; setF: (p: Partial<FormStat
           <AutocompleteInput value={form.modele} onChange={val => setF({ modele: val })}
             suggestions={form.marque && MARQUES_CAMIONS[form.marque] ? MARQUES_CAMIONS[form.marque] : Object.values(MARQUES_CAMIONS).flat().sort()}
             placeholder="T-880" />
+        </FormRow>
+      </div>
+
+      {/* Prix d'achat */}
+      <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
+        <FormRow label="💰 Prix d'achat réel du camion">
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#92400e', fontWeight: 700, fontSize: 14 }}>$</span>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={form.prixAchat}
+              onChange={e => setF({ prixAchat: e.target.value })}
+              placeholder="0"
+              style={{ ...inputStyle, paddingLeft: 24, fontWeight: 700, fontSize: 15, color: '#92400e', background: 'white' }}
+            />
+          </div>
+          <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+            Ce montant sera enregistré dans la base de données comme prix d'achat réel.
+          </div>
         </FormRow>
       </div>
 
@@ -1050,6 +1094,7 @@ if (form.type !== 'client' && !form.numero) return;
         statut: 'en-attente' as const,
         priorite: idx + 1,
       }));
+      const prixAchatNum = parseFloat(form.prixAchat);
       const vehiculeInv = {
         id: invId,
         statut: 'en-production' as const,
@@ -1064,6 +1109,7 @@ if (form.type !== 'client' && !form.numero) return;
         descriptionTravail: form.descriptionTravail || undefined,
         descriptionTravaux: form.descriptionTravaux || undefined,
         roadMap,
+        prixAchat: !isNaN(prixAchatNum) && prixAchatNum > 0 ? prixAchatNum : undefined,
       };
       await ajouterVehicule(vehiculeInv as any);
       inventaireId = invId;

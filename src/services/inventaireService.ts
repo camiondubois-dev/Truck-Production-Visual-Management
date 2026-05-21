@@ -121,6 +121,7 @@ export const inventaireService = {
       modele:          v.modele ?? null,
       annee:           v.annee ?? null,
       date_achat:      v.dateImport ?? new Date().toISOString(),
+      ...(v.prixAchat != null ? { prix_achat_reel: v.prixAchat } : {}),
     }, { onConflict: 'stock_numero', ignoreDuplicates: true });
   },
 

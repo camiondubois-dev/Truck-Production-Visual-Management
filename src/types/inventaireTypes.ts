@@ -60,6 +60,7 @@ export interface VehiculeInventaire {
   dateDepot?: string;           // YYYY-MM-DD
   modePaiementDepot?: string;   // 'virement' | 'cheque' | 'carte' | 'comptant' | 'po'
   roadMap?: RoadMapEtape[];
+  prixAchat?: number;           // prix d'achat réel du camion → prod_ventes.prix_achat_reel
 }
 
 /**
