@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
 import { photoService } from '../services/photoService';
-// (pas d'import supplémentaire — on utilise le client supabase anon existant)
+import { ensureSharedAuth } from '../hooks/useAchatsAuth';
 import { isBiometricSupported, isBiometricRegistered, registerBiometric, authenticateWithBiometric, removeBiometric } from '../hooks/useBiometric';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 import type { Document } from '../types/item.types';
@@ -1495,21 +1495,24 @@ export function VueTerrain() {
   const [ecran, setEcran] = useState<Ecran>(() => {
     const pinOk    = sessionStorage.getItem('terrain_pin_ok') === '1';
     const niveauOk = sessionStorage.getItem('terrain_niveau') !== null;
-    // Si terrain_niveau n'est pas défini (ancienne session), on redemande le PIN
-    // pour que le niveau d'accès (terrain vs gestion) soit correctement enregistré.
     return pinOk && niveauOk ? 'ok' : 'pin';
   });
+  const [authReady, setAuthReady] = useState(false);
 
-  // Nettoyage : si le compte TV traîne dans localStorage (bug ancienne version),
-  // on le déconnecte ET on recharge — sinon les données fetchées avant ce nettoyage restent vides.
+  // Connexion Supabase partagée (compte TV) — nécessaire pour accéder aux données
+  // prod_ventes / prod_inventaire via RLS. Exactement comme la Finance app.
+  // La validation du PIN est 100% locale (validerPinTerrain), aucun lien.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        // Terrain utilise le PIN uniquement — aucune session Supabase Auth ne devrait exister ici
-        supabase.auth.signOut().then(() => window.location.reload());
-      }
-    });
+    ensureSharedAuth().then(() => setAuthReady(true));
   }, []);
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+        Connexion au serveur…
+      </div>
+    );
+  }
 
   if (ecran === 'pin')   return <EcranPin onSuccess={() => setEcran('ok')} />;
   if (ecran === 'login') return <EcranConnexion onConnecte={() => setEcran('ok')} />;
