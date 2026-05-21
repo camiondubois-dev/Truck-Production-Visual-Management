@@ -280,18 +280,31 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
   const [digits, setDigits] = useState('');
   const [erreur, setErreur] = useState(false);
 
+  const pinLen = TERRAIN_PIN.length || 4; // longueur dynamique selon la variable d'env
+
+  const valider = (code: string) => {
+    if (!TERRAIN_PIN) {
+      // Variable d'environnement non configurée
+      setErreur(true);
+      setDigits('');
+      return;
+    }
+    if (code === TERRAIN_PIN) {
+      sessionStorage.setItem('terrain_pin_ok', '1');
+      onSuccess();
+    } else {
+      setTimeout(() => { setDigits(''); setErreur(true); }, 400);
+    }
+  };
+
   const handleDigit = (d: string) => {
-    if (digits.length >= 4) return;
+    if (digits.length >= pinLen) return;
     const next = digits + d;
     setErreur(false);
     setDigits(next);
-    if (next.length === 4) {
-      if (next === TERRAIN_PIN) {
-        sessionStorage.setItem('terrain_pin_ok', '1');
-        onSuccess();
-      } else {
-        setTimeout(() => { setDigits(''); setErreur(true); }, 400);
-      }
+    // Auto-validation dès que le bon nombre de chiffres est atteint
+    if (next.length === pinLen) {
+      setTimeout(() => valider(next), 120);
     }
   };
 
@@ -301,22 +314,52 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
       <div style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 6 }}>Vue Terrain</div>
       <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 40 }}>Entrez votre code d'accès</div>
 
+      {/* Cercles indicateurs — longueur dynamique */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        {[0, 1, 2, 3].map(i => (
-          <div key={i} style={{ width: 18, height: 18, borderRadius: '50%', background: digits.length > i ? (erreur ? '#ef4444' : '#f97316') : 'rgba(255,255,255,0.2)', transition: 'background 0.2s' }} />
+        {Array.from({ length: pinLen }).map((_, i) => (
+          <div key={i} style={{
+            width: 18, height: 18, borderRadius: '50%',
+            background: digits.length > i ? (erreur ? '#ef4444' : '#f97316') : 'rgba(255,255,255,0.2)',
+            transition: 'background 0.2s',
+            transform: i === digits.length - 1 ? 'scale(1.2)' : 'scale(1)',
+          }} />
         ))}
       </div>
-      {erreur && <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>Code incorrect</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: 240, marginTop: 24 }}>
+      {erreur && (
+        <div style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>
+          {!TERRAIN_PIN ? '⚠️ PIN non configuré (VITE_TERRAIN_PIN manquant)' : 'Code incorrect'}
+        </div>
+      )}
+
+      {/* Pavé numérique */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: 240, marginTop: 16 }}>
         {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
-          <button key={i} onClick={() => d === '⌫' ? setDigits(p => p.slice(0,-1)) : d ? handleDigit(d) : undefined}
+          <button key={i}
+            onClick={() => d === '⌫' ? (setErreur(false), setDigits(p => p.slice(0,-1))) : d ? handleDigit(d) : undefined}
             disabled={!d}
             style={{ padding: '18px 0', borderRadius: 14, border: 'none', background: d ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'white', fontSize: 22, fontWeight: 600, cursor: d ? 'pointer' : 'default', opacity: d ? 1 : 0 }}>
             {d}
           </button>
         ))}
       </div>
+
+      {/* Bouton Entrer (utile si PIN > 4 chiffres) */}
+      {pinLen > 4 && (
+        <button
+          onClick={() => { if (digits.length >= 4) valider(digits); }}
+          disabled={digits.length < 4}
+          style={{
+            marginTop: 20, width: 240, padding: '16px', borderRadius: 14, border: 'none',
+            background: digits.length >= 4 ? '#f97316' : 'rgba(255,255,255,0.08)',
+            color: digits.length >= 4 ? 'white' : 'rgba(255,255,255,0.3)',
+            fontSize: 16, fontWeight: 800,
+            cursor: digits.length >= 4 ? 'pointer' : 'not-allowed',
+            transition: 'all 0.15s',
+          }}>
+          → Entrer
+        </button>
+      )}
     </div>
   );
 }
