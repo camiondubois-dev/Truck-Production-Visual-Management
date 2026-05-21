@@ -1488,13 +1488,13 @@ export function VueTerrain() {
     sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
   );
 
-  // Nettoyage automatique : si le compte TV a été connecté par erreur (ancienne version),
-  // on le déconnecte immédiatement → le client Supabase revient en mode anon, les données chargent.
+  // Nettoyage : si le compte TV traîne dans localStorage (bug ancienne version),
+  // on le déconnecte ET on recharge — sinon les données fetchées avant ce nettoyage restent vides.
   useEffect(() => {
-    const TV_EMAIL = import.meta.env.VITE_TV_EMAIL as string | undefined;
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.email && TV_EMAIL && session.user.email === TV_EMAIL) {
-        supabase.auth.signOut();
+      if (session?.user) {
+        // Terrain utilise le PIN uniquement — aucune session Supabase Auth ne devrait exister ici
+        supabase.auth.signOut().then(() => window.location.reload());
       }
     });
   }, []);
