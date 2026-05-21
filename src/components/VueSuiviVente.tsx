@@ -867,9 +867,11 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
   onSelectVehicule?: (id: string) => void;
 }) {
   const { vehicules } = useInventaire();
-  // Terrain (PIN, pas de AuthProvider) → on affiche tout. Desktop gestion → tout. Sinon rien.
+  // Terrain : niveau stocké en sessionStorage. Desktop : rôle Supabase.
   const auth = useAuthOptional();
-  const isGestion = !auth || auth.profile?.role === 'gestion';
+  const isGestion = auth
+    ? auth.profile?.role === 'gestion'
+    : sessionStorage.getItem('terrain_niveau') === 'gestion';
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
   const [recherche, setRecherche] = useState('');
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
