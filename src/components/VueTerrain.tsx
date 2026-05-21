@@ -1492,9 +1492,13 @@ function EcranConnexion({ onConnecte }: { onConnecte: () => void }) {
 // ─── Export principal ────────────────────────────────────────────────────────
 
 export function VueTerrain() {
-  const [ecran, setEcran] = useState<Ecran>(() =>
-    sessionStorage.getItem('terrain_pin_ok') === '1' ? 'ok' : 'pin'
-  );
+  const [ecran, setEcran] = useState<Ecran>(() => {
+    const pinOk    = sessionStorage.getItem('terrain_pin_ok') === '1';
+    const niveauOk = sessionStorage.getItem('terrain_niveau') !== null;
+    // Si terrain_niveau n'est pas défini (ancienne session), on redemande le PIN
+    // pour que le niveau d'accès (terrain vs gestion) soit correctement enregistré.
+    return pinOk && niveauOk ? 'ok' : 'pin';
+  });
 
   // Nettoyage : si le compte TV traîne dans localStorage (bug ancienne version),
   // on le déconnecte ET on recharge — sinon les données fetchées avant ce nettoyage restent vides.
