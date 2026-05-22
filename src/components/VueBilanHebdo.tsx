@@ -170,15 +170,21 @@ export function VueBilanHebdo() {
         .eq('paiement_complet', true)
         .gte('updated_at', new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString());
 
-      // 4. Prix demandé (prod_ventes)
+      // 4. Prix demandé + statut prod_ventes (pour filtrer les ventes déjà finalisées)
       const numeros = [...(invData ?? []), ...(partisData ?? [])].map((r: any) => r.numero);
       let prixMap: Record<string, number> = {};
+      const vendusFinalises = new Set<string>();
       if (numeros.length > 0) {
         const { data: prixData } = await supabase
           .from('prod_ventes')
-          .select('stock_numero, prix_demande')
+          .select('stock_numero, prix_demande, statut')
           .in('stock_numero', numeros);
-        (prixData ?? []).forEach((r: any) => { if (r.prix_demande) prixMap[r.stock_numero] = r.prix_demande; });
+        (prixData ?? []).forEach((r: any) => {
+          if (r.prix_demande) prixMap[r.stock_numero] = r.prix_demande;
+          // Une ligne dans prod_ventes avec statut='vendu' = vente finalisée
+          // → on retire ces camions du pipeline (peu importe paiement_complet de prod_inventaire)
+          if (r.statut === 'vendu') vendusFinalises.add(r.stock_numero);
+        });
       }
 
       const toRow = (r: any): PipelineRow => ({
@@ -188,7 +194,11 @@ export function VueBilanHebdo() {
         en_financement: r.en_financement ?? false,
       });
 
-      setPipeline((invData ?? []).map(toRow));
+      // Retirer du pipeline les camions dont la vente est déjà finalisée
+      // (prod_ventes.statut = 'vendu') — désync avec prod_inventaire.paiement_complet
+      const pipelineFiltre = (invData ?? []).filter((r: any) => !vendusFinalises.has(r.numero));
+
+      setPipeline(pipelineFiltre.map(toRow));
       setPartis((partisData ?? []).map(toRow));
 
       // 5. Pièces cette semaine
