@@ -319,13 +319,32 @@ export function VueBilanHebdo() {
   const avecJoursP    = ventesPrev.filter(r => r.jours_inventaire != null);
   const avgJoursP     = avecJoursP.length > 0 ? Math.round(avecJoursP.reduce((s, r) => s + (r.jours_inventaire ?? 0), 0) / avecJoursP.length) : null;
   const depotsCA_W    = depotsWeek.reduce((s, r) => s + (r.montant_depot ?? 0), 0);
-  const totalW        = piecesCA_W + depotsCA_W + ventesCA_W;
+
+  // Revenu de location — prorata par jour (montant_mensuel / 30 × jours actifs dans la semaine)
+  const calcLocationsSemaine = (debutSem: string, finSem: string) => {
+    const d1 = new Date(debutSem).getTime();
+    const d2 = new Date(finSem).getTime();
+    return locations.reduce((s, l) => {
+      const debutContrat = new Date(l.dateDebut).getTime();
+      const finContrat   = l.dateFin ? new Date(l.dateFin).getTime() : d2;
+      // Intersection contrat × semaine
+      const debutInter = Math.max(debutContrat, d1);
+      const finInter   = Math.min(finContrat, d2);
+      if (finInter <= debutInter) return s;
+      const jours = (finInter - debutInter) / (1000 * 60 * 60 * 24);
+      return s + (l.montantMensuel * jours / 30);
+    }, 0);
+  };
+  const locationsCA_W   = calcLocationsSemaine(monday, today);
+  const locationsCumule = locations.reduce((s, l) => s + (l.revenuCumule ?? 0), 0);
+  const totalW          = piecesCA_W + depotsCA_W + ventesCA_W + locationsCA_W;
 
   // Semaine précédente
   const piecesCA_P    = piecesPrev.reduce((s, r) => s + Math.max(r.sous_total, 0), 0);
   const ventesCA_P    = ventesPrev.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
   const depotsCA_P    = depotsPrev.reduce((s, r) => s + (r.montant_depot ?? 0), 0);
-  const totalP        = piecesCA_P + depotsCA_P + ventesCA_P;
+  const locationsCA_P = calcLocationsSemaine(prevMonday, monday);
+  const totalP        = piecesCA_P + depotsCA_P + ventesCA_P + locationsCA_P;
 
   const delta = (curr: number, prev: number) =>
     prev > 0 ? fmtPct((curr - prev) / prev * 100) : null;
@@ -425,6 +444,14 @@ export function VueBilanHebdo() {
           curr={depotsCA_W} prev={depotsCA_P}
           currSub={`${depotsWeek.length} dépôt${depotsWeek.length !== 1 ? 's' : ''}`}
           prevSub={`${depotsPrev.length} dépôt${depotsPrev.length !== 1 ? 's' : ''}`}
+        />
+        <CmpRow
+          icon="🔁" label="Revenu de location"
+          curr={locationsCA_W} prev={locationsCA_P}
+          currSub={locations.length > 0
+            ? `${locations.length} contrat${locations.length !== 1 ? 's' : ''} actif${locations.length !== 1 ? 's' : ''} · Cumulé total ${fmt$(locationsCumule)}`
+            : 'Aucun contrat actif'}
+          prevSub={undefined}
         />
 
         {/* Jours en inventaire moyen */}
