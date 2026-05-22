@@ -457,6 +457,8 @@ function TabInventaire() {
   const [loading,     setLoading]     = useState(true);
   const [selectedInv, setSelectedInv] = useState<InvRow | null>(null);
   const [drawerPhoto, setDrawerPhoto] = useState<string | null>(null);
+  // Locations actives par stock_numero (revenu cumulé + montant mensuel)
+  const [locByStock,  setLocByStock]  = useState<Record<string, { revenuCumule: number; montantMensuel: number; dateDebut: string; client: string | null }>>({});
 
   // Fetch photo lazily quand un camion est sélectionné
   useEffect(() => {
@@ -470,6 +472,24 @@ function TabInventaire() {
       'stock_numero,type_vehicule,date_achat,age_jours,cout_achat,cout_total_depense,prix_achat_reel,prix_demande,marque,modele,annee',
       q => q.order('cout_achat', { ascending: false }),
     ).then(data => { setRows(data); setLoading(false); });
+
+    // Locations actives — pour afficher badge + revenu cumulé sur les cards
+    supabase
+      .from('prod_locations_avec_cumul')
+      .select('stock_numero, revenu_cumule, montant_mensuel, date_debut, client')
+      .is('date_fin', null)
+      .then(({ data }) => {
+        const map: typeof locByStock = {};
+        for (const r of (data ?? []) as any[]) {
+          map[r.stock_numero] = {
+            revenuCumule:   Number(r.revenu_cumule ?? 0),
+            montantMensuel: Number(r.montant_mensuel ?? 0),
+            dateDebut:      r.date_debut,
+            client:         r.client ?? null,
+          };
+        }
+        setLocByStock(map);
+      });
   }, []);
 
   const totalAchat   = rows.reduce((s, r) => s + (r.prix_achat_reel   ?? 0), 0);
@@ -509,6 +529,7 @@ function TabInventaire() {
             const pctProj = r.prix_demande != null && r.prix_demande > 0 && profit != null
               ? (profit / r.prix_demande) * 100 : null;
             const profitColor = profit == null ? 'white' : profit >= 0 ? GREEN : RED;
+            const loc = locByStock[r.stock_numero];  // location active sur ce camion (ou undefined)
 
             return (
               <div
@@ -524,7 +545,7 @@ function TabInventaire() {
                 {/* Ligne principale : infos gauche / coûts droite */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 11, color: AMBER, fontWeight: 700 }}>#{r.stock_numero}</span>
                       {r.age_jours != null && (
                         <span style={{
@@ -533,6 +554,15 @@ function TabInventaire() {
                           color: ageColor(r.age_jours),
                         }}>
                           {r.age_jours} j
+                        </span>
+                      )}
+                      {loc && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 800, padding: '1px 6px',
+                          borderRadius: 8, background: '#8b5cf622', color: '#a78bfa',
+                          letterSpacing: '0.04em',
+                        }}>
+                          🔁 LOCATION
                         </span>
                       )}
                     </div>
@@ -579,6 +609,24 @@ function TabInventaire() {
                       </span>
                     )}
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)' }}>proj.</span>
+                  </div>
+                )}
+
+                {/* Bande revenu de location cumulé — visible uniquement si location active */}
+                {loc && (
+                  <div style={{
+                    marginTop: 8, paddingTop: 8,
+                    borderTop: `1px solid rgba(139,92,246,0.15)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, fontSize: 11,
+                  }}>
+                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      Location · {fmt$(loc.montantMensuel)}/mois
+                      {loc.client && <span style={{ marginLeft: 6, color: 'rgba(255,255,255,0.35)' }}>· {loc.client}</span>}
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: '#a78bfa' }}>
+                      + {fmt$(loc.revenuCumule)} cumulé
+                    </span>
                   </div>
                 )}
               </div>

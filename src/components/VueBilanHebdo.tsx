@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { locationService, type LocationAvecCumul } from '../services/locationService';
+import { LocationsManager } from './LocationsManager';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -141,6 +143,8 @@ export function VueBilanHebdo() {
   const [depotsPrev,   setDepotsPrev]   = useState<DepotWeekRow[]>([]);
   const [ytdVentes,    setYtdVentes]    = useState({ ca: 0, marge: 0, nb: 0 });
   const [ytdPieces,    setYtdPieces]    = useState({ ca: 0, nb: 0 });
+  const [locations,    setLocations]    = useState<LocationAvecCumul[]>([]);
+  const [showLocManager, setShowLocManager] = useState(false);
 
   // ── Chargement ────────────────────────────────────────────────
   useEffect(() => { charger(); }, []);
@@ -276,6 +280,15 @@ export function VueBilanHebdo() {
         nb: acc.nb + 1,
       }), { ca: 0, nb: 0 });
       setYtdPieces(ytdP);
+
+      // 12. Locations actives (revenu cumulé)
+      try {
+        const locs = await locationService.getActifs();
+        setLocations(locs);
+      } catch (e) {
+        console.warn('[VueBilanHebdo] Locations non chargées (table prod_locations manquante ?):', e);
+        setLocations([]);
+      }
 
     } catch (err) {
       console.error('[VueBilanHebdo] Erreur chargement:', err);
@@ -585,6 +598,80 @@ export function VueBilanHebdo() {
             </table>
           </div>
         </>
+      )}
+
+      {/* ── Locations en cours — revenus cumulés ─────────────────── */}
+      {(() => {
+        const totalRevenuLocations = locations.reduce((s, l) => s + (l.revenuCumule ?? 0), 0);
+        const totalMensuel         = locations.reduce((s, l) => s + (l.montantMensuel ?? 0), 0);
+        return (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 10 }}>
+              <SectionTitle>🔁 Locations en cours — Revenu cumulé ({locations.length})</SectionTitle>
+              <button onClick={() => setShowLocManager(true)} style={{
+                padding: '8px 14px', borderRadius: 8, border: 'none',
+                background: '#8b5cf6', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+              }}>
+                Gérer les contrats
+              </button>
+            </div>
+            {locations.length === 0 ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '12px 0' }}>
+                Aucun contrat de location actif. Clique "Gérer les contrats" pour en ajouter.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
+                  {[
+                    { label: 'Camions en location',      value: String(locations.length), color: undefined },
+                    { label: 'Revenu mensuel récurrent', value: fmt$(totalMensuel),       color: '#8b5cf6' },
+                    { label: 'Revenu cumulé total',      value: fmt$(totalRevenuLocations), color: '#22c55e' },
+                  ].map(k => (
+                    <div key={k.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: k.color ?? 'white' }}>{k.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <TH>#Stock</TH>
+                        <TH>Client</TH>
+                        <TH>Début</TH>
+                        <TH right>Mensuel</TH>
+                        <TH right>Mois écoulés</TH>
+                        <TH right>Revenu cumulé</TH>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {locations.map(l => (
+                        <tr key={l.id}>
+                          <TD bold color="#8b5cf6">#{l.stockNumero}</TD>
+                          <TD>{l.client ?? '—'}</TD>
+                          <TD>{l.dateDebut}</TD>
+                          <TD right>{fmt$(l.montantMensuel)}</TD>
+                          <TD right>{String(l.moisEcoules)}</TD>
+                          <TD right bold color="#22c55e">{fmt$(l.revenuCumule)}</TD>
+                        </tr>
+                      ))}
+                      <tr style={{ background: 'rgba(34,197,94,0.08)' }}>
+                        <TD bold colSpan={5 as any}>TOTAL CUMULÉ</TD>
+                        <TD right bold color="#22c55e">{fmt$(totalRevenuLocations)}</TD>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Modal de gestion des locations */}
+      {showLocManager && (
+        <LocationsManager onClose={() => { setShowLocManager(false); charger(); }} />
       )}
 
       {/* ── Réservés & En financement ───────────────────────────── */}
