@@ -171,21 +171,26 @@ export function TabBilanHebdoMobile() {
         supabase.from('prod_ventes_pieces').select('sous_total').eq('annee_fiscale', fy),
       ]);
 
-      setPipeline((pipeRes.data ?? []) as any);
-
-      // Filtrer les ventes déjà finalisées (cohérence avec bilan desktop)
-      const numerosPipeline = (pipeRes.data ?? []).map((r: any) => r.numero);
-      let vendusFinalises = new Set<string>();
+      // Pipeline : on enrichit dans le même flux avec prix_demande + on filtre les ventes finalisées
+      const pipelineData = (pipeRes.data ?? []) as any[];
+      const numerosPipeline = pipelineData.map(r => r.numero);
+      const prixMap: Record<string, number> = {};
+      const vendusFinalises = new Set<string>();
       if (numerosPipeline.length > 0) {
         const { data } = await supabase
           .from('prod_ventes')
-          .select('stock_numero, statut')
+          .select('stock_numero, prix_demande, statut')
           .in('stock_numero', numerosPipeline);
         for (const r of (data ?? []) as any[]) {
+          if (r.prix_demande) prixMap[r.stock_numero] = Number(r.prix_demande);
           if (r.statut === 'vendu') vendusFinalises.add(r.stock_numero);
         }
-        setPipeline(prev => prev.filter(r => !vendusFinalises.has(r.numero)));
       }
+      const pipelineEnriched = pipelineData
+        .filter(r => !vendusFinalises.has(r.numero))
+        .map(r => ({ ...r, prix_demande: prixMap[r.numero] ?? null }));
+      setPipeline(pipelineEnriched);
+      setPricesMap(prixMap);
 
       setPartis((partisRes.data ?? []) as any);
       setLocations((locsRes.data ?? []) as any);
@@ -277,23 +282,8 @@ export function TabBilanHebdoMobile() {
   const totalCAvendus60j = partis.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
   const totalMargeVendus60j = partis.reduce((s, r) => s + (r.marge_profit ?? 0), 0);
 
-  // ─── Récupérer prix_demande pour les camions du pipeline ──
+  // pricesMap est rempli dans charger() en même temps que le pipeline (évite race condition)
   const [pricesMap, setPricesMap] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (pipeline.length === 0) return;
-    const stocks = pipeline.map(p => p.numero);
-    supabase
-      .from('prod_ventes')
-      .select('stock_numero, prix_demande')
-      .in('stock_numero', stocks)
-      .then(({ data }) => {
-        const map: Record<string, number> = {};
-        for (const r of (data ?? []) as any[]) {
-          if (r.prix_demande) map[r.stock_numero] = r.prix_demande;
-        }
-        setPricesMap(map);
-      });
-  }, [pipeline.length]);
 
   if (loading) {
     return (
@@ -714,17 +704,39 @@ function DrawerCamion({ data, onClose }: {
   } | null>(null);
   const [couts, setCouts] = useState<{
     prix_achat_reel: number | null;
-    cout_total_depense: number | null;  // total M.O. dépensée
+    cout_total_depense: number | null;
     cout_achat: number | null;
     prix_demande: number | null;
     age_jours: number | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Swipe-down to close — on tracke la position Y du touch
+  const [dragY, setDragY] = useState(0);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY == null) return;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (dy > 0) setDragY(dy);  // on ne tracke que vers le bas
+  };
+  const handleTouchEnd = () => {
+    // Si tiré de plus de 100px → on ferme
+    if (dragY > 100) {
+      onClose();
+    } else {
+      setDragY(0); // sinon on revient à la position initiale
+    }
+    setTouchStartY(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -788,20 +800,46 @@ function DrawerCamion({ data, onClose }: {
           borderRadius: '20px 20px 0 0',
           maxHeight: '92vh', overflowY: 'auto',
           color: 'white',
+          transform: `translateY(${dragY}px)`,
+          transition: touchStartY == null ? 'transform 0.2s ease-out' : 'none',
+          position: 'relative',
         }}
       >
-        {/* Poignée */}
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '10px auto 0' }} />
+        {/* Zone "poignée" — swipeable pour fermer */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            padding: '12px 20px 8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: '#1a1a2e',
+            position: 'sticky', top: 0, zIndex: 2,
+            // Safe-area pour les iPhone avec encoche
+            paddingTop: 'max(12px, env(safe-area-inset-top, 12px))',
+          }}
+        >
+          {/* Espace gauche pour centrer la poignée */}
+          <div style={{ width: 36 }} />
+          {/* Poignée centrale */}
+          <div style={{ width: 50, height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.25)' }} />
+          {/* Bouton fermer à droite */}
+          <button onClick={onClose} style={{
+            width: 36, height: 36, borderRadius: '50%', border: 'none',
+            background: 'rgba(255,255,255,0.1)', color: 'white',
+            cursor: 'pointer', fontSize: 16, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+        </div>
 
         {/* Photo */}
         {photo ? (
           <img src={photo} alt={titre} style={{
             width: '100%', height: 200, objectFit: 'cover',
-            marginTop: 10,
           }} />
         ) : (
           <div style={{
-            width: '100%', height: 100, marginTop: 10,
+            width: '100%', height: 100,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'rgba(255,255,255,0.2)', fontSize: 13, background: 'rgba(255,255,255,0.02)',
           }}>
@@ -810,14 +848,6 @@ function DrawerCamion({ data, onClose }: {
         )}
 
         <div style={{ padding: '16px 20px 32px' }}>
-          {/* Bouton fermer flottant */}
-          <button onClick={onClose} style={{
-            position: 'absolute', top: 24, right: 16,
-            width: 36, height: 36, borderRadius: '50%', border: 'none',
-            background: 'rgba(0,0,0,0.5)', color: 'white',
-            cursor: 'pointer', fontSize: 16, zIndex: 1,
-            backdropFilter: 'blur(8px)',
-          }}>✕</button>
 
           {/* En-tête : badge contexte + numero + titre */}
           <div style={{
