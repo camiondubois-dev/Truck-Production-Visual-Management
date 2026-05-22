@@ -160,14 +160,21 @@ export function VueBilanHebdo() {
       const vendMap: Record<string, string> = {};
       (vds ?? []).forEach((v: any) => { vendMap[v.id] = v.nom; });
 
-      // 2. Pipeline "Argent à venir" — uniquement réservé/vendu non payés
-      // Les LOCATIONS sont gérées dans leur propre section, jamais ici.
+      // 2. Pipeline "Argent à venir" — TOUT camion avec signal commercial actif
+      // Un camion entre dans le pipeline dès qu'il a UN de ces signaux :
+      //   - etat_commercial = 'reserve' ou 'vendu'
+      //   - paiement_depot  = true (dépôt reçu mais sale pas encore finalisée)
+      //   - paiement_po     = true (PO reçu)
+      //   - en_financement  = true (en attente de financement)
+      // ET paiement_complet = false (pas encore complètement payé)
+      // Les LOCATIONS sont gérées dans leur propre section — jamais ici.
       const { data: invData } = await supabase
         .from('prod_inventaire')
         .select('id, numero, marque, modele, annee, etat_commercial, client_acheteur, vendeur_id, paiement_depot, paiement_complet, paiement_po, en_financement, montant_depot, date_depot, mode_paiement_depot, livraison_asap')
-        .in('etat_commercial', ['reserve', 'vendu'])
         .in('type', ['eau', 'detail'])
-        .eq('paiement_complet', false);
+        .eq('paiement_complet', false)
+        .neq('etat_commercial', 'location')
+        .or('etat_commercial.eq.reserve,etat_commercial.eq.vendu,paiement_depot.eq.true,paiement_po.eq.true,en_financement.eq.true');
 
       // 3. Partis (payés complet, 60 derniers jours) — vendus uniquement (pas locations)
       const { data: partisData } = await supabase
@@ -357,8 +364,11 @@ export function VueBilanHebdo() {
     return s + Math.max(prix - depot, 0);
   }, 0);
 
-  const vendusPipeline   = pipeline.filter(r => r.etat_commercial === 'vendu');
+  // Catégorisation :
+  // - 'reserve' explicite → réservés
+  // - tout le reste du pipeline (vendu OU signal commercial sans statut explicite) → vendus non payés
   const reservesPipeline = pipeline.filter(r => r.etat_commercial === 'reserve');
+  const vendusPipeline   = pipeline.filter(r => r.etat_commercial !== 'reserve');
 
   // ── Rendu ─────────────────────────────────────────────────────
   if (loading) {
