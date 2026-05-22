@@ -173,19 +173,31 @@ export function TabBilanHebdoMobile() {
         supabase.from('prod_ventes_pieces').select('sous_total').eq('annee_fiscale', fy),
       ]);
 
-      // Pipeline : on enrichit dans le même flux avec prix_demande + on filtre les ventes finalisées
+      // Pipeline : enrichir avec prix_demande + filtrer vendus finalisés
+      // IMPORTANT : prod_ventes n'est PAS accessible via TV account (RLS).
+      // On utilise les vues à la place :
+      //   - prod_inventaire_couts pour prix_demande
+      //   - prod_rapport_profitabilite pour détecter les ventes finalisées
       const pipelineData = (pipeRes.data ?? []) as any[];
       const numerosPipeline = pipelineData.map(r => r.numero);
       const prixMap: Record<string, number> = {};
       const vendusFinalises = new Set<string>();
       if (numerosPipeline.length > 0) {
-        const { data } = await supabase
-          .from('prod_ventes')
-          .select('stock_numero, prix_demande, statut')
-          .in('stock_numero', numerosPipeline);
-        for (const r of (data ?? []) as any[]) {
+        const [prixRes, vendusRes] = await Promise.all([
+          supabase
+            .from('prod_inventaire_couts')
+            .select('stock_numero, prix_demande')
+            .in('stock_numero', numerosPipeline),
+          supabase
+            .from('prod_rapport_profitabilite')
+            .select('stock_numero')
+            .in('stock_numero', numerosPipeline),
+        ]);
+        for (const r of (prixRes.data ?? []) as any[]) {
           if (r.prix_demande) prixMap[r.stock_numero] = Number(r.prix_demande);
-          if (r.statut === 'vendu') vendusFinalises.add(r.stock_numero);
+        }
+        for (const r of (vendusRes.data ?? []) as any[]) {
+          vendusFinalises.add(r.stock_numero);
         }
       }
       const pipelineEnriched = pipelineData
