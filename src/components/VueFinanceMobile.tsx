@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { nomVendeur } from '../services/piecesImportService';
+import { TabBilanHebdoMobile } from './TabBilanHebdoMobile';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const AMBER   = '#f59e0b';
@@ -1206,8 +1207,9 @@ function TabInfo({ onLogout }: { onLogout: () => void }) {
 
 // ─── Navigation ────────────────────────────────────────────────────────────────
 
-type Tab = 'ventes' | 'inventaire' | 'pieces' | 'plans' | 'info';
+type Tab = 'bilan' | 'ventes' | 'inventaire' | 'pieces' | 'plans' | 'info';
 const TABS: { id: Tab; emoji: string; label: string }[] = [
+  { id: 'bilan',      emoji: '📅', label: 'Bilan'      },
   { id: 'ventes',     emoji: '📊', label: 'Ventes'     },
   { id: 'inventaire', emoji: '🏭', label: 'Inventaire' },
   { id: 'pieces',     emoji: '🔧', label: 'Pièces'     },
@@ -1218,9 +1220,10 @@ const TABS: { id: Tab; emoji: string; label: string }[] = [
 // ─── Composant principal ───────────────────────────────────────────────────────
 
 export function VueFinanceMobile({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<Tab>('ventes');
+  const [tab, setTab] = useState<Tab>('bilan');
 
   const titles: Record<Tab, string> = {
+    bilan:      'Bilan hebdomadaire',
     ventes:     'Rapport de ventes',
     inventaire: 'Inventaire & Projection',
     pieces:     'Ventes de pièces',
@@ -1249,6 +1252,7 @@ export function VueFinanceMobile({ onLogout }: { onLogout: () => void }) {
 
       {/* Contenu */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 76 }}>
+        {tab === 'bilan'      && <TabBilanHebdoMobile />}
         {tab === 'ventes'     && <TabVentes />}
         {tab === 'inventaire' && <TabInventaire />}
         {tab === 'pieces'     && <TabPieces />}
