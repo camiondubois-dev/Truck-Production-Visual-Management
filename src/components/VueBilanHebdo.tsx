@@ -628,9 +628,10 @@ export function VueBilanHebdo() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
             {[
-              { label: 'Camions en attente',  value: String(vendusPipeline.length), color: undefined },
-              { label: 'Dépôts reçus',        value: fmt$(vendusPipeline.filter(r => r.paiement_depot).reduce((s, r) => s + (r.montant_depot ?? 0), 0)), color: '#f59e0b' },
-              { label: 'Solde total à venir', value: fmt$(argAVenir), color: '#f87171' },
+              { label: 'Camions en attente',     value: String(vendusPipeline.length), color: undefined },
+              { label: 'Prix demandés (total)',  value: fmt$(vendusPipeline.reduce((s, r) => s + (r.prix_demande ?? 0), 0)), color: undefined },
+              { label: 'Dépôts reçus (total)',   value: fmt$(vendusPipeline.filter(r => r.paiement_depot).reduce((s, r) => s + (r.montant_depot ?? 0), 0)), color: '#f59e0b' },
+              { label: 'Solde total à venir',    value: fmt$(argAVenir), color: '#f87171' },
             ].map(k => (
               <div key={k.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 18px' }}>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
@@ -672,11 +673,20 @@ export function VueBilanHebdo() {
                     </tr>
                   );
                 })}
-                <tr style={{ background: 'rgba(248,113,113,0.08)' }}>
-                  <TD bold colSpan={7 as any}>TOTAL À RECEVOIR</TD>
-                  <TD right bold color="#f87171">{fmt$(argAVenir)}</TD>
-                  <TD>{''}</TD>
-                </tr>
+                {(() => {
+                  const totalPrix   = vendusPipeline.reduce((s, r) => s + (r.prix_demande ?? 0), 0);
+                  const totalDepots = vendusPipeline.reduce((s, r) => s + (r.paiement_depot ? (r.montant_depot ?? 0) : 0), 0);
+                  return (
+                    <tr style={{ background: 'rgba(248,113,113,0.08)', borderTop: '2px solid rgba(248,113,113,0.25)' }}>
+                      <TD bold colSpan={4 as any}>TOTAL</TD>
+                      <TD right bold>{fmt$(totalPrix || null)}</TD>
+                      <TD right bold color="#f59e0b">{totalDepots > 0 ? fmt$(totalDepots) : '—'}</TD>
+                      <TD>{''}</TD>
+                      <TD right bold color="#f87171">{fmt$(argAVenir)}</TD>
+                      <TD>{''}</TD>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
