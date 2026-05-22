@@ -117,10 +117,12 @@ export function TabBilanHebdoMobile() {
   const [ytd, setYtd] = useState({ caVentes: 0, margeVentes: 0, nbVentes: 0, caPieces: 0, nbPieces: 0 });
 
   // ─── Drawer (détail camion) ──
+  // Le drawer fait son propre fetch (photo + coûts) à partir du stockNumero.
+  // On lui passe juste le contexte initial (avec prix/depot connus du bilan).
   const [selectedCamion, setSelectedCamion] = useState<{
-    titre: string;
-    sousLignes: Array<{ label: string; value: string; color?: string; bold?: boolean }>;
     stockNumero: string;
+    contexte:    'pipeline' | 'parti' | 'location' | 'depot';
+    initialInfo: Record<string, string | number | boolean | null>;
   } | null>(null);
 
   useEffect(() => { charger(); }, []);
@@ -301,65 +303,67 @@ export function TabBilanHebdoMobile() {
     );
   }
 
-  // ─── Drawer helper : ouvre un camion (pipeline / parti / etc.) ──
+  // ─── Drawer helpers : ouvre un camion avec son contexte ──
   const ouvrirPipelineRow = (r: PipelineRow) => {
     const prix = pricesMap[r.numero] ?? r.prix_demande ?? null;
     const depot = r.paiement_depot ? (r.montant_depot ?? 0) : 0;
-    const solde = prix != null ? Math.max(prix - depot, 0) : null;
     setSelectedCamion({
-      titre: `#${r.numero} — ${[r.annee, r.marque, r.modele].filter(Boolean).join(' ') || 'Camion'}`,
       stockNumero: r.numero,
-      sousLignes: [
-        { label: 'Client',         value: r.client_acheteur ?? '—' },
-        { label: 'État commercial', value: r.etat_commercial.toUpperCase() },
-        { label: 'Prix demandé',    value: fmt$(prix), bold: true },
-        { label: 'Dépôt reçu',      value: depot > 0 ? fmt$(depot) : '—', color: depot > 0 ? AMBER : undefined },
-        { label: 'Mode paiement',   value: r.mode_paiement_depot ?? '—' },
-        { label: 'Solde à venir',   value: fmt$(solde), color: RED, bold: true },
-        { label: 'PO reçu',         value: r.paiement_po ? '✅ Oui' : 'Non' },
-        { label: 'En financement',  value: r.en_financement ? '✅ Oui' : 'Non' },
-      ],
+      contexte: 'pipeline',
+      initialInfo: {
+        client:         r.client_acheteur,
+        etat_commercial: r.etat_commercial,
+        prix_demande:   prix,
+        montant_depot:  depot,
+        mode_paiement_depot: r.mode_paiement_depot,
+        paiement_po:    r.paiement_po,
+        en_financement: r.en_financement,
+        marque: r.marque, modele: r.modele, annee: r.annee,
+      },
     });
   };
 
   const ouvrirParti = (r: PartiRow) => {
     setSelectedCamion({
-      titre: `#${r.stock_numero} — ${r.vehicule ?? [r.annee, r.marque, r.modele].filter(Boolean).join(' ') ?? 'Camion'}`,
       stockNumero: r.stock_numero,
-      sousLignes: [
-        { label: 'Client',       value: r.client ?? '—' },
-        { label: 'Date vente',   value: r.date_vente ?? '—' },
-        { label: 'Prix vente',   value: fmt$(r.prix_vente), bold: true, color: GREEN },
-        { label: 'Marge',        value: fmt$(r.marge_profit), bold: true, color: (r.marge_profit ?? 0) >= 0 ? GREEN : RED },
-        { label: '% Marge',      value: r.pct_profit != null ? `${r.pct_profit.toFixed(1)} %` : '—', color: (r.pct_profit ?? 0) >= 10 ? GREEN : (r.pct_profit ?? 0) >= 5 ? AMBER : RED },
-      ],
+      contexte: 'parti',
+      initialInfo: {
+        client:      r.client,
+        date_vente:  r.date_vente,
+        prix_vente:  r.prix_vente,
+        marge_profit: r.marge_profit,
+        pct_profit:  r.pct_profit,
+        vehicule:    r.vehicule,
+        marque: r.marque, modele: r.modele, annee: r.annee,
+      },
     });
   };
 
   const ouvrirLocation = (l: LocationRow) => {
     setSelectedCamion({
-      titre: `#${l.stock_numero} — En location`,
       stockNumero: l.stock_numero,
-      sousLignes: [
-        { label: 'Client',          value: l.client ?? '—' },
-        { label: 'Date début',      value: l.date_debut },
-        { label: 'Montant mensuel', value: fmt$(l.montant_mensuel), bold: true, color: PURPLE },
-        { label: 'Mois écoulés',    value: String(l.mois_ecoules) },
-        { label: 'Revenu cumulé',   value: fmt$(l.revenu_cumule), bold: true, color: GREEN },
-      ],
+      contexte: 'location',
+      initialInfo: {
+        client:          l.client,
+        date_debut:      l.date_debut,
+        montant_mensuel: l.montant_mensuel,
+        mois_ecoules:    l.mois_ecoules,
+        revenu_cumule:   l.revenu_cumule,
+      },
     });
   };
 
   const ouvrirDepotW = (d: DepotWeekRow) => {
     setSelectedCamion({
-      titre: `#${d.numero} — ${[d.annee, d.marque, d.modele].filter(Boolean).join(' ') || 'Camion'}`,
       stockNumero: d.numero,
-      sousLignes: [
-        { label: 'Client',       value: d.client_acheteur ?? '—' },
-        { label: 'Dépôt reçu',   value: fmt$(d.montant_depot), bold: true, color: AMBER },
-        { label: 'Date',         value: d.date_depot ?? '—' },
-        { label: 'Mode',         value: d.mode_paiement_depot ?? '—' },
-      ],
+      contexte: 'depot',
+      initialInfo: {
+        client:        d.client_acheteur,
+        montant_depot: d.montant_depot,
+        date_depot:    d.date_depot,
+        mode_paiement: d.mode_paiement_depot,
+        marque: d.marque, modele: d.modele, annee: d.annee,
+      },
     });
   };
 
@@ -692,24 +696,89 @@ function YtdCell({ label, value, sub, color, bold }: {
   );
 }
 
+/** Fiche complète d'un camion : photo + identité + coûts + section contextuelle */
 function DrawerCamion({ data, onClose }: {
-  data: { titre: string; sousLignes: Array<{ label: string; value: string; color?: string; bold?: boolean }>; stockNumero: string };
+  data: {
+    stockNumero: string;
+    contexte: 'pipeline' | 'parti' | 'location' | 'depot';
+    initialInfo: Record<string, any>;
+  };
   onClose: () => void;
 }) {
-  // Animation d'apparition simple
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [identite, setIdentite] = useState<{
+    marque: string | null; modele: string | null; annee: number | null;
+    type: string | null; variante: string | null;
+    date_achat: string | null; date_vva: string | null;
+    client_acheteur: string | null;
+  } | null>(null);
+  const [couts, setCouts] = useState<{
+    prix_achat_reel: number | null;
+    cout_total_depense: number | null;  // total M.O. dépensée
+    cout_achat: number | null;
+    prix_demande: number | null;
+    age_jours: number | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const [photoRes, identRes, coutsRes] = await Promise.all([
+        supabase.from('prod_inventaire').select('photo_url').eq('numero', data.stockNumero).maybeSingle(),
+        supabase.from('prod_inventaire')
+          .select('marque, modele, annee, type, variante, date_achat, date_vva, client_acheteur')
+          .eq('numero', data.stockNumero).maybeSingle(),
+        supabase.from('prod_inventaire_couts')
+          .select('prix_achat_reel, cout_total_depense, cout_achat, prix_demande, age_jours')
+          .eq('stock_numero', data.stockNumero).maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setPhoto((photoRes.data as any)?.photo_url ?? null);
+      setIdentite(identRes.data as any);
+      setCouts(coutsRes.data as any);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [data.stockNumero]);
+
+  // ─── Calculs financiers ──
+  const prixAchat   = couts?.prix_achat_reel    ?? couts?.cout_achat ?? 0;
+  const mo          = couts?.cout_total_depense ?? 0;
+  const totalInvesti = prixAchat + mo;
+  const prixDemande = couts?.prix_demande ?? (data.initialInfo.prix_demande as number | null) ?? null;
+  const prixVente   = (data.initialInfo.prix_vente as number | null) ?? null;
+  const margeReelle = prixVente != null ? prixVente - totalInvesti : null;
+  const margeProj   = prixDemande != null ? prixDemande - totalInvesti : null;
+  const pctReel     = prixVente != null && prixVente > 0 && margeReelle != null ? (margeReelle / prixVente) * 100 : null;
+  const pctProj     = prixDemande != null && prixDemande > 0 && margeProj != null ? (margeProj / prixDemande) * 100 : null;
+
+  // Solde à venir (pipeline)
+  const montantDepot = (data.initialInfo.montant_depot as number | null) ?? 0;
+  const soldeAVenir  = prixDemande != null ? Math.max(prixDemande - montantDepot, 0) : null;
+
+  // ─── Construction du label titre ──
+  const annee  = identite?.annee  ?? data.initialInfo.annee  ?? null;
+  const marque = identite?.marque ?? data.initialInfo.marque ?? null;
+  const modele = identite?.modele ?? data.initialInfo.modele ?? null;
+  const titre = [annee, marque, modele].filter(Boolean).join(' ') || 'Camion';
+
+  const ctxColor = data.contexte === 'pipeline' ? RED : data.contexte === 'parti' ? GREEN : data.contexte === 'location' ? PURPLE : AMBER;
+  const ctxLabel = data.contexte === 'pipeline' ? 'EN ATTENTE DE PAIEMENT' : data.contexte === 'parti' ? 'VENDU & PAYÉ' : data.contexte === 'location' ? 'EN LOCATION' : 'DÉPÔT REÇU';
 
   return (
     <div
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(0,0,0,0.6)',
+        background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'flex-end',
-        animation: 'fadeIn 0.15s ease',
       }}
     >
       <div
@@ -717,40 +786,191 @@ function DrawerCamion({ data, onClose }: {
         style={{
           width: '100%', background: '#1a1a2e',
           borderRadius: '20px 20px 0 0',
-          padding: '20px 20px 32px',
-          maxHeight: '85vh', overflowY: 'auto',
+          maxHeight: '92vh', overflowY: 'auto',
           color: 'white',
         }}
       >
         {/* Poignée */}
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '0 auto 16px' }} />
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '10px auto 0' }} />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{data.titre}</div>
+        {/* Photo */}
+        {photo ? (
+          <img src={photo} alt={titre} style={{
+            width: '100%', height: 200, objectFit: 'cover',
+            marginTop: 10,
+          }} />
+        ) : (
+          <div style={{
+            width: '100%', height: 100, marginTop: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(255,255,255,0.2)', fontSize: 13, background: 'rgba(255,255,255,0.02)',
+          }}>
+            📷 Aucune photo
+          </div>
+        )}
+
+        <div style={{ padding: '16px 20px 32px' }}>
+          {/* Bouton fermer flottant */}
           <button onClick={onClose} style={{
-            width: 32, height: 32, borderRadius: '50%', border: 'none',
-            background: 'rgba(255,255,255,0.08)', color: 'white',
-            cursor: 'pointer', fontSize: 14,
+            position: 'absolute', top: 24, right: 16,
+            width: 36, height: 36, borderRadius: '50%', border: 'none',
+            background: 'rgba(0,0,0,0.5)', color: 'white',
+            cursor: 'pointer', fontSize: 16, zIndex: 1,
+            backdropFilter: 'blur(8px)',
           }}>✕</button>
-        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {data.sousLignes.map(l => (
-            <div key={l.label} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8,
-            }}>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{l.label}</span>
-              <span style={{
-                fontSize: l.bold ? 15 : 13,
-                fontWeight: l.bold ? 800 : 600,
-                color: l.color ?? 'white',
-                textAlign: 'right',
-              }}>{l.value}</span>
+          {/* En-tête : badge contexte + numero + titre */}
+          <div style={{
+            display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: '0.05em',
+            background: `${ctxColor}22`, color: ctxColor,
+            padding: '4px 10px', borderRadius: 8, marginBottom: 10,
+          }}>
+            {ctxLabel}
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 900, color: AMBER, lineHeight: 1, marginBottom: 4 }}>
+            #{data.stockNumero}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>
+            {titre}
+          </div>
+
+          {loading ? (
+            <div style={{ padding: 30, textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+              Chargement des détails…
             </div>
-          ))}
+          ) : (
+            <>
+              {/* ─── Identité ── */}
+              <Section titre="Identité">
+                <Ligne label="Client / Acheteur" value={
+                  (data.initialInfo.client as string | null) ??
+                  identite?.client_acheteur ?? '—'
+                } bold />
+                {identite?.type && <Ligne label="Type" value={identite.type} />}
+                {identite?.variante && <Ligne label="Variante" value={identite.variante} />}
+                {identite?.date_achat && <Ligne label="Date achat" value={identite.date_achat.slice(0, 10)} />}
+                {couts?.age_jours != null && (
+                  <Ligne label="Âge en inventaire" value={`${couts.age_jours} j`}
+                    color={couts.age_jours <= 60 ? GREEN : couts.age_jours <= 120 ? AMBER : RED} />
+                )}
+              </Section>
+
+              {/* ─── Coûts ── */}
+              <Section titre="Coûts (depuis la base)">
+                <Ligne label="Prix d'achat réel" value={fmt$(prixAchat)} />
+                <Ligne label="Coût M.O. dépensé" value={fmt$(mo)} color={mo > 0 ? AMBER : undefined} />
+                <Ligne label="TOTAL INVESTI" value={fmt$(totalInvesti)} bold />
+              </Section>
+
+              {/* ─── Section contextuelle ── */}
+              {data.contexte === 'pipeline' && (
+                <Section titre="Vente en attente">
+                  <Ligne label="État commercial" value={String(data.initialInfo.etat_commercial ?? '—').toUpperCase()} />
+                  <Ligne label="Prix demandé" value={fmt$(prixDemande)} bold />
+                  <Ligne label="Dépôt reçu"
+                    value={montantDepot > 0 ? fmt$(montantDepot) : '—'}
+                    color={montantDepot > 0 ? AMBER : undefined}
+                    bold={montantDepot > 0}
+                  />
+                  {data.initialInfo.mode_paiement_depot && (
+                    <Ligne label="Mode paiement" value={String(data.initialInfo.mode_paiement_depot)} />
+                  )}
+                  <Ligne label="PO reçu" value={data.initialInfo.paiement_po ? '✅ Oui' : 'Non'} />
+                  <Ligne label="En financement" value={data.initialInfo.en_financement ? '✅ Oui' : 'Non'} />
+                  <Ligne label="SOLDE À VENIR" value={fmt$(soldeAVenir)} color={RED} bold />
+                  {margeProj != null && (
+                    <>
+                      <Ligne label="Marge projetée" value={fmt$(margeProj)} color={margeProj >= 0 ? GREEN : RED} bold />
+                      {pctProj != null && (
+                        <Ligne label="% marge projetée" value={`${pctProj.toFixed(1)} %`}
+                          color={pctProj >= 10 ? GREEN : pctProj >= 5 ? AMBER : RED} />
+                      )}
+                    </>
+                  )}
+                </Section>
+              )}
+
+              {data.contexte === 'parti' && (
+                <Section titre="Vente finalisée">
+                  <Ligne label="Date vente" value={String(data.initialInfo.date_vente ?? '—')} />
+                  <Ligne label="Prix de vente" value={fmt$(prixVente)} color={GREEN} bold />
+                  <Ligne label="Marge réelle" value={fmt$(margeReelle ?? data.initialInfo.marge_profit as number)}
+                    color={((margeReelle ?? (data.initialInfo.marge_profit as number)) ?? 0) >= 0 ? GREEN : RED} bold />
+                  {(pctReel ?? data.initialInfo.pct_profit) != null && (
+                    <Ligne label="% marge réelle"
+                      value={`${((pctReel ?? data.initialInfo.pct_profit) as number).toFixed(1)} %`}
+                      color={((pctReel ?? data.initialInfo.pct_profit) as number) >= 10 ? GREEN : ((pctReel ?? data.initialInfo.pct_profit) as number) >= 5 ? AMBER : RED}
+                    />
+                  )}
+                </Section>
+              )}
+
+              {data.contexte === 'location' && (
+                <Section titre="Contrat de location">
+                  <Ligne label="Date début" value={String(data.initialInfo.date_debut)} />
+                  <Ligne label="Montant mensuel" value={fmt$(data.initialInfo.montant_mensuel as number)} color={PURPLE} bold />
+                  <Ligne label="Mois écoulés" value={String(data.initialInfo.mois_ecoules)} />
+                  <Ligne label="Revenu cumulé" value={fmt$(data.initialInfo.revenu_cumule as number)} color={GREEN} bold />
+                  {prixDemande != null && (
+                    <Ligne label="Prix demandé (si vendu)" value={fmt$(prixDemande)} />
+                  )}
+                </Section>
+              )}
+
+              {data.contexte === 'depot' && (
+                <Section titre="Dépôt reçu">
+                  <Ligne label="Montant" value={fmt$(data.initialInfo.montant_depot as number)} color={AMBER} bold />
+                  <Ligne label="Date" value={String(data.initialInfo.date_depot ?? '—')} />
+                  <Ligne label="Mode paiement" value={String(data.initialInfo.mode_paiement ?? '—')} />
+                  {prixDemande != null && (
+                    <>
+                      <Ligne label="Prix demandé total" value={fmt$(prixDemande)} bold />
+                      <Ligne label="Solde restant" value={fmt$(Math.max(prixDemande - (data.initialInfo.montant_depot as number ?? 0), 0))} color={RED} bold />
+                    </>
+                  )}
+                </Section>
+              )}
+            </>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Section({ titre, children }: { titre: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{
+        fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
+        color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase',
+        marginBottom: 8,
+      }}>{titre}</div>
+      <div style={{
+        background: 'rgba(255,255,255,0.04)', borderRadius: 10,
+        padding: '4px 12px',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Ligne({ label, value, color, bold }: {
+  label: string; value: string; color?: string; bold?: boolean;
+}) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+    }}>
+      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{label}</span>
+      <span style={{
+        fontSize: bold ? 15 : 13,
+        fontWeight: bold ? 800 : 600,
+        color: color ?? 'white',
+        textAlign: 'right',
+      }}>{value}</span>
     </div>
   );
 }
