@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { locationService, type LocationAvecCumul } from '../services/locationService';
 import { LocationsManager } from './LocationsManager';
+import { paiementService, type VentePaiement, STATUT_LABELS, STATUT_COLORS, STATUT_EMOJIS } from '../services/paiementService';
+import { PaiementsManager } from './PaiementsManager';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -163,6 +165,9 @@ export function VueBilanHebdo() {
   const [campsInvLoc,  setCampsInvLoc]  = useState<{ numero: string; marque: string|null; modele: string|null; annee: number|null; client_acheteur: string|null }[]>([]);
   const [showLocManager,    setShowLocManager]    = useState(false);
   const [stockPrerempli,    setStockPrerempli]    = useState<string | undefined>(undefined);
+  // Vendus non payés (prod_ventes statut_paiement != 'paye')
+  const [vendusNonPayes,    setVendusNonPayes]    = useState<VentePaiement[]>([]);
+  const [showPaiements,     setShowPaiements]     = useState(false);
 
   // ── Chargement ────────────────────────────────────────────────
   useEffect(() => { charger(); }, []);
@@ -341,6 +346,15 @@ export function VueBilanHebdo() {
         console.warn('[VueBilanHebdo] Locations non chargées (table prod_locations manquante ?):', e);
         setLocations([]);
         setCampsInvLoc([]);
+      }
+
+      // 13. Vendus non payés (prod_ventes avec statut_paiement != 'paye')
+      try {
+        const nonPayes = await paiementService.getNonPayes();
+        setVendusNonPayes(nonPayes);
+      } catch (e) {
+        console.warn('[VueBilanHebdo] Paiements non chargés (colonnes manquantes ? Lance le SQL.):', e);
+        setVendusNonPayes([]);
       }
 
     } catch (err) {
@@ -820,11 +834,100 @@ export function VueBilanHebdo() {
         );
       })()}
 
+      {/* ── Vendus non payés — argent à recevoir des ventes finalisées ── */}
+      {(() => {
+        const totalRecu      = vendusNonPayes.reduce((s, v) => s + v.montantRecu, 0);
+        const totalARecevoir = vendusNonPayes.reduce((s, v) => s + v.soldeARecevoir, 0);
+        const totalPrix      = vendusNonPayes.reduce((s, v) => s + (v.prixVente ?? 0), 0);
+        return (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 10 }}>
+              <SectionTitle>💰 Vendus non payés ({vendusNonPayes.length})</SectionTitle>
+              <button onClick={() => setShowPaiements(true)} style={{
+                padding: '8px 14px', borderRadius: 8, border: 'none',
+                background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+              }}>
+                💰 Suivi des paiements
+              </button>
+            </div>
+            {vendusNonPayes.length === 0 ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '12px 0' }}>
+                ✅ Tous tes vendus sont marqués comme payés.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
+                  {[
+                    { label: 'Camions non payés', value: String(vendusNonPayes.length), color: undefined },
+                    { label: 'Prix de vente total', value: fmt$(totalPrix), color: undefined },
+                    { label: 'Déjà reçu', value: fmt$(totalRecu), color: '#4ade80' },
+                    { label: 'Reste à recevoir', value: fmt$(totalARecevoir), color: '#f87171' },
+                  ].map(k => (
+                    <div key={k.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: k.color ?? 'white' }}>{k.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <TH>#Stock</TH>
+                        <TH>Statut paiement</TH>
+                        <TH right>Prix vente</TH>
+                        <TH right>Reçu</TH>
+                        <TH right>Solde à recevoir</TH>
+                        <TH>Notes</TH>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vendusNonPayes.map(v => (
+                        <tr key={v.stockNumero}>
+                          <TD bold color="#a78bfa">#{v.stockNumero}</TD>
+                          <TD>
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                              background: `${STATUT_COLORS[v.statutPaiement]}22`,
+                              color: STATUT_COLORS[v.statutPaiement],
+                            }}>
+                              {STATUT_EMOJIS[v.statutPaiement]} {STATUT_LABELS[v.statutPaiement]}
+                            </span>
+                          </TD>
+                          <TD right>{fmt$(v.prixVente)}</TD>
+                          <TD right color="#4ade80">{fmt$(v.montantRecu)}</TD>
+                          <TD right bold color="#f87171">{fmt$(v.soldeARecevoir)}</TD>
+                          <TD>{v.notesPaiement ?? '—'}</TD>
+                        </tr>
+                      ))}
+                      <tr style={{ background: 'rgba(248,113,113,0.08)' }}>
+                        <TD bold colSpan={2 as any}>TOTAL</TD>
+                        <TD right bold>{fmt$(totalPrix)}</TD>
+                        <TD right bold color="#4ade80">{fmt$(totalRecu)}</TD>
+                        <TD right bold color="#f87171">{fmt$(totalARecevoir)}</TD>
+                        <TD>{''}</TD>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
+
       {/* Modal de gestion des locations */}
       {showLocManager && (
         <LocationsManager
           onClose={() => { setShowLocManager(false); setStockPrerempli(undefined); charger(); }}
           stockInitial={stockPrerempli}
+        />
+      )}
+
+      {/* Modal de suivi des paiements */}
+      {showPaiements && (
+        <PaiementsManager
+          onClose={() => { setShowPaiements(false); charger(); }}
         />
       )}
 

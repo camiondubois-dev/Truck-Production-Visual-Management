@@ -12,6 +12,7 @@ import type { Item } from '../types/item.types';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
 import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
+import { PaiementsManager } from './PaiementsManager';
 
 /** useGarage qui ne crash pas si pas de provider. */
 function useGarageOptional(): { items: Item[] } {
@@ -54,6 +55,7 @@ function VueSuiviVenteDesktop() {
   const [tvMode, setTvMode] = useState(false);
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
   const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [showPaiements, setShowPaiements] = useState(false);
 
   // Horloge live
   useEffect(() => {
@@ -202,8 +204,22 @@ function VueSuiviVenteDesktop() {
           </div>
         </button>
 
-        {/* Horloge + bouton TV */}
+        {/* Bouton Paiements (gestion seulement) + Horloge + bouton TV */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isGestion && (
+            <button onClick={() => setShowPaiements(true)}
+              title="Suivi des paiements"
+              style={{
+                background: '#22c55e22',
+                border: '1px solid #22c55e66',
+                color: '#86efac', padding: 'clamp(7px, 0.9vw, 11px) clamp(10px, 1.2vw, 14px)',
+                borderRadius: 8, cursor: 'pointer',
+                fontSize: 'clamp(11px, 1vw, 13px)', fontWeight: 700,
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              💰 Paiements
+            </button>
+          )}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: 'monospace', fontSize: 'clamp(16px, 1.6vw, 22px)', fontWeight: 700, lineHeight: 1, letterSpacing: '0.04em' }}>
               {now.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
@@ -305,6 +321,9 @@ function VueSuiviVenteDesktop() {
 
       {/* Modal PDF */}
       {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
+
+      {/* Modal Suivi des paiements */}
+      {showPaiements && <PaiementsManager onClose={() => setShowPaiements(false)} />}
 
       {/* Animation ASAP */}
       <style>{`
