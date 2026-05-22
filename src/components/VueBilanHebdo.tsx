@@ -72,6 +72,21 @@ interface PipelineRow {
   livraison_asap: boolean;
 }
 
+/** Vendus & payés — source de vérité : prod_rapport_profitabilite */
+interface PartiRow {
+  stock_numero:     string;
+  date_vente:       string | null;
+  vehicule:         string | null;
+  marque?:          string | null;
+  modele?:          string | null;
+  annee?:           number | null;
+  client:           string | null;
+  prix_vente:       number | null;
+  marge_profit:     number | null;
+  pct_profit:       number | null;
+  jours_inventaire: number | null;
+}
+
 interface VenteWeekRow {
   date_vente: string;
   prix_vente: number;
@@ -134,7 +149,7 @@ export function VueBilanHebdo() {
   // ── State ─────────────────────────────────────────────────────
   const [loading,      setLoading]      = useState(true);
   const [pipeline,     setPipeline]     = useState<PipelineRow[]>([]);
-  const [partis,       setPartis]       = useState<PipelineRow[]>([]);
+  const [partis,       setPartis]       = useState<PartiRow[]>([]);
   const [ventesWeek,   setVentesWeek]   = useState<VenteWeekRow[]>([]);
   const [ventesPrev,   setVentesPrev]   = useState<VenteWeekRow[]>([]);
   const [piecesWeek,   setPiecesWeek]   = useState<PieceWeekRow[]>([]);
@@ -176,17 +191,21 @@ export function VueBilanHebdo() {
         .neq('etat_commercial', 'location')
         .or('etat_commercial.eq.reserve,etat_commercial.eq.vendu,paiement_depot.eq.true,paiement_po.eq.true,en_financement.eq.true');
 
-      // 3. Partis (payés complet, 60 derniers jours) — vendus uniquement (pas locations)
+      // 3. Vendus & payés (60 derniers jours) — SOURCE : prod_rapport_profitabilite
+      //    C'est le vrai rapport de vente, pas l'inventaire. Beaucoup plus précis.
+      const dateLimite60j = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
       const { data: partisData } = await supabase
-        .from('prod_inventaire')
-        .select('id, numero, marque, modele, annee, etat_commercial, client_acheteur, vendeur_id, paiement_depot, paiement_complet, paiement_po, en_financement, montant_depot, date_depot, mode_paiement_depot, livraison_asap')
-        .in('etat_commercial', ['vendu'])
-        .in('type', ['eau', 'detail'])
-        .eq('paiement_complet', true)
-        .gte('updated_at', new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString());
+        .from('prod_rapport_profitabilite')
+        .select('stock_numero, date_vente, vehicule, marque, modele, annee, client, prix_vente, marge_profit, pct_profit, jours_inventaire')
+        .gte('date_vente', dateLimite60j)
+        .order('date_vente', { ascending: false });
 
       // 4. Prix demandé + statut prod_ventes (pour filtrer les ventes déjà finalisées)
-      const numeros = [...(invData ?? []), ...(partisData ?? [])].map((r: any) => r.numero);
+      //    On utilise numero (invData) + stock_numero (partisData rapport profitabilité)
+      const numeros = [
+        ...(invData ?? []).map((r: any) => r.numero),
+        ...(partisData ?? []).map((r: any) => r.stock_numero),
+      ].filter(Boolean);
       let prixMap: Record<string, number> = {};
       const vendusFinalises = new Set<string>();
       if (numeros.length > 0) {
@@ -214,7 +233,21 @@ export function VueBilanHebdo() {
       const pipelineFiltre = (invData ?? []).filter((r: any) => !vendusFinalises.has(r.numero));
 
       setPipeline(pipelineFiltre.map(toRow));
-      setPartis((partisData ?? []).map(toRow));
+
+      // Partis : mapping direct depuis prod_rapport_profitabilite
+      setPartis((partisData ?? []).map((r: any): PartiRow => ({
+        stock_numero:     r.stock_numero,
+        date_vente:       r.date_vente ?? null,
+        vehicule:         r.vehicule ?? null,
+        marque:           r.marque ?? null,
+        modele:           r.modele ?? null,
+        annee:            r.annee ?? null,
+        client:           r.client ?? null,
+        prix_vente:       r.prix_vente != null ? Number(r.prix_vente) : null,
+        marge_profit:     r.marge_profit != null ? Number(r.marge_profit) : null,
+        pct_profit:       r.pct_profit != null ? Number(r.pct_profit) : null,
+        jours_inventaire: r.jours_inventaire != null ? Number(r.jours_inventaire) : null,
+      })));
 
       // 5. Pièces cette semaine
       const { data: pwData } = await supabase
@@ -821,9 +854,26 @@ export function VueBilanHebdo() {
       )}
 
       {/* ── Camions vendus & partis ──────────────────────────────── */}
-      {partis.length > 0 && (
+      {partis.length > 0 && (() => {
+        const totalVente = partis.reduce((s, r) => s + (r.prix_vente ?? 0), 0);
+        const totalMarge = partis.reduce((s, r) => s + (r.marge_profit ?? 0), 0);
+        const pctMoyen   = totalVente > 0 ? (totalMarge / totalVente * 100) : null;
+        return (
         <>
           <SectionTitle>✅ Vendus & payés (60 derniers jours — {partis.length})</SectionTitle>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
+            {[
+              { label: 'Nb camions vendus',  value: String(partis.length), color: undefined },
+              { label: 'CA total (60 j)',    value: fmt$(totalVente), color: '#4ade80' },
+              { label: 'Marge totale (60 j)', value: fmt$(totalMarge), color: totalMarge >= 0 ? '#4ade80' : '#f87171' },
+              { label: 'Marge moyenne',      value: pctMoyen != null ? `${pctMoyen.toFixed(1)} %` : '—', color: pctMoyen != null && pctMoyen >= 10 ? '#4ade80' : '#f59e0b' },
+            ].map(k => (
+              <div key={k.label} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 18px' }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: k.color ?? 'white' }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
           <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -831,27 +881,43 @@ export function VueBilanHebdo() {
                   <TH>#Stock</TH>
                   <TH>Camion</TH>
                   <TH>Client</TH>
-                  <TH>Vendeur</TH>
-                  <TH right>Prix</TH>
-                  <TH>Mode paiement</TH>
+                  <TH>Date vente</TH>
+                  <TH right>Prix vente</TH>
+                  <TH right>Marge</TH>
+                  <TH right>% Marge</TH>
+                  <TH right>Jours inv.</TH>
                 </tr>
               </thead>
               <tbody>
-                {partis.map(r => (
-                  <tr key={r.id}>
-                    <TD bold color="#4ade80">#{r.numero}</TD>
-                    <TD>{[r.annee, r.marque, r.modele].filter(Boolean).join(' ') || '—'}</TD>
-                    <TD>{r.client_acheteur ?? '—'}</TD>
-                    <TD>{r.vendeur_nom ?? '—'}</TD>
-                    <TD right bold>{fmt$(r.prix_demande ?? null)}</TD>
-                    <TD>{r.mode_paiement_depot ?? '—'}</TD>
-                  </tr>
-                ))}
+                {partis.map(r => {
+                  const margeColor = (r.marge_profit ?? 0) >= 0 ? '#4ade80' : '#f87171';
+                  const pctColor   = (r.pct_profit ?? 0) >= 10 ? '#4ade80' : (r.pct_profit ?? 0) >= 5 ? '#f59e0b' : '#f87171';
+                  return (
+                    <tr key={r.stock_numero}>
+                      <TD bold color="#4ade80">#{r.stock_numero}</TD>
+                      <TD>{r.vehicule ?? [r.annee, r.marque, r.modele].filter(Boolean).join(' ') ?? '—'}</TD>
+                      <TD>{r.client ?? '—'}</TD>
+                      <TD>{r.date_vente ?? '—'}</TD>
+                      <TD right bold>{fmt$(r.prix_vente)}</TD>
+                      <TD right bold color={margeColor}>{fmt$(r.marge_profit)}</TD>
+                      <TD right bold color={pctColor}>{r.pct_profit != null ? `${r.pct_profit.toFixed(1)} %` : '—'}</TD>
+                      <TD right>{r.jours_inventaire ?? '—'}</TD>
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: 'rgba(74,222,128,0.08)', borderTop: '1px solid rgba(74,222,128,0.2)' }}>
+                  <TD bold colSpan={4 as any}>TOTAL</TD>
+                  <TD right bold color="#4ade80">{fmt$(totalVente)}</TD>
+                  <TD right bold color={totalMarge >= 0 ? '#4ade80' : '#f87171'}>{fmt$(totalMarge)}</TD>
+                  <TD right bold color={pctMoyen != null && pctMoyen >= 10 ? '#4ade80' : '#f59e0b'}>{pctMoyen != null ? `${pctMoyen.toFixed(1)} %` : '—'}</TD>
+                  <TD>{''}</TD>
+                </tr>
               </tbody>
             </table>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* ── Analyse globale AF courant ───────────────────────────── */}
       <SectionTitle>📊 Analyse globale — AF {fy} (à ce jour)</SectionTitle>
