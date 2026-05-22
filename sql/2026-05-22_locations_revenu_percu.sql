@@ -15,8 +15,14 @@ ALTER TABLE prod_locations
 COMMENT ON COLUMN prod_locations.revenu_percu IS
   'Montant total réellement reçu (manuel). Si NULL, utilise le calcul auto (mois × mensuel).';
 
--- 2. Recréer la vue avec la logique de priorité revenu_percu > calcul auto
-CREATE OR REPLACE VIEW prod_locations_avec_cumul AS
+-- 2. DROP les vues d'abord (CREATE OR REPLACE ne permet pas de réordonner les colonnes
+--    quand la table sous-jacente change de structure)
+--    Ordre important : prod_locations_total_par_camion dépend de prod_locations_avec_cumul
+DROP VIEW IF EXISTS prod_locations_total_par_camion;
+DROP VIEW IF EXISTS prod_locations_avec_cumul;
+
+-- 3. Recréer la vue avec la logique de priorité revenu_percu > calcul auto
+CREATE VIEW prod_locations_avec_cumul AS
 SELECT
   l.*,
   CASE WHEN l.date_fin IS NULL THEN true ELSE false END AS actif,
@@ -40,8 +46,8 @@ SELECT
   (l.revenu_percu IS NOT NULL) AS revenu_manuel
 FROM prod_locations l;
 
--- 3. Recréer la vue agrégée (utilise prod_locations_avec_cumul, pas de changement)
-CREATE OR REPLACE VIEW prod_locations_total_par_camion AS
+-- 4. Recréer la vue agrégée (utilise prod_locations_avec_cumul, pas de changement)
+CREATE VIEW prod_locations_total_par_camion AS
 SELECT
   stock_numero,
   SUM(revenu_cumule)               AS revenu_location_total,
