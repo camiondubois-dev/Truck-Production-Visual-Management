@@ -144,7 +144,10 @@ export function VueBilanHebdo() {
   const [ytdVentes,    setYtdVentes]    = useState({ ca: 0, marge: 0, nb: 0 });
   const [ytdPieces,    setYtdPieces]    = useState({ ca: 0, nb: 0 });
   const [locations,    setLocations]    = useState<LocationAvecCumul[]>([]);
-  const [showLocManager, setShowLocManager] = useState(false);
+  // Camions marqués en location dans prod_inventaire (peut ou non avoir de contrat)
+  const [campsInvLoc,  setCampsInvLoc]  = useState<{ numero: string; marque: string|null; modele: string|null; annee: number|null; client_acheteur: string|null }[]>([]);
+  const [showLocManager,    setShowLocManager]    = useState(false);
+  const [stockPrerempli,    setStockPrerempli]    = useState<string | undefined>(undefined);
 
   // ── Chargement ────────────────────────────────────────────────
   useEffect(() => { charger(); }, []);
@@ -281,13 +284,22 @@ export function VueBilanHebdo() {
       }), { ca: 0, nb: 0 });
       setYtdPieces(ytdP);
 
-      // 12. Locations actives (revenu cumulé)
+      // 12. Locations actives (revenu cumulé) + camions marqués 'location' dans inventaire
       try {
-        const locs = await locationService.getActifs();
+        const [locs, { data: invLoc }] = await Promise.all([
+          locationService.getActifs(),
+          supabase
+            .from('prod_inventaire')
+            .select('numero, marque, modele, annee, client_acheteur')
+            .eq('etat_commercial', 'location')
+            .neq('statut', 'archive'),
+        ]);
         setLocations(locs);
+        setCampsInvLoc((invLoc ?? []) as any);
       } catch (e) {
         console.warn('[VueBilanHebdo] Locations non chargées (table prod_locations manquante ?):', e);
         setLocations([]);
+        setCampsInvLoc([]);
       }
 
     } catch (err) {
@@ -602,28 +614,69 @@ export function VueBilanHebdo() {
 
       {/* ── Locations en cours — revenus cumulés ─────────────────── */}
       {(() => {
-        const totalRevenuLocations = locations.reduce((s, l) => s + (l.revenuCumule ?? 0), 0);
-        const totalMensuel         = locations.reduce((s, l) => s + (l.montantMensuel ?? 0), 0);
+        // Index des contrats par stock_numero pour matcher avec l'inventaire
+        const contratsByStock: Record<string, LocationAvecCumul> = {};
+        for (const l of locations) contratsByStock[l.stockNumero] = l;
+
+        // Liste fusionnée : tous les camions où etat_commercial='location' DANS L'INVENTAIRE,
+        // plus les contrats existants qui ne seraient pas (encore) marqués dans l'inventaire.
+        const stocksInv = new Set(campsInvLoc.map(c => c.numero));
+        const lignes: Array<{
+          stockNumero: string;
+          client:      string | null;
+          marque:      string | null;
+          modele:      string | null;
+          annee:       number | null;
+          contrat:     LocationAvecCumul | null;
+        }> = [];
+
+        // 1. Camions marqués 'location' dans inventaire (avec ou sans contrat)
+        for (const c of campsInvLoc) {
+          const contrat = contratsByStock[c.numero] ?? null;
+          lignes.push({
+            stockNumero: c.numero,
+            client:      contrat?.client ?? c.client_acheteur,
+            marque:      c.marque, modele: c.modele, annee: c.annee,
+            contrat,
+          });
+        }
+        // 2. Contrats actifs dont le camion n'a PAS etat_commercial='location' (incohérence)
+        for (const l of locations) {
+          if (!stocksInv.has(l.stockNumero)) {
+            lignes.push({
+              stockNumero: l.stockNumero, client: l.client,
+              marque: null, modele: null, annee: null, contrat: l,
+            });
+          }
+        }
+
+        const avecContrat = lignes.filter(li => li.contrat);
+        const sansContrat = lignes.filter(li => !li.contrat);
+        const totalRevenuLocations = avecContrat.reduce((s, li) => s + (li.contrat!.revenuCumule ?? 0), 0);
+        const totalMensuel         = avecContrat.reduce((s, li) => s + (li.contrat!.montantMensuel ?? 0), 0);
+
         return (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, marginBottom: 10 }}>
-              <SectionTitle>🔁 Locations en cours — Revenu cumulé ({locations.length})</SectionTitle>
-              <button onClick={() => setShowLocManager(true)} style={{
+              <SectionTitle>🔁 Locations en cours ({lignes.length})</SectionTitle>
+              <button onClick={() => { setStockPrerempli(undefined); setShowLocManager(true); }} style={{
                 padding: '8px 14px', borderRadius: 8, border: 'none',
                 background: '#8b5cf6', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer',
               }}>
                 Gérer les contrats
               </button>
             </div>
-            {locations.length === 0 ? (
+
+            {lignes.length === 0 ? (
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '12px 0' }}>
-                Aucun contrat de location actif. Clique "Gérer les contrats" pour en ajouter.
+                Aucun camion en location actuellement.
               </div>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
                   {[
-                    { label: 'Camions en location',      value: String(locations.length), color: undefined },
+                    { label: 'Camions en location',      value: String(lignes.length),    color: undefined },
+                    { label: 'Contrats à compléter',     value: String(sansContrat.length), color: sansContrat.length > 0 ? '#f59e0b' : undefined },
                     { label: 'Revenu mensuel récurrent', value: fmt$(totalMensuel),       color: '#8b5cf6' },
                     { label: 'Revenu cumulé total',      value: fmt$(totalRevenuLocations), color: '#22c55e' },
                   ].map(k => (
@@ -638,27 +691,44 @@ export function VueBilanHebdo() {
                     <thead>
                       <tr>
                         <TH>#Stock</TH>
+                        <TH>Camion</TH>
                         <TH>Client</TH>
                         <TH>Début</TH>
                         <TH right>Mensuel</TH>
-                        <TH right>Mois écoulés</TH>
-                        <TH right>Revenu cumulé</TH>
+                        <TH right>Mois</TH>
+                        <TH right>Cumulé</TH>
+                        <TH>Action</TH>
                       </tr>
                     </thead>
                     <tbody>
-                      {locations.map(l => (
-                        <tr key={l.id}>
-                          <TD bold color="#8b5cf6">#{l.stockNumero}</TD>
-                          <TD>{l.client ?? '—'}</TD>
-                          <TD>{l.dateDebut}</TD>
-                          <TD right>{fmt$(l.montantMensuel)}</TD>
-                          <TD right>{String(l.moisEcoules)}</TD>
-                          <TD right bold color="#22c55e">{fmt$(l.revenuCumule)}</TD>
+                      {lignes.map(li => (
+                        <tr key={li.stockNumero}>
+                          <TD bold color="#8b5cf6">#{li.stockNumero}</TD>
+                          <TD>{[li.annee, li.marque, li.modele].filter(Boolean).join(' ') || '—'}</TD>
+                          <TD>{li.client ?? '—'}</TD>
+                          <TD>{li.contrat?.dateDebut ?? '—'}</TD>
+                          <TD right>{li.contrat ? fmt$(li.contrat.montantMensuel) : '—'}</TD>
+                          <TD right>{li.contrat ? String(li.contrat.moisEcoules) : '—'}</TD>
+                          <TD right bold color={li.contrat ? '#22c55e' : '#f59e0b'}>
+                            {li.contrat ? fmt$(li.contrat.revenuCumule) : '⚠️ Contrat manquant'}
+                          </TD>
+                          <TD>
+                            {li.contrat ? (
+                              <button onClick={() => { setStockPrerempli(undefined); setShowLocManager(true); }} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                Voir
+                              </button>
+                            ) : (
+                              <button onClick={() => { setStockPrerempli(li.stockNumero); setShowLocManager(true); }} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#f59e0b', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                + Ajouter contrat
+                              </button>
+                            )}
+                          </TD>
                         </tr>
                       ))}
                       <tr style={{ background: 'rgba(34,197,94,0.08)' }}>
-                        <TD bold colSpan={5 as any}>TOTAL CUMULÉ</TD>
+                        <TD bold colSpan={6 as any}>TOTAL CUMULÉ</TD>
                         <TD right bold color="#22c55e">{fmt$(totalRevenuLocations)}</TD>
+                        <TD>{''}</TD>
                       </tr>
                     </tbody>
                   </table>
@@ -671,7 +741,10 @@ export function VueBilanHebdo() {
 
       {/* Modal de gestion des locations */}
       {showLocManager && (
-        <LocationsManager onClose={() => { setShowLocManager(false); charger(); }} />
+        <LocationsManager
+          onClose={() => { setShowLocManager(false); setStockPrerempli(undefined); charger(); }}
+          stockInitial={stockPrerempli}
+        />
       )}
 
       {/* ── Réservés & En financement ───────────────────────────── */}

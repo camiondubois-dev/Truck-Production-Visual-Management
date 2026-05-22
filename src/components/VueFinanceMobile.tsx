@@ -459,6 +459,8 @@ function TabInventaire() {
   const [drawerPhoto, setDrawerPhoto] = useState<string | null>(null);
   // Locations actives par stock_numero (revenu cumulé + montant mensuel)
   const [locByStock,  setLocByStock]  = useState<Record<string, { revenuCumule: number; montantMensuel: number; dateDebut: string; client: string | null }>>({});
+  // Camions marqués 'location' dans l'inventaire (peut ou non avoir de contrat)
+  const [enLocationSet, setEnLocationSet] = useState<Set<string>>(new Set());
 
   // Fetch photo lazily quand un camion est sélectionné
   useEffect(() => {
@@ -489,6 +491,16 @@ function TabInventaire() {
           };
         }
         setLocByStock(map);
+      });
+
+    // Camions marqués 'location' dans l'inventaire — pour badge même sans contrat
+    supabase
+      .from('prod_inventaire')
+      .select('numero')
+      .eq('etat_commercial', 'location')
+      .neq('statut', 'archive')
+      .then(({ data }) => {
+        setEnLocationSet(new Set((data ?? []).map((r: any) => r.numero)));
       });
   }, []);
 
@@ -530,6 +542,7 @@ function TabInventaire() {
               ? (profit / r.prix_demande) * 100 : null;
             const profitColor = profit == null ? 'white' : profit >= 0 ? GREEN : RED;
             const loc = locByStock[r.stock_numero];  // location active sur ce camion (ou undefined)
+            const enLocation = enLocationSet.has(r.stock_numero) || !!loc;  // marqué location dans inv OU a un contrat
 
             return (
               <div
@@ -556,7 +569,7 @@ function TabInventaire() {
                           {r.age_jours} j
                         </span>
                       )}
-                      {loc && (
+                      {enLocation && (
                         <span style={{
                           fontSize: 10, fontWeight: 800, padding: '1px 6px',
                           borderRadius: 8, background: '#8b5cf622', color: '#a78bfa',
@@ -612,8 +625,8 @@ function TabInventaire() {
                   </div>
                 )}
 
-                {/* Bande revenu de location cumulé — visible uniquement si location active */}
-                {loc && (
+                {/* Bande location — revenu cumulé si contrat existe, sinon avertissement */}
+                {enLocation && loc && (
                   <div style={{
                     marginTop: 8, paddingTop: 8,
                     borderTop: `1px solid rgba(139,92,246,0.15)`,
@@ -627,6 +640,16 @@ function TabInventaire() {
                     <span style={{ fontWeight: 800, fontSize: 13, color: '#a78bfa' }}>
                       + {fmt$(loc.revenuCumule)} cumulé
                     </span>
+                  </div>
+                )}
+                {enLocation && !loc && (
+                  <div style={{
+                    marginTop: 8, paddingTop: 8,
+                    borderTop: `1px solid rgba(245,158,11,0.2)`,
+                    fontSize: 11, color: '#fbbf24',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    ⚠️ Contrat de location manquant — à ajouter via le Bilan hebdomadaire
                   </div>
                 )}
               </div>

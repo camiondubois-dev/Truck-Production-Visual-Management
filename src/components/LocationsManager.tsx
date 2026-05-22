@@ -27,7 +27,7 @@ const FORM_VIDE: FormState = {
   dateFin: '', montantMensuel: '', notes: '',
 };
 
-export function LocationsManager({ onClose }: { onClose: () => void }) {
+export function LocationsManager({ onClose, stockInitial }: { onClose: () => void; stockInitial?: string }) {
   const [locations, setLocations] = useState<LocationAvecCumul[]>([]);
   const [vendeurs,  setVendeurs]  = useState<Vendeur[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -36,6 +36,14 @@ export function LocationsManager({ onClose }: { onClose: () => void }) {
   const [saving,    setSaving]    = useState(false);
   const [erreur,    setErreur]    = useState<string | null>(null);
   const [filtre,    setFiltre]    = useState<'tous' | 'actifs' | 'termines'>('actifs');
+
+  // Si stockInitial est fourni → ouvre directement le formulaire de création pré-rempli
+  useEffect(() => {
+    if (stockInitial) {
+      setForm({ ...FORM_VIDE, stockNumero: stockInitial, dateDebut: new Date().toISOString().slice(0, 10) });
+      setEditMode('create');
+    }
+  }, [stockInitial]);
 
   const charger = async () => {
     setLoading(true);
