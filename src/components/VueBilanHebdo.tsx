@@ -319,12 +319,22 @@ export function VueBilanHebdo() {
       }), { ca: 0, marge: 0, nb: 0 });
       setYtdVentes(ytdV);
 
-      // 12. YTD Pièces
-      const { data: ytdPData } = await supabase
-        .from('prod_ventes_pieces')
-        .select('sous_total')
-        .eq('annee_fiscale', fy);
-      const ytdP = (ytdPData ?? []).reduce((acc: any, r: any) => ({
+      // 12. YTD Pièces — paginé pour contourner la limite Supabase de 1000 rows
+      let ytdPData: { sous_total: number }[] = [];
+      let offset = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data: page } = await supabase
+          .from('prod_ventes_pieces')
+          .select('sous_total')
+          .eq('annee_fiscale', fy)
+          .range(offset, offset + PAGE - 1);
+        if (!page || page.length === 0) break;
+        ytdPData = ytdPData.concat(page as any);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      const ytdP = ytdPData.reduce((acc: any, r: any) => ({
         ca: acc.ca + Math.max(r.sous_total, 0),
         nb: acc.nb + 1,
       }), { ca: 0, nb: 0 });
