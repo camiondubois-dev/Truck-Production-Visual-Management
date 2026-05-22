@@ -107,6 +107,8 @@ export function TabBilanHebdoMobile() {
   const fy = currentFY();
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [pipeline, setPipeline] = useState<PipelineRow[]>([]);
   const [partis, setPartis] = useState<PartiRow[]>([]);
   const [locations, setLocations] = useState<LocationRow[]>([]);
@@ -241,8 +243,15 @@ export function TabBilanHebdoMobile() {
       console.error('[BilanHebdoMobile]', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setLastRefresh(new Date());
     }
   }
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await charger();
+  };
 
   // ─── Calculs ──
   const delta = (curr: number, prev: number) =>
@@ -361,6 +370,36 @@ export function TabBilanHebdoMobile() {
   return (
     <div style={{ padding: '12px 14px 80px', maxWidth: 600, margin: '0 auto' }}>
 
+      {/* ── Bouton refresh + horodatage ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10, padding: '0 4px',
+      }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+          MAJ {lastRefresh.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: refreshing ? 'rgba(255,255,255,0.04)' : `${AMBER}22`,
+            border: `1px solid ${refreshing ? 'rgba(255,255,255,0.1)' : `${AMBER}44`}`,
+            borderRadius: 8, padding: '6px 12px',
+            color: refreshing ? 'rgba(255,255,255,0.4)' : AMBER,
+            fontSize: 12, fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <span style={{
+            display: 'inline-block',
+            animation: refreshing ? 'spin 1s linear infinite' : 'none',
+          }}>🔄</span>
+          {refreshing ? 'Actualisation…' : 'Actualiser'}
+        </button>
+        <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+
       {/* ── HERO : Total cette semaine ── */}
       <div style={{
         background: `linear-gradient(135deg, ${AMBER}22 0%, ${AMBER}08 100%)`,
@@ -440,6 +479,31 @@ export function TabBilanHebdoMobile() {
             const solde = prix != null ? Math.max(prix - dep, 0) : null;
             const statusLabel = r.paiement_depot ? 'Dépôt' : r.paiement_po ? 'PO' : r.en_financement ? 'Financement' : r.etat_commercial === 'reserve' ? 'Réservé' : 'En attente';
             const statusColor = r.paiement_depot ? AMBER : r.paiement_po ? GREEN : r.en_financement ? BLUE : 'rgba(255,255,255,0.4)';
+
+            // Affichage adaptatif selon les données disponibles
+            let droite: string;
+            let droiteCouleur: string;
+            let droiteSousTexte: string;
+            let droiteSousCouleur: string | undefined;
+            if (prix != null) {
+              // Cas idéal : on a le prix → afficher solde + dépôt
+              droite = fmt$(solde);
+              droiteCouleur = RED;
+              droiteSousTexte = dep > 0 ? `dépôt ${fmt$(dep)}` : `prix ${fmt$(prix)}`;
+            } else if (dep > 0) {
+              // Pas de prix mais on a un dépôt → mettre le dépôt en avant
+              droite = fmt$(dep);
+              droiteCouleur = AMBER;
+              droiteSousTexte = 'dépôt · prix à définir';
+              droiteSousCouleur = 'rgba(255,255,255,0.4)';
+            } else {
+              // Ni prix ni dépôt — état incomplet
+              droite = '⚠';
+              droiteCouleur = 'rgba(255,255,255,0.3)';
+              droiteSousTexte = 'à compléter';
+              droiteSousCouleur = 'rgba(255,255,255,0.4)';
+            }
+
             return (
               <CarteCamion
                 key={r.id}
@@ -449,9 +513,10 @@ export function TabBilanHebdoMobile() {
                 sousTitre={[r.annee, r.marque, r.modele].filter(Boolean).join(' ') || '—'}
                 ligne1={r.client_acheteur ?? '—'}
                 badge={{ label: statusLabel, color: statusColor }}
-                droite={fmt$(solde)}
-                droiteCouleur={RED}
-                droiteSousTexte={dep > 0 ? `dépôt ${fmt$(dep)}` : `prix ${fmt$(prix)}`}
+                droite={droite}
+                droiteCouleur={droiteCouleur}
+                droiteSousTexte={droiteSousTexte}
+                droiteSousCouleur={droiteSousCouleur}
               />
             );
           })}
