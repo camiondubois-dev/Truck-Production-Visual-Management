@@ -18,6 +18,7 @@ export interface Location {
   dateDebut:       string;          // ISO date 'YYYY-MM-DD'
   dateFin:         string | null;
   montantMensuel:  number;
+  revenuPercu:     number | null;   // montant manuel — si défini, remplace le calcul auto
   notes:           string | null;
   createdAt:       string;
   updatedAt:       string;
@@ -27,7 +28,8 @@ export interface Location {
 export interface LocationAvecCumul extends Location {
   actif:         boolean;
   moisEcoules:   number;
-  revenuCumule:  number;
+  revenuCumule:  number;            // = revenuPercu si défini, sinon calcul auto
+  revenuManuel:  boolean;           // true si le cumul vient de revenu_percu (manuel)
 }
 
 /** Agrégat par camion (vue prod_locations_total_par_camion) */
@@ -49,6 +51,7 @@ function fromDB(row: any): Location {
     dateDebut:      row.date_debut,
     dateFin:        row.date_fin ?? null,
     montantMensuel: Number(row.montant_mensuel),
+    revenuPercu:    row.revenu_percu != null ? Number(row.revenu_percu) : null,
     notes:          row.notes ?? null,
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
@@ -61,6 +64,7 @@ function fromDBAvecCumul(row: any): LocationAvecCumul {
     actif:        !!row.actif,
     moisEcoules:  Number(row.mois_ecoules ?? 0),
     revenuCumule: Number(row.revenu_cumule ?? 0),
+    revenuManuel: !!row.revenu_manuel,
   };
 }
 
@@ -170,6 +174,7 @@ export const locationService = {
     dateDebut:      string;
     dateFin:        string | null;
     montantMensuel: number;
+    revenuPercu:    number | null;
     notes:          string | null;
   }>): Promise<void> {
     const dbPatch: any = {};
@@ -178,6 +183,7 @@ export const locationService = {
     if ('dateDebut'      in patch) dbPatch.date_debut      = patch.dateDebut;
     if ('dateFin'        in patch) dbPatch.date_fin        = patch.dateFin;
     if ('montantMensuel' in patch) dbPatch.montant_mensuel = patch.montantMensuel;
+    if ('revenuPercu'    in patch) dbPatch.revenu_percu    = patch.revenuPercu;
     if ('notes'          in patch) dbPatch.notes           = patch.notes;
     const { error } = await supabase
       .from('prod_locations')

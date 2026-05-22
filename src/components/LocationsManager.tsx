@@ -18,13 +18,14 @@ interface FormState {
   dateDebut:      string;
   dateFin:        string;
   montantMensuel: string;
+  revenuPercu:    string;   // montant manuel (vide = calcul auto)
   notes:          string;
 }
 
 const FORM_VIDE: FormState = {
   stockNumero: '', client: '', vendeurId: '',
   dateDebut: new Date().toISOString().slice(0, 10),
-  dateFin: '', montantMensuel: '', notes: '',
+  dateFin: '', montantMensuel: '', revenuPercu: '', notes: '',
 };
 
 export function LocationsManager({ onClose, stockInitial }: { onClose: () => void; stockInitial?: string }) {
@@ -85,6 +86,7 @@ export function LocationsManager({ onClose, stockInitial }: { onClose: () => voi
       dateDebut:      l.dateDebut,
       dateFin:        l.dateFin ?? '',
       montantMensuel: String(l.montantMensuel),
+      revenuPercu:    l.revenuPercu != null ? String(l.revenuPercu) : '',
       notes:          l.notes ?? '',
     });
     setEditMode('edit');
@@ -112,12 +114,16 @@ export function LocationsManager({ onClose, stockInitial }: { onClose: () => voi
           notes:          form.notes.trim() || null,
         });
       } else if (editMode === 'edit' && form.id) {
+        const revenuPercuVal = form.revenuPercu.trim() === ''
+          ? null
+          : (Number.isFinite(parseFloat(form.revenuPercu)) ? parseFloat(form.revenuPercu) : null);
         await locationService.modifier(form.id, {
           client:         form.client.trim() || null,
           vendeurId:      form.vendeurId || null,
           dateDebut:      form.dateDebut,
           dateFin:        form.dateFin || null,
           montantMensuel: montant,
+          revenuPercu:    revenuPercuVal,
           notes:          form.notes.trim() || null,
         });
       }
@@ -225,6 +231,25 @@ export function LocationsManager({ onClose, stockInitial }: { onClose: () => voi
                 placeholder="Ex: 2500"
               />
             </Champ>
+
+            {/* Champ "Montant total reçu" visible uniquement en mode édition */}
+            {editMode === 'edit' && (
+              <Champ label="Montant total reçu (manuel — optionnel)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.revenuPercu}
+                  onChange={e => setForm(f => ({ ...f, revenuPercu: e.target.value }))}
+                  style={inputStyle}
+                  placeholder="Laisse vide pour calcul automatique"
+                />
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4, lineHeight: 1.4 }}>
+                  Si rempli, ce montant remplace le calcul auto (mois × mensuel). Utile quand la
+                  location est terminée et qu'il y a eu un ajustement.
+                </div>
+              </Champ>
+            )}
+
             <Champ label="Notes">
               <textarea
                 value={form.notes}
@@ -309,7 +334,14 @@ export function LocationsManager({ onClose, stockInitial }: { onClose: () => voi
                     <td style={tdStyle}>{l.dateFin ?? <span style={{ color: '#a78bfa', fontWeight: 700 }}>En cours</span>}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt$(l.montantMensuel)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{l.moisEcoules}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: '#22c55e', fontWeight: 700 }}>{fmt$(l.revenuCumule)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: '#22c55e', fontWeight: 700 }}>
+                      {fmt$(l.revenuCumule)}
+                      {l.revenuManuel && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: '#fbbf24', background: 'rgba(245,158,11,0.15)', padding: '1px 5px', borderRadius: 4 }}>
+                          ✏ manuel
+                        </span>
+                      )}
+                    </td>
                     <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                       <button onClick={() => ouvrirEdition(l)} title="Éditer" style={iconBtn}>✏️</button>
                       {l.actif && <button onClick={() => terminer(l)} title="Terminer aujourd'hui" style={iconBtn}>⏹️</button>}

@@ -160,19 +160,20 @@ export function VueBilanHebdo() {
       const vendMap: Record<string, string> = {};
       (vds ?? []).forEach((v: any) => { vendMap[v.id] = v.nom; });
 
-      // 2. Pipeline (réservé/vendu non payé complet)
+      // 2. Pipeline "Argent à venir" — uniquement réservé/vendu non payés
+      // Les LOCATIONS sont gérées dans leur propre section, jamais ici.
       const { data: invData } = await supabase
         .from('prod_inventaire')
         .select('id, numero, marque, modele, annee, etat_commercial, client_acheteur, vendeur_id, paiement_depot, paiement_complet, paiement_po, en_financement, montant_depot, date_depot, mode_paiement_depot, livraison_asap')
-        .in('etat_commercial', ['reserve', 'vendu', 'location'])
+        .in('etat_commercial', ['reserve', 'vendu'])
         .in('type', ['eau', 'detail'])
         .eq('paiement_complet', false);
 
-      // 3. Partis (payés complet, 60 derniers jours)
+      // 3. Partis (payés complet, 60 derniers jours) — vendus uniquement (pas locations)
       const { data: partisData } = await supabase
         .from('prod_inventaire')
         .select('id, numero, marque, modele, annee, etat_commercial, client_acheteur, vendeur_id, paiement_depot, paiement_complet, paiement_po, en_financement, montant_depot, date_depot, mode_paiement_depot, livraison_asap')
-        .in('etat_commercial', ['vendu', 'location'])
+        .in('etat_commercial', ['vendu'])
         .in('type', ['eau', 'detail'])
         .eq('paiement_complet', true)
         .gte('updated_at', new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString());
@@ -356,7 +357,7 @@ export function VueBilanHebdo() {
     return s + Math.max(prix - depot, 0);
   }, 0);
 
-  const vendusPipeline   = pipeline.filter(r => r.etat_commercial === 'vendu' || r.etat_commercial === 'location');
+  const vendusPipeline   = pipeline.filter(r => r.etat_commercial === 'vendu');
   const reservesPipeline = pipeline.filter(r => r.etat_commercial === 'reserve');
 
   // ── Rendu ─────────────────────────────────────────────────────
