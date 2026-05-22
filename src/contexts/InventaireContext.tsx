@@ -20,6 +20,7 @@ interface InventaireContextType {
   marquerPret: (id: string, estPret: boolean) => Promise<void>;
   mettreAJourCommercial: (id: string, etatCommercial: 'non-vendu' | 'reserve' | 'vendu' | 'location', dateLivraisonPlanifiee: string | null, clientAcheteur: string | null) => Promise<void>;
   archiverVehicule: (id: string) => Promise<void>;
+  desarchiverVehicule: (id: string) => Promise<void>;
   supprimerVehicule: (id: string) => Promise<void>;
 }
 
@@ -339,6 +340,26 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     setVehicules(prev => prev.filter(v => v.id !== id));
   };
 
+  const desarchiverVehicule = async (id: string) => {
+    await inventaireService.desarchiver(id);
+    // Recharge le véhicule depuis la base (puisqu'il a été filtré par getAll qui exclut archive)
+    const { data: row } = await supabase
+      .from('prod_inventaire')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (row) {
+      const v = fromDB(row);
+      setVehicules(prev => {
+        // Ne pas dupliquer si déjà présent
+        if (prev.some(p => p.id === v.id)) {
+          return prev.map(p => p.id === v.id ? v : p);
+        }
+        return [v, ...prev];
+      });
+    }
+  };
+
   const supprimerVehicule = async (id: string) => {
     await inventaireService.supprimer(id);
     setVehicules(prev => prev.filter(v => v.id !== id));
@@ -351,7 +372,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       marquerEnProduction, marquerDisponible,
       mettreAJourPhotoInventaire, mettreAJourType,
       mettreAJourEtapes, mettreAJourRoadMap, mettreAJourPriorites, mettreAJourReservoir,
-      marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
+      marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
     }}>
       {children}
     </InventaireContext.Provider>

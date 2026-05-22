@@ -152,7 +152,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
 }) {
   const {
     mettreAJourRoadMap, mettreAJourPhotoInventaire,
-    marquerPret, mettreAJourCommercial, archiverVehicule, supprimerVehicule,
+    marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir, mettreAJourType,
   } = useInventaire();
   const { supprimerItem, ajouterDocument, supprimerDocument, assignerSlot, slotMap, rechargerItems } = useGarage();
@@ -952,6 +952,22 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
               <button onClick={() => { archiverVehicule(v.id); onClose(); }}
                 style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                 🏁 Archiver ce véhicule
+              </button>
+            </div>
+          )}
+
+          {/* ── Désarchiver (réintroduire dans le pipeline) ─────── */}
+          {v.statut === 'archive' && isGestion && (
+            <div style={{ marginBottom: 14, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8, fontWeight: 600 }}>
+                📦 Ce véhicule est archivé
+              </div>
+              <div style={{ fontSize: 11, color: '#92400e', marginBottom: 10, lineHeight: 1.4 }}>
+                Le client a retourné le camion ou l'archivage était une erreur ? Désarchive-le pour le remettre dans le pipeline (statut : disponible).
+              </div>
+              <button onClick={() => { desarchiverVehicule(v.id); onClose(); }}
+                style={{ width: '100%', padding: '10px', borderRadius: 7, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                🔄 Désarchiver et remettre dans le pipeline
               </button>
             </div>
           )}

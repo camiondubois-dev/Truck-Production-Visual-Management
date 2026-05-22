@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { EauIcon } from './EauIcon';
 import { searchTable } from '../services/searchService';
 import { fromDB as inventaireFromDB, estStockCamionValide } from '../services/inventaireService';
+import { supabase } from '../lib/supabase';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useGarage } from '../hooks/useGarage';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +15,7 @@ import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { getSectionVehicule, PanneauDetailVehicule } from './PanneauDetailVehicule';
 import { CarteVehicule, SectionHeaderCard } from './VueAsana';
 
-type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu';
+type FiltreStatut = 'tous' | 'disponible' | 'en-production' | 'pret' | 'vendu' | 'archive';
 type TypeVehicule = 'eau' | 'client' | 'detail';
 type FiltreDept = 'tous' | string; // station ID
 type FiltrePretCommercial = 'tous' | 'a-vendre' | 'a-livrer' | 'location' | 'reserve';
@@ -268,7 +269,21 @@ export function VueInventaire() {
   const [erreurImport, setErreurImport] = useState<string | null>(null);
   const [showModalAjout, setShowModalAjout] = useState(false);
   const [typeOverrides] = useState<Record<string, 'eau' | 'detail'>>({});
+  const [vehiculesArchives, setVehiculesArchives] = useState<VehiculeInventaire[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Charger les archives quand le filtre 'archive' est sélectionné
+  useEffect(() => {
+    if (filtreStatut !== 'archive') return;
+    supabase
+      .from('prod_inventaire')
+      .select('*')
+      .eq('statut', 'archive')
+      .order('updated_at', { ascending: false })
+      .then(({ data }) => {
+        setVehiculesArchives((data ?? []).map(inventaireFromDB));
+      });
+  }, [filtreStatut, vehicules.length]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -279,7 +294,12 @@ export function VueInventaire() {
     return () => clearTimeout(timer);
   }, [recherche]);
 
-  const baseList = (searchResults !== null ? searchResults : vehicules)
+  // Quand le filtre 'archive' est actif, on combine les archives fetchées séparément avec
+  // les véhicules actifs (qui peuvent en théorie ne pas avoir d'archive).
+  const sourceVehicules = filtreStatut === 'archive'
+    ? [...vehicules, ...vehiculesArchives.filter(a => !vehicules.some(v => v.id === a.id))]
+    : vehicules;
+  const baseList = (searchResults !== null ? searchResults : sourceVehicules)
     .map(v => typeOverrides[v.id] ? { ...v, type: typeOverrides[v.id]! } : v);
 
   const deptCounts = ROAD_MAP_STATIONS.reduce((acc, s) => {
@@ -397,9 +417,10 @@ export function VueInventaire() {
             { id: 'en-production' as FiltreStatut, label: '🔧 En production' },
             { id: 'pret'          as FiltreStatut, label: `✅ Prêts${pretsCount > 0 ? ` (${pretsCount})` : ''}` },
             { id: 'vendu'         as FiltreStatut, label: `🏷️ Vendus/Loués${vendusCount > 0 ? ` (${vendusCount})` : ''}` },
+            { id: 'archive'       as FiltreStatut, label: `📦 Archivés${vehiculesArchives.length > 0 && filtreStatut === 'archive' ? ` (${vehiculesArchives.length})` : ''}` },
           ]).map(s => (
             <button key={s.id} onClick={() => { setFiltreStatut(s.id); if (s.id !== 'pret') setFiltrePretCommercial('tous'); }}
-              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreStatut === s.id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === s.id ? (s.id === 'pret' ? '#22c55e' : s.id === 'vendu' ? '#7c3aed' : '#374151') : 'white', color: filtreStatut === s.id ? 'white' : '#6b7280', fontWeight: filtreStatut === s.id ? 700 : 400 }}>
+              style={{ padding: '5px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 12, border: filtreStatut === s.id ? 'none' : '1px solid #e5e7eb', background: filtreStatut === s.id ? (s.id === 'pret' ? '#22c55e' : s.id === 'vendu' ? '#7c3aed' : s.id === 'archive' ? '#6b7280' : '#374151') : 'white', color: filtreStatut === s.id ? 'white' : '#6b7280', fontWeight: filtreStatut === s.id ? 700 : 400 }}>
               {s.label}
             </button>
           ))}

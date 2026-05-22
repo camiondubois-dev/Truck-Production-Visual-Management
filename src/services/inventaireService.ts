@@ -306,6 +306,18 @@ export const inventaireService = {
     if (error) throw error;
   },
 
+  /**
+   * Désarchive un véhicule : remet statut='disponible' et le réintroduit dans le pipeline.
+   * Utilisé quand un client retourne un camion qui avait été archivé par erreur ou suite à un retour.
+   */
+  async desarchiver(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ statut: 'disponible', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   async supprimer(id: string): Promise<void> {
     const { error } = await supabase
       .from('prod_inventaire')
