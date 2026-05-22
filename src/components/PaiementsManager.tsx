@@ -30,6 +30,7 @@ export function PaiementsManager({ onClose }: { onClose: () => void }) {
   const [vendus, setVendus] = useState<VentePaiement[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState<'tous' | StatutPaiement>('tous');
+  const [recherche, setRecherche] = useState('');
   const [editForm, setEditForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -49,9 +50,13 @@ export function PaiementsManager({ onClose }: { onClose: () => void }) {
   useEffect(() => { charger(); }, []);
 
   const filtres = useMemo(() => {
-    if (filtre === 'tous') return vendus;
-    return vendus.filter(v => v.statutPaiement === filtre);
-  }, [vendus, filtre]);
+    let result = filtre === 'tous' ? vendus : vendus.filter(v => v.statutPaiement === filtre);
+    const q = recherche.trim().toLowerCase();
+    if (q) {
+      result = result.filter(v => v.stockNumero.toLowerCase().includes(q));
+    }
+    return result;
+  }, [vendus, filtre, recherche]);
 
   // Compteurs par statut
   const counts = useMemo(() => {
@@ -215,6 +220,39 @@ export function PaiementsManager({ onClose }: { onClose: () => void }) {
       <Modal large>
         <Header titre="💰 Suivi des paiements" onClose={onClose} />
 
+        {/* Recherche par numéro de stock */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: 28, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 14, color: 'rgba(255,255,255,0.4)', pointerEvents: 'none',
+          }}>🔍</span>
+          <input
+            type="text"
+            value={recherche}
+            onChange={e => setRecherche(e.target.value)}
+            placeholder="Rechercher par numéro de stock (ex: 35225)…"
+            autoComplete="off"
+            style={{
+              width: '100%', padding: '10px 36px 10px 38px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 8, color: 'white',
+              fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box',
+              outline: 'none',
+            }}
+          />
+          {recherche && (
+            <button
+              onClick={() => setRecherche('')}
+              style={{
+                position: 'absolute', right: 28, top: '50%', transform: 'translateY(-50%)',
+                background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white',
+                width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+                fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>✕</button>
+          )}
+        </div>
+
         {/* Filtres */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <FiltreBtn label={`Tous (${counts.tous})`} actif={filtre === 'tous'} onClick={() => setFiltre('tous')} />
@@ -242,7 +280,9 @@ export function PaiementsManager({ onClose }: { onClose: () => void }) {
             <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 30 }}>Chargement…</div>
           ) : filtres.length === 0 ? (
             <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 30 }}>
-              Aucun camion dans cette catégorie.
+              {recherche
+                ? `Aucun camion ne correspond à "${recherche}"`
+                : 'Aucun camion dans cette catégorie.'}
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

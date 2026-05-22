@@ -49,25 +49,25 @@ export const paiementService = {
     return data ? fromDB(data) : null;
   },
 
-  /** Récupère TOUS les vendus avec leurs infos de paiement. */
+  /** Récupère TOUS les vendus avec leurs infos de paiement, triés par numéro de stock décroissant. */
   async getAllVendus(): Promise<VentePaiement[]> {
     const { data, error } = await supabase
       .from('prod_ventes')
       .select('stock_numero, prix_vente, statut_paiement, montant_recu, date_paiement_complet, notes_paiement')
       .eq('statut', 'vendu')
-      .order('date_vente', { ascending: false, nullsFirst: false });
+      .order('stock_numero', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(fromDB);
   },
 
-  /** Récupère uniquement les vendus NON PAYÉS (= argent à venir). */
+  /** Récupère uniquement les vendus NON PAYÉS (= argent à venir), triés par numéro de stock. */
   async getNonPayes(): Promise<VentePaiement[]> {
     const { data, error } = await supabase
       .from('prod_ventes')
       .select('stock_numero, prix_vente, statut_paiement, montant_recu, date_paiement_complet, notes_paiement')
       .eq('statut', 'vendu')
       .neq('statut_paiement', 'paye')
-      .order('date_vente', { ascending: false, nullsFirst: false });
+      .order('stock_numero', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(fromDB);
   },
