@@ -1,0 +1,290 @@
+// ════════════════════════════════════════════════════════════════
+// Service Main-d'œuvre — Phase 1
+// CRUD sur prod_employes + helpers pour prod_work_orders et prod_heures_employes
+// (les imports + analytics arrivent en Phase 2/3)
+// ════════════════════════════════════════════════════════════════
+
+import { supabase } from '../lib/supabase';
+
+// ─── Types ────────────────────────────────────────────────────────
+
+export interface Employe {
+  id:           string;
+  nom:          string;
+  codeHitrac:   string | null;
+  departement:  string | null;
+  tauxHoraire:  number;          // $/h, coût employeur (avec charges)
+  actif:        boolean;
+  notes:        string | null;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
+export interface WorkOrder {
+  id:              string;
+  woNumero:        string;
+  type:            'interne' | 'externe';
+  dateOuverture:   string | null;
+  dateFermeture:   string | null;
+  stockNumero:     string | null;  // si interne
+  client:          string | null;  // si externe
+  description:    string | null;
+  statut:          'ouvert' | 'ferme' | 'facture';
+  montantFacture:  number;
+  coutPieces:      number;
+}
+
+export interface HeureEmploye {
+  id:            string;
+  employeId:     string;
+  woNumero:      string | null;
+  date:          string;
+  heures:        number;
+  notes:         string | null;
+}
+
+/** Agrégat par WO (vue prod_wo_cout_mo) */
+export interface WoCoutMo {
+  woNumero:        string;
+  type:            'interne' | 'externe';
+  stockNumero:     string | null;
+  client:          string | null;
+  montantFacture:  number;
+  coutPieces:      number;
+  totalHeures:     number;
+  coutMoReel:      number;
+  profitBrut:      number;
+}
+
+/** Agrégat par camion (vue prod_camion_cout_mo_reel) */
+export interface CamionCoutMoReel {
+  stockNumero:        string;
+  nbWo:               number;
+  totalHeures:        number;
+  coutMoReelTotal:    number;
+}
+
+// ─── Mappers ──────────────────────────────────────────────────────
+
+function employeFromDB(row: any): Employe {
+  return {
+    id:           row.id,
+    nom:          row.nom,
+    codeHitrac:   row.code_hitrac ?? null,
+    departement:  row.departement ?? null,
+    tauxHoraire:  Number(row.taux_horaire ?? 0),
+    actif:        row.actif !== false,
+    notes:        row.notes ?? null,
+    createdAt:    row.created_at,
+    updatedAt:    row.updated_at,
+  };
+}
+
+function woFromDB(row: any): WorkOrder {
+  return {
+    id:             row.id,
+    woNumero:       row.wo_numero,
+    type:           row.type,
+    dateOuverture:  row.date_ouverture ?? null,
+    dateFermeture:  row.date_fermeture ?? null,
+    stockNumero:    row.stock_numero ?? null,
+    client:         row.client ?? null,
+    description:    row.description ?? null,
+    statut:         row.statut ?? 'ouvert',
+    montantFacture: Number(row.montant_facture ?? 0),
+    coutPieces:     Number(row.cout_pieces ?? 0),
+  };
+}
+
+function heureFromDB(row: any): HeureEmploye {
+  return {
+    id:         row.id,
+    employeId:  row.employe_id,
+    woNumero:   row.wo_numero ?? null,
+    date:       row.date,
+    heures:     Number(row.heures),
+    notes:      row.notes ?? null,
+  };
+}
+
+// ─── Service CRUD employés ─────────────────────────────────────────
+
+export const employeService = {
+  async getAll(): Promise<Employe[]> {
+    const { data, error } = await supabase
+      .from('prod_employes')
+      .select('*')
+      .order('nom', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(employeFromDB);
+  },
+
+  async getActifs(): Promise<Employe[]> {
+    const { data, error } = await supabase
+      .from('prod_employes')
+      .select('*')
+      .eq('actif', true)
+      .order('nom', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(employeFromDB);
+  },
+
+  async creer(payload: {
+    nom:          string;
+    codeHitrac?:  string | null;
+    departement?: string | null;
+    tauxHoraire:  number;
+    notes?:       string | null;
+  }): Promise<Employe> {
+    const { data, error } = await supabase
+      .from('prod_employes')
+      .insert({
+        nom:          payload.nom.trim(),
+        code_hitrac:  payload.codeHitrac ?? null,
+        departement:  payload.departement ?? null,
+        taux_horaire: payload.tauxHoraire,
+        notes:        payload.notes ?? null,
+        actif:        true,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return employeFromDB(data);
+  },
+
+  async modifier(id: string, patch: Partial<{
+    nom:          string;
+    codeHitrac:   string | null;
+    departement:  string | null;
+    tauxHoraire:  number;
+    actif:        boolean;
+    notes:        string | null;
+  }>): Promise<void> {
+    const dbPatch: any = {};
+    if ('nom'          in patch) dbPatch.nom          = patch.nom?.trim();
+    if ('codeHitrac'   in patch) dbPatch.code_hitrac  = patch.codeHitrac;
+    if ('departement'  in patch) dbPatch.departement  = patch.departement;
+    if ('tauxHoraire'  in patch) dbPatch.taux_horaire = patch.tauxHoraire;
+    if ('actif'        in patch) dbPatch.actif        = patch.actif;
+    if ('notes'        in patch) dbPatch.notes        = patch.notes;
+    const { error } = await supabase
+      .from('prod_employes')
+      .update(dbPatch)
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async desactiver(id: string): Promise<void> {
+    await this.modifier(id, { actif: false });
+  },
+
+  async reactiver(id: string): Promise<void> {
+    await this.modifier(id, { actif: true });
+  },
+
+  /** Suppression définitive (uniquement si aucune heure pointée). */
+  async supprimer(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('prod_employes')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+};
+
+// ─── Service WO + heures (lecture seule pour Phase 1) ──────────────
+
+export const workOrderService = {
+  async getAll(): Promise<WorkOrder[]> {
+    const { data, error } = await supabase
+      .from('prod_work_orders')
+      .select('*')
+      .order('date_ouverture', { ascending: false, nullsFirst: false });
+    if (error) throw error;
+    return (data ?? []).map(woFromDB);
+  },
+
+  async getByStock(stockNumero: string): Promise<WorkOrder[]> {
+    const { data, error } = await supabase
+      .from('prod_work_orders')
+      .select('*')
+      .eq('stock_numero', stockNumero)
+      .order('date_ouverture', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(woFromDB);
+  },
+
+  async getCoutsByWo(): Promise<WoCoutMo[]> {
+    const { data, error } = await supabase
+      .from('prod_wo_cout_mo')
+      .select('*');
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      woNumero:        r.wo_numero,
+      type:            r.type,
+      stockNumero:     r.stock_numero ?? null,
+      client:          r.client ?? null,
+      montantFacture:  Number(r.montant_facture ?? 0),
+      coutPieces:      Number(r.cout_pieces ?? 0),
+      totalHeures:     Number(r.total_heures ?? 0),
+      coutMoReel:      Number(r.cout_mo_reel ?? 0),
+      profitBrut:      Number(r.profit_brut ?? 0),
+    }));
+  },
+
+  async getCoutMoParCamion(): Promise<Record<string, CamionCoutMoReel>> {
+    const { data, error } = await supabase
+      .from('prod_camion_cout_mo_reel')
+      .select('*');
+    if (error) throw error;
+    const map: Record<string, CamionCoutMoReel> = {};
+    for (const r of (data ?? [])) {
+      const c: CamionCoutMoReel = {
+        stockNumero:     (r as any).stock_numero,
+        nbWo:            Number((r as any).nb_wo ?? 0),
+        totalHeures:     Number((r as any).total_heures ?? 0),
+        coutMoReelTotal: Number((r as any).cout_mo_reel_total ?? 0),
+      };
+      map[c.stockNumero] = c;
+    }
+    return map;
+  },
+};
+
+export const heuresService = {
+  async getByEmploye(employeId: string, from?: string, to?: string): Promise<HeureEmploye[]> {
+    let q = supabase
+      .from('prod_heures_employes')
+      .select('*')
+      .eq('employe_id', employeId);
+    if (from) q = q.gte('date', from);
+    if (to)   q = q.lte('date', to);
+    const { data, error } = await q.order('date', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(heureFromDB);
+  },
+
+  async getByWo(woNumero: string): Promise<HeureEmploye[]> {
+    const { data, error } = await supabase
+      .from('prod_heures_employes')
+      .select('*')
+      .eq('wo_numero', woNumero)
+      .order('date', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(heureFromDB);
+  },
+};
+
+// ─── Constantes utiles ────────────────────────────────────────────
+
+export const DEPARTEMENTS_SUGGEREES = [
+  'Mécanique',
+  'Soudure',
+  'Électrique',
+  'Peinture',
+  'Carrosserie',
+  'Hydraulique',
+  'Assemblage final',
+  'Sous-traitance',
+  'Autre',
+];

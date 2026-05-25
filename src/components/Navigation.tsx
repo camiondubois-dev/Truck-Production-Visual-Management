@@ -32,6 +32,7 @@ const ADMIN_TABS = [
   { id: 'analyse',       label: 'Analyse',         icon: '📊', color: '#8b5cf6' },
   { id: 'tv-admin',      label: 'Modifications TV', icon: '📺', color: '#f97316' },
   { id: 'profitabilite', label: 'Profitabilité',    icon: '💹', color: '#22c55e' },
+  { id: 'employes',      label: 'Employés (M.O.)',  icon: '👥', color: '#0ea5e9' },
   { id: 'activite',      label: 'Activité',         icon: '👁️', color: '#06b6d4' },
 ];
 

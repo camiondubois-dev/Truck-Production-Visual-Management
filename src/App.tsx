@@ -20,6 +20,7 @@ import { VueAdminTV } from './components/VueAdminTV';
 import { VueImport } from './components/VueImport';
 import { VueProfitabilite } from './components/VueProfitabilite';
 import { VuePlansVente } from './components/VuePlansVente';
+import { VueEmployes } from './components/VueEmployes';
 import { VueActivite } from './components/VueActivite';
 import {
   canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin, canImport,
@@ -31,9 +32,9 @@ import { supabase } from './lib/supabase';
 import { useActiviteTracker } from './hooks/useActiviteTracker';
 import { useAutoReload } from './hooks/useAutoReload';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'plans-vente' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'activite';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'plans-vente' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'employes' | 'activite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','activite'];
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','employes','activite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -125,6 +126,7 @@ export default function App() {
       case 'import':        return canImport(profile);
       case 'analyse':
       case 'tv-admin':
+      case 'employes':
       case 'activite':      return canSeeAdmin(profile);
       default:              return false;
     }
@@ -163,6 +165,7 @@ export default function App() {
         {safeTab === 'tv-admin'      && <VueAdminTV />}
         {safeTab === 'import'        && <VueImport />}
         {safeTab === 'profitabilite' && <VueProfitabilite />}
+        {safeTab === 'employes'      && <VueEmployes />}
         {safeTab === 'activite'      && <VueActivite />}
       </div>
     </div>
