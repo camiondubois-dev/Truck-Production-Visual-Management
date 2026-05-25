@@ -57,7 +57,7 @@ interface InventaireRow {
   paiement_depot?: boolean;
 }
 
-interface InvMeta {
+export interface InvMeta {
   numero: string;
   marque: string | null;
   modele: string | null;
@@ -1353,7 +1353,7 @@ function VueInventaire({
 
 // ── Vue Plans de vente ────────────────────────────────────────────────────────
 
-function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
+export function VuePlans({ invMeta }: { invMeta: InvMeta[] }) {
   const [plans, setPlans] = useState<PlanResume[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);

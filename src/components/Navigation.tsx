@@ -9,6 +9,8 @@ interface NavigationProps {
   currentTab: string;
   onTabChange: (tabId: string) => void;
   onNouveau?: () => void;
+  /** Liste d'IDs d'onglets à masquer (selon le rôle de l'utilisateur). */
+  hiddenTabs?: string[];
 }
 
 const TABS = [
@@ -18,6 +20,7 @@ const TABS = [
   { id: 'detail',      label: 'Camions détail',   icon: '🏷️',       color: '#22c55e' },
   { id: 'livraisons',  label: 'Suivi livraisons', icon: '🚚',       color: '#dc2626' },
   { id: 'suivi-vente', label: 'Suivi vente',      icon: '🛒',       color: '#0ea5e9' },
+  { id: 'plans-vente', label: 'Plans de vente',   icon: '📋',       color: '#a78bfa' },
   { id: 'moteurs',     label: 'Moteurs',          icon: '🛠️',      color: '#7c3aed' },
   { id: 'inventaire',  label: 'Inventaire',       icon: '📋',       color: '#1e293b' },
   { id: 'reservoirs',  label: 'Réservoirs',       icon: '🛢',       color: '#0ea5e9' },
@@ -32,7 +35,8 @@ const ADMIN_TABS = [
   { id: 'activite',      label: 'Activité',         icon: '👁️', color: '#06b6d4' },
 ];
 
-export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationProps) {
+export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = [] }: NavigationProps) {
+  const isHidden = (id: string) => hiddenTabs.includes(id);
   const { deconnexion, profile } = useAuth();
   const { items } = useGarage();
   const adminRef = useRef<HTMLDivElement>(null);
@@ -97,7 +101,7 @@ export function Navigation({ currentTab, onTabChange, onNouveau }: NavigationPro
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, overflow: 'hidden' }}>
 
         {/* Onglets principaux */}
-        {TABS.map((tab) => (
+        {TABS.filter(tab => !isHidden(tab.id)).map((tab) => (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}

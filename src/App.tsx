@@ -19,15 +19,21 @@ import { TVConnexion } from './components/TVConnexion';
 import { VueAdminTV } from './components/VueAdminTV';
 import { VueImport } from './components/VueImport';
 import { VueProfitabilite } from './components/VueProfitabilite';
+import { VuePlansVente } from './components/VuePlansVente';
 import { VueActivite } from './components/VueActivite';
+import {
+  canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin,
+  canSeeInventaire, canSeeSuiviVente, canSeeCamionsParType,
+  canSeeArchive, canSeeReservoirs,
+} from './lib/permissions';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 import { useActiviteTracker } from './hooks/useActiviteTracker';
 import { useAutoReload } from './hooks/useAutoReload';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'activite';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'plans-vente' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'activite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','reservoirs','archive','analyse','tv-admin','import','profitabilite','activite'];
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','activite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -100,30 +106,64 @@ export default function App() {
     );
   }
 
+  // ── Filtrage des onglets selon les permissions du rôle ──
+  // (les routes elles-mêmes restent appelables — la garde finale est sur le rendu)
+  const allowedTab = (t: Tab): boolean => {
+    switch (t) {
+      case 'plancher':      return true;
+      case 'livraisons':    return true;
+      case 'moteurs':       return true;
+      case 'eau':
+      case 'clients':
+      case 'detail':        return canSeeCamionsParType(profile);
+      case 'inventaire':    return canSeeInventaire(profile);
+      case 'suivi-vente':   return canSeeSuiviVente(profile);
+      case 'plans-vente':   return canSeePlansVente(profile);
+      case 'archive':       return canSeeArchive(profile);
+      case 'reservoirs':    return canSeeReservoirs(profile);
+      case 'profitabilite': return canSeeProfitabilite(profile);
+      case 'analyse':
+      case 'tv-admin':
+      case 'import':
+      case 'activite':      return canSeeAdmin(profile);
+      default:              return false;
+    }
+  };
+  // Fallback : si l'onglet courant n'est pas accessible pour ce rôle, on bascule sur Livraisons
+  const safeTab: Tab = allowedTab(currentTab) ? currentTab : 'livraisons';
+
+  // Détection des onglets cachés (pour passer au Navigation et qu'il les masque)
+  const hiddenTabs: Tab[] = (VALID_TABS as Tab[]).filter(t => !allowedTab(t));
+
+  // Helper : ignorer ces fallback du bilan (canSeeBilan est dans Profitabilité)
+  const _ = canSeeBilan;
+
   return (
     <div style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#0f0e0b' }}>
       <Navigation
-        currentTab={currentTab}
+        currentTab={safeTab}
         onTabChange={handleTabChange}
-        onNouveau={currentTab === 'plancher' ? () => setShowWizard(true) : undefined}
+        onNouveau={safeTab === 'plancher' ? () => setShowWizard(true) : undefined}
+        hiddenTabs={hiddenTabs}
       />
       <div style={{ paddingTop: 60, width: '100%', height: '100%', boxSizing: 'border-box' }}>
-        {currentTab === 'plancher'      && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
-        {currentTab === 'eau'           && <VueCamionsEau />}
-        {currentTab === 'clients'       && <VueClientsExternes />}
-        {currentTab === 'detail'        && <VueCamionsDetail />}
-        {currentTab === 'livraisons'    && <VueLivraisons />}
-        {currentTab === 'suivi-vente'   && <VueSuiviVente />}
-        {currentTab === 'moteurs'       && <VueMoteurs />}
-        {currentTab === 'inventaire'    && <VueInventaire />}
-        {currentTab === 'reservoirs'    && <VueReservoirs />}
-        {currentTab === 'archive'       && <VueArchive />}
+        {safeTab === 'plancher'      && <PlancherView showWizard={showWizard} setShowWizard={setShowWizard} />}
+        {safeTab === 'eau'           && <VueCamionsEau />}
+        {safeTab === 'clients'       && <VueClientsExternes />}
+        {safeTab === 'detail'        && <VueCamionsDetail />}
+        {safeTab === 'livraisons'    && <VueLivraisons />}
+        {safeTab === 'suivi-vente'   && <VueSuiviVente />}
+        {safeTab === 'moteurs'       && <VueMoteurs />}
+        {safeTab === 'inventaire'    && <VueInventaire />}
+        {safeTab === 'plans-vente'   && <VuePlansVente />}
+        {safeTab === 'reservoirs'    && <VueReservoirs />}
+        {safeTab === 'archive'       && <VueArchive />}
         {/* Administration — gestion seulement */}
-        {currentTab === 'analyse'       && <VueAnalyse />}
-        {currentTab === 'tv-admin'      && <VueAdminTV />}
-        {currentTab === 'import'        && <VueImport />}
-        {currentTab === 'profitabilite' && <VueProfitabilite />}
-        {currentTab === 'activite'      && <VueActivite />}
+        {safeTab === 'analyse'       && <VueAnalyse />}
+        {safeTab === 'tv-admin'      && <VueAdminTV />}
+        {safeTab === 'import'        && <VueImport />}
+        {safeTab === 'profitabilite' && <VueProfitabilite />}
+        {safeTab === 'activite'      && <VueActivite />}
       </div>
     </div>
   );
