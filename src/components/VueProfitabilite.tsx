@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { nomVendeur } from '../services/piecesImportService';
 import type { PieceRow } from '../services/piecesImportService';
 import { VueBilanHebdo } from './VueBilanHebdo';
+import { VueMainOeuvre } from './VueMainOeuvre';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1981,7 +1982,7 @@ function VuePieces() {
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export function VueProfitabilite() {
-  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans' | 'pieces' | 'encombre'>('ventes');
+  const [tab, setTab] = useState<'ventes' | 'inventaire' | 'plans' | 'pieces' | 'encombre' | 'main-oeuvre'>('ventes');
   const [invMeta, setInvMeta] = useState<InvMeta[]>([]);
 
   useEffect(() => {
@@ -1991,11 +1992,12 @@ export function VueProfitabilite() {
   }, []);
 
   const TABS = [
-    { id: 'ventes' as const,     label: 'Rapport Vente',           icon: '📊' },
-    { id: 'inventaire' as const, label: 'Inventaire & Projection', icon: '🔭' },
-    { id: 'plans' as const,      label: 'Plans de vente',          icon: '📋' },
-    { id: 'pieces' as const,     label: 'Ventes Pièces',           icon: '🔧' },
-    { id: 'encombre' as const,   label: 'Bilan hebdomadaire',       icon: '📅' },
+    { id: 'ventes' as const,       label: 'Rapport Vente',           icon: '📊' },
+    { id: 'inventaire' as const,   label: 'Inventaire & Projection', icon: '🔭' },
+    { id: 'plans' as const,        label: 'Plans de vente',          icon: '📋' },
+    { id: 'pieces' as const,       label: 'Ventes Pièces',           icon: '🔧' },
+    { id: 'encombre' as const,     label: 'Bilan hebdomadaire',       icon: '📅' },
+    { id: 'main-oeuvre' as const,  label: 'Main-d\'œuvre',           icon: '👷' },
   ];
 
   return (
@@ -2026,11 +2028,12 @@ export function VueProfitabilite() {
         </div>
       </div>
 
-      {tab === 'ventes'     && <VueVentes invMeta={invMeta} />}
-      {tab === 'inventaire' && <VueInventaire invMeta={invMeta} onGoToPlans={() => setTab('plans')} />}
-      {tab === 'plans'      && <VuePlans invMeta={invMeta} />}
-      {tab === 'pieces'     && <VuePieces />}
-      {tab === 'encombre'   && <VueBilanHebdo />}
+      {tab === 'ventes'       && <VueVentes invMeta={invMeta} />}
+      {tab === 'inventaire'   && <VueInventaire invMeta={invMeta} onGoToPlans={() => setTab('plans')} />}
+      {tab === 'plans'        && <VuePlans invMeta={invMeta} />}
+      {tab === 'pieces'       && <VuePieces />}
+      {tab === 'encombre'     && <VueBilanHebdo />}
+      {tab === 'main-oeuvre'  && <VueMainOeuvre />}
     </div>
   );
 }

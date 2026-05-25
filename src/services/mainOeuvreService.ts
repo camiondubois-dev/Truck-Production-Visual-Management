@@ -273,7 +273,63 @@ export const heuresService = {
     if (error) throw error;
     return (data ?? []).map(heureFromDB);
   },
+
+  /** Toutes les heures dans une plage (ou tout si pas de filtre). Paginé pour > 1000. */
+  async getAll(from?: string, to?: string): Promise<HeureEmploye[]> {
+    const PAGE = 1000;
+    let offset = 0;
+    let all: any[] = [];
+    while (true) {
+      let q = supabase.from('prod_heures_employes').select('*');
+      if (from) q = q.gte('date', from);
+      if (to)   q = q.lte('date', to);
+      const { data, error } = await q.range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all.map(heureFromDB);
+  },
 };
+
+// ─── Helpers de période ───────────────────────────────────────────
+
+export type PreriodeOption = 'semaine' | 'mois' | 'trimestre' | 'annee_fiscale' | 'tout';
+
+/** Retourne {from, to} en YYYY-MM-DD selon une option de période. */
+export function periodeBounds(opt: PreriodeOption): { from: string | null; to: string | null; label: string } {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  switch (opt) {
+    case 'semaine': {
+      const dow = now.getDay();
+      const daysToMon = dow === 0 ? 6 : dow - 1;
+      const mon = new Date(now); mon.setDate(now.getDate() - daysToMon); mon.setHours(0,0,0,0);
+      return { from: fmt(mon), to: fmt(now), label: 'Cette semaine' };
+    }
+    case 'mois': {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: fmt(first), to: fmt(now), label: 'Ce mois-ci' };
+    }
+    case 'trimestre': {
+      const q = Math.floor(now.getMonth() / 3);
+      const first = new Date(now.getFullYear(), q * 3, 1);
+      return { from: fmt(first), to: fmt(now), label: 'Ce trimestre' };
+    }
+    case 'annee_fiscale': {
+      // FY commence en juillet
+      const fyStart = now.getMonth() >= 6
+        ? new Date(now.getFullYear(), 6, 1)
+        : new Date(now.getFullYear() - 1, 6, 1);
+      return { from: fmt(fyStart), to: fmt(now), label: `AF ${now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1}` };
+    }
+    case 'tout':
+    default:
+      return { from: null, to: null, label: 'Toute la période' };
+  }
+}
 
 // ─── Constantes utiles ────────────────────────────────────────────
 
