@@ -129,10 +129,31 @@ export function TabBilanHebdoMobile() {
 
   useEffect(() => { charger(); }, []);
 
+  // Helper : fetch toutes les pages (contourne la limite Supabase de 1000 rows)
+  async function fetchAllPaginated<T>(
+    table: string,
+    columns: string,
+    addFilters: (q: any) => any,
+  ): Promise<T[]> {
+    const PAGE = 1000;
+    let offset = 0;
+    let all: T[] = [];
+    while (true) {
+      const q = addFilters(supabase.from(table).select(columns)).range(offset, offset + PAGE - 1);
+      const { data, error } = await q;
+      if (error) { console.error(`[fetchAllPaginated ${table}]`, error); break; }
+      if (!data || data.length === 0) break;
+      all = all.concat(data as T[]);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
   async function charger() {
     setLoading(true);
     try {
-      const [pipeRes, partisRes, locsRes, depotsRes, piecesWres, piecesPres, ventesWres, ventesPres, ytdVres, ytdPres] = await Promise.all([
+      const [pipeRes, partisRes, locsRes, depotsRes, piecesWres, piecesPres, ventesWres, ventesPres, ytdVData, ytdPData] = await Promise.all([
         // Pipeline
         supabase
           .from('prod_inventaire')
@@ -167,10 +188,18 @@ export function TabBilanHebdoMobile() {
         supabase.from('prod_rapport_profitabilite').select('prix_vente, marge_profit').gte('date_vente', monday),
         // Ventes camions semaine précédente
         supabase.from('prod_rapport_profitabilite').select('prix_vente, marge_profit').gte('date_vente', prevMonday).lt('date_vente', monday),
-        // YTD ventes
-        supabase.from('prod_rapport_profitabilite').select('prix_vente, marge_profit').eq('annee_fiscale', fy),
-        // YTD pièces
-        supabase.from('prod_ventes_pieces').select('sous_total').eq('annee_fiscale', fy),
+        // YTD ventes — PAGINÉ (peut dépasser 1000 sur une année complète)
+        fetchAllPaginated<{ prix_vente: number; marge_profit: number }>(
+          'prod_rapport_profitabilite',
+          'prix_vente, marge_profit',
+          q => q.eq('annee_fiscale', fy),
+        ),
+        // YTD pièces — PAGINÉ (souvent > 1000 factures/an)
+        fetchAllPaginated<{ sous_total: number }>(
+          'prod_ventes_pieces',
+          'sous_total',
+          q => q.eq('annee_fiscale', fy),
+        ),
       ]);
 
       // Pipeline : enrichir avec prix_demande + filtrer vendus finalisés
@@ -243,13 +272,13 @@ export function TabBilanHebdoMobile() {
         nbPrev: (depotsPrev ?? []).length,
       });
 
-      // YTD
+      // YTD (ytdVData et ytdPData sont déjà des arrays grâce à fetchAllPaginated)
       setYtd({
-        caVentes:    sumVentes(ytdVres.data ?? []),
-        margeVentes: sumMarge(ytdVres.data ?? []),
-        nbVentes:    (ytdVres.data ?? []).length,
-        caPieces:    sumPieces(ytdPres.data ?? []),
-        nbPieces:    (ytdPres.data ?? []).length,
+        caVentes:    sumVentes(ytdVData),
+        margeVentes: sumMarge(ytdVData),
+        nbVentes:    ytdVData.length,
+        caPieces:    sumPieces(ytdPData),
+        nbPieces:    ytdPData.length,
       });
     } catch (e) {
       console.error('[BilanHebdoMobile]', e);
