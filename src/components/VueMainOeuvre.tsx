@@ -46,7 +46,7 @@ const C = {
 // ─── Composant principal ──────────────────────────────────────────
 
 export function VueMainOeuvre() {
-  const [periode,    setPeriode]    = useState<PreriodeOption>('mois');
+  const [periode,    setPeriode]    = useState<PreriodeOption>('semaine_passee');
   const [loading,    setLoading]    = useState(true);
   const [employes,   setEmployes]   = useState<Employe[]>([]);
   const [woCouts,    setWoCouts]    = useState<WoCoutMo[]>([]);
@@ -284,16 +284,22 @@ export function VueMainOeuvre() {
       {/* Sélecteur de période */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 11, color: C.muted, letterSpacing: '0.05em', marginRight: 4 }}>PÉRIODE :</div>
-        {(['semaine', 'mois', 'trimestre', 'annee_fiscale', 'tout'] as const).map(p => (
-          <button key={p} onClick={() => setPeriode(p)}
+        {([
+          { id: 'semaine_passee' as const, label: 'Semaine passée'   },
+          { id: 'semaine'        as const, label: 'Semaine en cours' },
+          { id: 'mois'           as const, label: 'Mois'             },
+          { id: 'trimestre'      as const, label: 'Trimestre'        },
+          { id: 'annee_fiscale'  as const, label: 'Année fiscale'    },
+          { id: 'tout'           as const, label: 'Tout'             },
+        ]).map(p => (
+          <button key={p.id} onClick={() => setPeriode(p.id)}
             style={{
               padding: '6px 14px', borderRadius: 18, border: 'none',
-              background: periode === p ? C.amber : C.card,
-              color: periode === p ? C.bg : C.muted,
-              fontWeight: periode === p ? 800 : 600, fontSize: 12, cursor: 'pointer',
-              textTransform: 'capitalize',
+              background: periode === p.id ? C.amber : C.card,
+              color: periode === p.id ? C.bg : C.muted,
+              fontWeight: periode === p.id ? 800 : 600, fontSize: 12, cursor: 'pointer',
             }}>
-            {p === 'annee_fiscale' ? 'Année fiscale' : p}
+            {p.label}
           </button>
         ))}
         <span style={{ marginLeft: 8, fontSize: 11, color: C.faded }}>

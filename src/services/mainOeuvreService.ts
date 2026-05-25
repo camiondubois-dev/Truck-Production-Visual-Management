@@ -308,18 +308,27 @@ export const heuresService = {
 
 // ─── Helpers de période ───────────────────────────────────────────
 
-export type PreriodeOption = 'semaine' | 'mois' | 'trimestre' | 'annee_fiscale' | 'tout';
+export type PreriodeOption = 'semaine_passee' | 'semaine' | 'mois' | 'trimestre' | 'annee_fiscale' | 'tout';
 
 /** Retourne {from, to} en YYYY-MM-DD selon une option de période. */
 export function periodeBounds(opt: PreriodeOption): { from: string | null; to: string | null; label: string } {
   const now = new Date();
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   switch (opt) {
+    case 'semaine_passee': {
+      // Semaine précédente : lundi à dimanche
+      const dow = now.getDay();
+      const daysToMon = dow === 0 ? 6 : dow - 1;
+      const monCet = new Date(now); monCet.setDate(now.getDate() - daysToMon); monCet.setHours(0,0,0,0);
+      const monPasse = new Date(monCet); monPasse.setDate(monCet.getDate() - 7);
+      const dimPasse = new Date(monPasse); dimPasse.setDate(monPasse.getDate() + 6);
+      return { from: fmt(monPasse), to: fmt(dimPasse), label: 'Semaine passée' };
+    }
     case 'semaine': {
       const dow = now.getDay();
       const daysToMon = dow === 0 ? 6 : dow - 1;
       const mon = new Date(now); mon.setDate(now.getDate() - daysToMon); mon.setHours(0,0,0,0);
-      return { from: fmt(mon), to: fmt(now), label: 'Cette semaine' };
+      return { from: fmt(mon), to: fmt(now), label: 'Semaine en cours' };
     }
     case 'mois': {
       const first = new Date(now.getFullYear(), now.getMonth(), 1);
