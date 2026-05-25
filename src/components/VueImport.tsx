@@ -27,8 +27,9 @@ export function VueImport() {
   const { profile } = useAuth();
   const [tab, setTab] = useState<TabId>('couts');
 
-  if (profile?.role !== 'gestion') {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Accès réservé aux gestionnaires.</div>;
+  // Accès : gestion + vendeur (les vendeurs ont besoin d'importer leurs ventes iTrack)
+  if (profile?.role !== 'gestion' && profile?.role !== 'vendeur') {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Accès réservé aux gestionnaires et vendeurs.</div>;
   }
 
   return (

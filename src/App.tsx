@@ -22,7 +22,7 @@ import { VueProfitabilite } from './components/VueProfitabilite';
 import { VuePlansVente } from './components/VuePlansVente';
 import { VueActivite } from './components/VueActivite';
 import {
-  canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin,
+  canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin, canImport,
   canSeeInventaire, canSeeSuiviVente, canSeeCamionsParType,
   canSeeArchive, canSeeReservoirs,
 } from './lib/permissions';
@@ -122,9 +122,9 @@ export default function App() {
       case 'archive':       return canSeeArchive(profile);
       case 'reservoirs':    return canSeeReservoirs(profile);
       case 'profitabilite': return canSeeProfitabilite(profile);
+      case 'import':        return canImport(profile);
       case 'analyse':
       case 'tv-admin':
-      case 'import':
       case 'activite':      return canSeeAdmin(profile);
       default:              return false;
     }

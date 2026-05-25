@@ -23,6 +23,7 @@ const TABS = [
   { id: 'plans-vente', label: 'Plans de vente',   icon: '📋',       color: '#a78bfa' },
   { id: 'moteurs',     label: 'Moteurs',          icon: '🛠️',      color: '#7c3aed' },
   { id: 'inventaire',  label: 'Inventaire',       icon: '📋',       color: '#1e293b' },
+  { id: 'import',      label: 'Import iTrack',    icon: '📥',       color: '#f59e0b' },
   { id: 'reservoirs',  label: 'Réservoirs',       icon: '🛢',       color: '#0ea5e9' },
   { id: 'archive',     label: 'Archive',          icon: '📦',       color: '#6b7280' },
 ];
@@ -30,7 +31,6 @@ const TABS = [
 const ADMIN_TABS = [
   { id: 'analyse',       label: 'Analyse',         icon: '📊', color: '#8b5cf6' },
   { id: 'tv-admin',      label: 'Modifications TV', icon: '📺', color: '#f97316' },
-  { id: 'import',        label: 'Import',           icon: '📥', color: '#f59e0b' },
   { id: 'profitabilite', label: 'Profitabilité',    icon: '💹', color: '#22c55e' },
   { id: 'activite',      label: 'Activité',         icon: '👁️', color: '#06b6d4' },
 ];

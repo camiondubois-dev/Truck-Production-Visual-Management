@@ -58,9 +58,15 @@ export function canSeePaiements(p?: ProfileLike | null): boolean {
   return role(p) === 'gestion';
 }
 
-/** Peut accéder aux outils d'admin : Analyse, Activité, Import, TV admin. */
+/** Peut accéder aux outils d'admin : Analyse, Activité, TV admin. */
 export function canSeeAdmin(p?: ProfileLike | null): boolean {
   return role(p) === 'gestion';
+}
+
+/** Peut accéder à l'import iTrack (Hitrac) : coûts + ventes + pièces. */
+export function canImport(p?: ProfileLike | null): boolean {
+  const r = role(p);
+  return r === 'gestion' || r === 'vendeur';
 }
 
 /** Peut voir l'onglet Inventaire (liste de tous les camions). */
