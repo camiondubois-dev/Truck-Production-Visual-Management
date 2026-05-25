@@ -10,12 +10,14 @@ import { supabase } from '../lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────
 
-/** Statut du camion référencé par un WO interne, après cross-check DB */
+/** Statut du camion ou moteur référencé par un WO interne, après cross-check DB */
 export type CamionStatut =
-  | 'inventaire'       // dans prod_inventaire, pas (encore) vendu
-  | 'vendu'            // dans prod_ventes statut='vendu' ou prod_inventaire etat_commercial='vendu'
-  | 'inconnu'          // numéro valide mais introuvable dans les bases
-  | 'travaux_pieces';  // pas un vrai numéro de stock (PIECES-X, 33214-1, # TEMPORAIRE...)
+  | 'inventaire'           // camion dans prod_inventaire, pas (encore) vendu
+  | 'vendu'                // camion vendu (prod_inventaire.etat_commercial OU prod_ventes.statut)
+  | 'moteur_inventaire'    // moteur dans prod_moteurs, pas vendu
+  | 'moteur_vendu'         // moteur dans prod_moteurs, etat_commercial='vendu'
+  | 'inconnu'              // numéro valide mais introuvable
+  | 'travaux_pieces';      // pas un vrai numéro de stock (PIECES-X, # TEMPORAIRE...)
 
 export interface LaborEntry {
   employeCode:     string;         // ex: 'atormis'
@@ -24,7 +26,7 @@ export interface LaborEntry {
   typeBrut:        string;         // 'Build Order (Internal)' | 'Service Order (External)' | ...
   typeNormalise:   'interne' | 'externe';
   statutNormalise: 'ouvert' | 'ferme';
-  customerOrPart:  string;         // si interne → stock_numero, si externe → nom client
+  customerOrPart:  string;         // si interne → stock_numero/moteur, si externe → nom client
   heures:          number;
   // Enrichi après cross-check DB (uniquement pour les WO internes)
   camionStatut?:   CamionStatut;
@@ -262,87 +264,112 @@ function estNumeroStockCamion(s: string): boolean {
 }
 
 export async function enrichirAvecCamions(entries: LaborEntry[]): Promise<LaborEntry[]> {
-  // Collecter les numéros de stock candidats parmi les WO internes
-  const numerosValides = Array.from(new Set(
+  // Toutes les références internes (peu importe le format — pour vérif moteurs aussi)
+  const refsInternes = Array.from(new Set(
     entries
       .filter(e => e.typeNormalise === 'interne')
       .map(e => e.customerOrPart.trim())
-      .filter(estNumeroStockCamion)
+      .filter(s => s.length > 0)
   ));
+  // Sous-ensemble : seulement les vrais numéros de stock camion (purement numériques)
+  const numerosCamion = refsInternes.filter(estNumeroStockCamion);
 
-  // Fetch en parallèle les 2 bases
+  // Fetch en parallèle les 3 bases
   let invMap = new Map<string, { marque: string | null; modele: string | null; annee: number | null; vendu: boolean }>();
   let venduSet = new Set<string>();
+  let moteurMap = new Map<string, { marque: string | null; modele: string | null; annee: number | null; vendu: boolean }>();
 
-  if (numerosValides.length > 0) {
-    const [invRes, venRes] = await Promise.all([
-      supabase
-        .from('prod_inventaire')
-        .select('numero, marque, modele, annee, etat_commercial')
-        .in('numero', numerosValides),
-      supabase
-        .from('prod_ventes')
-        .select('stock_numero, statut')
-        .in('stock_numero', numerosValides),
+  if (refsInternes.length > 0) {
+    const [invRes, venRes, motRes] = await Promise.all([
+      // Camions : seulement les numéros valides (purement numériques)
+      numerosCamion.length > 0
+        ? supabase.from('prod_inventaire').select('numero, marque, modele, annee, etat_commercial').in('numero', numerosCamion)
+        : Promise.resolve({ data: [] as any[] }),
+      numerosCamion.length > 0
+        ? supabase.from('prod_ventes').select('stock_numero, statut').in('stock_numero', numerosCamion)
+        : Promise.resolve({ data: [] as any[] }),
+      // Moteurs : on essaie TOUTES les références (les stk_numero moteurs peuvent être alphanumériques)
+      supabase.from('prod_moteurs').select('stk_numero, marque, modele, annee, etat_commercial').in('stk_numero', refsInternes),
     ]);
     for (const r of (invRes.data ?? []) as any[]) {
       invMap.set(r.numero, {
-        marque: r.marque ?? null,
-        modele: r.modele ?? null,
-        annee:  r.annee  ?? null,
+        marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null,
         vendu:  r.etat_commercial === 'vendu',
       });
     }
     for (const r of (venRes.data ?? []) as any[]) {
       if (r.statut === 'vendu') venduSet.add(r.stock_numero);
     }
+    for (const r of (motRes.data ?? []) as any[]) {
+      moteurMap.set(r.stk_numero, {
+        marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null,
+        vendu:  r.etat_commercial === 'vendu',
+      });
+    }
   }
 
   return entries.map(e => {
     if (e.typeNormalise !== 'interne') return e;
+    const ref = e.customerOrPart.trim();
 
-    const num = e.customerOrPart.trim();
-    if (!estNumeroStockCamion(num)) {
-      return { ...e, camionStatut: 'travaux_pieces' as CamionStatut };
-    }
-    const inv = invMap.get(num);
+    // 1. Camion en inventaire ? (priorité haute, dans prod_inventaire)
+    const inv = invMap.get(ref);
     if (inv) {
-      const isVendu = inv.vendu || venduSet.has(num);
+      const isVendu = inv.vendu || venduSet.has(ref);
       return {
         ...e,
         camionStatut: isVendu ? ('vendu' as CamionStatut) : ('inventaire' as CamionStatut),
-        camionMarque: inv.marque,
-        camionModele: inv.modele,
-        camionAnnee:  inv.annee,
+        camionMarque: inv.marque, camionModele: inv.modele, camionAnnee: inv.annee,
       };
     }
-    if (venduSet.has(num)) {
+    // 2. Camion vendu (dans prod_ventes uniquement) ?
+    if (venduSet.has(ref)) {
       return { ...e, camionStatut: 'vendu' as CamionStatut };
     }
+    // 3. Moteur ? (peut être numérique ou alphanumérique)
+    const mot = moteurMap.get(ref);
+    if (mot) {
+      return {
+        ...e,
+        camionStatut: mot.vendu ? ('moteur_vendu' as CamionStatut) : ('moteur_inventaire' as CamionStatut),
+        camionMarque: mot.marque, camionModele: mot.modele, camionAnnee: mot.annee,
+      };
+    }
+    // 4. Pas un vrai numéro de stock (alphanumérique, suffixe -1, etc.) → travaux/pièces
+    if (!estNumeroStockCamion(ref)) {
+      return { ...e, camionStatut: 'travaux_pieces' as CamionStatut };
+    }
+    // 5. Numérique mais pas trouvé nulle part → inconnu
     return { ...e, camionStatut: 'inconnu' as CamionStatut };
   });
 }
 
-// Helpers d'affichage pour le statut camion
+// Helpers d'affichage pour le statut camion / moteur
 export const CAMION_STATUT_LABELS: Record<CamionStatut, string> = {
-  inventaire:     'En inventaire',
-  vendu:          'Camion vendu',
-  inconnu:        'Stock inconnu',
-  travaux_pieces: 'Travaux / pièces',
+  inventaire:        'Camion en inventaire',
+  vendu:             'Camion vendu',
+  moteur_inventaire: 'Moteur en inventaire',
+  moteur_vendu:      'Moteur vendu',
+  inconnu:           'Stock inconnu',
+  travaux_pieces:    'Travaux / pièces',
 };
 
 export const CAMION_STATUT_COLORS: Record<CamionStatut, string> = {
-  inventaire:     '#3b82f6',
-  vendu:          '#22c55e',
-  inconnu:        '#ef4444',
-  travaux_pieces: '#9ca3af',
+  inventaire:        '#3b82f6',
+  vendu:             '#22c55e',
+  moteur_inventaire: '#a78bfa',
+  moteur_vendu:      '#f59e0b',
+  inconnu:           '#ef4444',
+  travaux_pieces:    '#9ca3af',
 };
 
 export const CAMION_STATUT_EMOJIS: Record<CamionStatut, string> = {
-  inventaire:     '📦',
-  vendu:          '✅',
-  inconnu:        '❓',
-  travaux_pieces: '🔧',
+  inventaire:        '📦',
+  vendu:             '✅',
+  moteur_inventaire: '🔩',
+  moteur_vendu:      '⚙️',
+  inconnu:           '❓',
+  travaux_pieces:    '🔧',
 };
 
 // ─── Diff : compare avec l'état actuel de la base ─────────────────

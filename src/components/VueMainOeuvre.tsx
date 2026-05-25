@@ -52,8 +52,9 @@ export function VueMainOeuvre() {
   const [woCouts,    setWoCouts]    = useState<WoCoutMo[]>([]);
   const [heures,     setHeures]     = useState<HeureEmploye[]>([]);
   const [filtreType, setFiltreType] = useState<'tous' | 'interne' | 'externe'>('tous');
-  // Metadata camions (marque/modèle/année + statut vendu) pour enrichir le tableau Par camion
-  const [invMeta, setInvMeta] = useState<Record<string, { marque: string | null; modele: string | null; annee: number | null; vendu: boolean }>>({});
+  // Metadata camions + moteurs (marque/modèle/année + statut vendu)
+  type MetaEntry = { marque: string | null; modele: string | null; annee: number | null; vendu: boolean; type: 'camion' | 'moteur' };
+  const [invMeta, setInvMeta] = useState<Record<string, MetaEntry>>({});
 
   const bounds = useMemo(() => periodeBounds(periode), [periode]);
 
@@ -70,44 +71,49 @@ export function VueMainOeuvre() {
         setWoCouts(wos);
         setHeures(hrs);
 
-        // Fetch métadonnées camion pour tous les vrais numéros de stock présents
-        // + statut vendu (via prod_inventaire.etat_commercial OU prod_ventes.statut)
-        const stocksValides = Array.from(new Set(
-          wos
-            .filter(w => w.type === 'interne' && estVraiStockCamion(w.stockNumero))
-            .map(w => w.stockNumero!)
+        // Fetch métadonnées camion + moteur pour toutes les références internes
+        const refsInternes = Array.from(new Set(
+          wos.filter(w => w.type === 'interne' && w.stockNumero).map(w => w.stockNumero!)
         ));
-        if (stocksValides.length > 0) {
-          const [invRes, venRes] = await Promise.all([
-            supabase
-              .from('prod_inventaire')
-              .select('numero, marque, modele, annee, etat_commercial')
-              .in('numero', stocksValides),
-            supabase
-              .from('prod_ventes')
-              .select('stock_numero, statut')
-              .in('stock_numero', stocksValides),
+        const stocksValides = refsInternes.filter(estVraiStockCamion);
+
+        if (refsInternes.length > 0) {
+          const [invRes, venRes, motRes] = await Promise.all([
+            stocksValides.length > 0
+              ? supabase.from('prod_inventaire').select('numero, marque, modele, annee, etat_commercial').in('numero', stocksValides)
+              : Promise.resolve({ data: [] as any[] }),
+            stocksValides.length > 0
+              ? supabase.from('prod_ventes').select('stock_numero, statut').in('stock_numero', stocksValides)
+              : Promise.resolve({ data: [] as any[] }),
+            supabase.from('prod_moteurs').select('stk_numero, marque, modele, annee, etat_commercial').in('stk_numero', refsInternes),
           ]);
-          // Set des stocks marqués vendu dans prod_ventes
           const venduSet = new Set<string>();
           for (const r of (venRes.data ?? []) as any[]) {
             if (r.statut === 'vendu') venduSet.add(r.stock_numero);
           }
           const map: typeof invMeta = {};
+          // Camions d'abord (priorité)
           for (const r of (invRes.data ?? []) as any[]) {
             const venduInv = r.etat_commercial === 'vendu';
             map[r.numero] = {
-              marque: r.marque ?? null,
-              modele: r.modele ?? null,
-              annee:  r.annee  ?? null,
-              vendu:  venduInv || venduSet.has(r.numero),
+              marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null,
+              vendu: venduInv || venduSet.has(r.numero),
+              type: 'camion',
             };
           }
-          // Pour les stocks pas trouvés dans prod_inventaire mais présents dans prod_ventes
           for (const num of venduSet) {
             if (!map[num]) {
-              map[num] = { marque: null, modele: null, annee: null, vendu: true };
+              map[num] = { marque: null, modele: null, annee: null, vendu: true, type: 'camion' };
             }
+          }
+          // Moteurs (seulement si pas déjà classé en camion)
+          for (const r of (motRes.data ?? []) as any[]) {
+            if (map[r.stk_numero]) continue;
+            map[r.stk_numero] = {
+              marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null,
+              vendu: r.etat_commercial === 'vendu',
+              type: 'moteur',
+            };
           }
           setInvMeta(map);
         } else {
@@ -205,10 +211,12 @@ export function VueMainOeuvre() {
     const interne = make();
     const externe = make();
     const cats = {
-      inventaire: make(),
-      vendu:      make(),
-      travaux:    make(),
-      inconnu:    make(),
+      inventaire:        make(),
+      vendu:             make(),
+      moteur_inventaire: make(),
+      moteur_vendu:      make(),
+      travaux:           make(),
+      inconnu:           make(),
     };
 
     for (const w of woCouts) {
@@ -220,17 +228,20 @@ export function VueMainOeuvre() {
         interne.wos.add(w.woNumero);
         interne.entries += nbEntries;
 
-        // Sous-catégorisation interne
+        // Sous-catégorisation interne (camion / moteur / travaux / inconnu)
         let cat: keyof typeof cats;
         if (!w.stockNumero) {
           cat = 'inconnu';
-        } else if (!estVraiStockCamion(w.stockNumero)) {
-          cat = 'travaux';
         } else {
           const meta = invMeta[w.stockNumero];
-          if (!meta)         cat = 'inconnu';
-          else if (meta.vendu) cat = 'vendu';
-          else                 cat = 'inventaire';
+          if (meta) {
+            if (meta.type === 'moteur') cat = meta.vendu ? 'moteur_vendu' : 'moteur_inventaire';
+            else                         cat = meta.vendu ? 'vendu'        : 'inventaire';
+          } else if (!estVraiStockCamion(w.stockNumero)) {
+            cat = 'travaux';
+          } else {
+            cat = 'inconnu';
+          }
         }
         cats[cat].heures += w.totalHeures;
         cats[cat].wos.add(w.woNumero);
@@ -245,10 +256,12 @@ export function VueMainOeuvre() {
       interne: { ...interne, nbWo: interne.wos.size },
       externe: { ...externe, nbWo: externe.wos.size },
       cats: {
-        inventaire: { ...cats.inventaire, nbWo: cats.inventaire.wos.size },
-        vendu:      { ...cats.vendu,      nbWo: cats.vendu.wos.size },
-        travaux:    { ...cats.travaux,    nbWo: cats.travaux.wos.size },
-        inconnu:    { ...cats.inconnu,    nbWo: cats.inconnu.wos.size },
+        inventaire:        { ...cats.inventaire,        nbWo: cats.inventaire.wos.size },
+        vendu:             { ...cats.vendu,             nbWo: cats.vendu.wos.size },
+        moteur_inventaire: { ...cats.moteur_inventaire, nbWo: cats.moteur_inventaire.wos.size },
+        moteur_vendu:      { ...cats.moteur_vendu,      nbWo: cats.moteur_vendu.wos.size },
+        travaux:           { ...cats.travaux,           nbWo: cats.travaux.wos.size },
+        inconnu:           { ...cats.inconnu,           nbWo: cats.inconnu.wos.size },
       },
     };
   }, [woCouts, heures, bounds, invMeta]);
@@ -345,23 +358,25 @@ export function VueMainOeuvre() {
                 />
               </div>
 
-              {/* 4 sous-blocs : breakdown des INTERNES */}
+              {/* Sous-blocs : breakdown des INTERNES */}
               {apercu.interne.heures > 0 && (
                 <>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     🏭 Détail des heures internes par destination
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                    <BlocCat titre="EN INVENTAIRE"     emoji="📦" couleur={C.blue}   data={apercu.cats.inventaire} />
-                    <BlocCat titre="CAMION VENDU"      emoji="✅" couleur={C.green}  data={apercu.cats.vendu} />
-                    <BlocCat titre="TRAVAUX / PIÈCES"  emoji="🔧" couleur="#9ca3af" data={apercu.cats.travaux} />
-                    <BlocCat titre="STOCK INCONNU"     emoji="❓" couleur={C.red}    data={apercu.cats.inconnu} />
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                    <BlocCat titre="CAMION EN INV."    emoji="📦"  couleur={C.blue}   data={apercu.cats.inventaire} />
+                    <BlocCat titre="CAMION VENDU"      emoji="✅"  couleur={C.green}  data={apercu.cats.vendu} />
+                    <BlocCat titre="MOTEUR EN INV."    emoji="🔩"  couleur={C.purple} data={apercu.cats.moteur_inventaire} />
+                    <BlocCat titre="MOTEUR VENDU"      emoji="⚙️" couleur={C.amber}  data={apercu.cats.moteur_vendu} />
+                    <BlocCat titre="TRAVAUX / PIÈCES"  emoji="🔧"  couleur="#9ca3af" data={apercu.cats.travaux} />
+                    <BlocCat titre="STOCK INCONNU"     emoji="❓"  couleur={C.red}    data={apercu.cats.inconnu} />
                   </div>
                   {apercu.cats.inconnu.heures > 0 && (
                     <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.10)', border: `1px solid ${C.red}40`, borderRadius: 8, color: C.red, fontSize: 12 }}>
                       ⚠️ <strong>{fmtH(apercu.cats.inconnu.heures)}</strong> de travail sur des stocks inconnus
-                      ({apercu.cats.inconnu.nbWo} WO). Numéro(s) numérique(s) absent(s) de <code>prod_inventaire</code> et <code>prod_ventes</code>.
-                      À vérifier — peut-être un nouveau camion pas encore créé.
+                      ({apercu.cats.inconnu.nbWo} WO). Numéro(s) absent(s) de <code>prod_inventaire</code>, <code>prod_ventes</code> ET <code>prod_moteurs</code>.
+                      À vérifier — peut-être un nouveau camion/moteur pas encore créé.
                     </div>
                   )}
                 </>
