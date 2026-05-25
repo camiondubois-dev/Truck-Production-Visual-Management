@@ -10,6 +10,13 @@ import { supabase } from '../lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────
 
+/** Statut du camion référencé par un WO interne, après cross-check DB */
+export type CamionStatut =
+  | 'inventaire'       // dans prod_inventaire, pas (encore) vendu
+  | 'vendu'            // dans prod_ventes statut='vendu' ou prod_inventaire etat_commercial='vendu'
+  | 'inconnu'          // numéro valide mais introuvable dans les bases
+  | 'travaux_pieces';  // pas un vrai numéro de stock (PIECES-X, 33214-1, # TEMPORAIRE...)
+
 export interface LaborEntry {
   employeCode:     string;         // ex: 'atormis'
   woNumero:        string;         // ex: '1-32513'
@@ -19,6 +26,11 @@ export interface LaborEntry {
   statutNormalise: 'ouvert' | 'ferme';
   customerOrPart:  string;         // si interne → stock_numero, si externe → nom client
   heures:          number;
+  // Enrichi après cross-check DB (uniquement pour les WO internes)
+  camionStatut?:   CamionStatut;
+  camionMarque?:   string | null;
+  camionModele?:   string | null;
+  camionAnnee?:    number | null;
 }
 
 export interface LaborLogParse {
@@ -159,6 +171,99 @@ export function parseLaborLog(csvText: string): LaborLogParse {
 
   return { entries, totalLignes, periodeDebut, periodeFin, erreurs };
 }
+
+// ─── Enrichissement : cross-check avec prod_inventaire + prod_ventes ───
+// Pour les WO internes, détermine si le numéro réfère à un camion en
+// inventaire, vendu, inconnu, ou si c'est juste un travail de pièces.
+
+/** Test si un texte ressemble à un vrai numéro de stock de camion */
+function estNumeroStockCamion(s: string): boolean {
+  return /^\d{4,}$/.test(s.trim());
+}
+
+export async function enrichirAvecCamions(entries: LaborEntry[]): Promise<LaborEntry[]> {
+  // Collecter les numéros de stock candidats parmi les WO internes
+  const numerosValides = Array.from(new Set(
+    entries
+      .filter(e => e.typeNormalise === 'interne')
+      .map(e => e.customerOrPart.trim())
+      .filter(estNumeroStockCamion)
+  ));
+
+  // Fetch en parallèle les 2 bases
+  let invMap = new Map<string, { marque: string | null; modele: string | null; annee: number | null; vendu: boolean }>();
+  let venduSet = new Set<string>();
+
+  if (numerosValides.length > 0) {
+    const [invRes, venRes] = await Promise.all([
+      supabase
+        .from('prod_inventaire')
+        .select('numero, marque, modele, annee, etat_commercial')
+        .in('numero', numerosValides),
+      supabase
+        .from('prod_ventes')
+        .select('stock_numero, statut')
+        .in('stock_numero', numerosValides),
+    ]);
+    for (const r of (invRes.data ?? []) as any[]) {
+      invMap.set(r.numero, {
+        marque: r.marque ?? null,
+        modele: r.modele ?? null,
+        annee:  r.annee  ?? null,
+        vendu:  r.etat_commercial === 'vendu',
+      });
+    }
+    for (const r of (venRes.data ?? []) as any[]) {
+      if (r.statut === 'vendu') venduSet.add(r.stock_numero);
+    }
+  }
+
+  return entries.map(e => {
+    if (e.typeNormalise !== 'interne') return e;
+
+    const num = e.customerOrPart.trim();
+    if (!estNumeroStockCamion(num)) {
+      return { ...e, camionStatut: 'travaux_pieces' as CamionStatut };
+    }
+    const inv = invMap.get(num);
+    if (inv) {
+      const isVendu = inv.vendu || venduSet.has(num);
+      return {
+        ...e,
+        camionStatut: isVendu ? ('vendu' as CamionStatut) : ('inventaire' as CamionStatut),
+        camionMarque: inv.marque,
+        camionModele: inv.modele,
+        camionAnnee:  inv.annee,
+      };
+    }
+    if (venduSet.has(num)) {
+      return { ...e, camionStatut: 'vendu' as CamionStatut };
+    }
+    return { ...e, camionStatut: 'inconnu' as CamionStatut };
+  });
+}
+
+// Helpers d'affichage pour le statut camion
+export const CAMION_STATUT_LABELS: Record<CamionStatut, string> = {
+  inventaire:     'En inventaire',
+  vendu:          'Camion vendu',
+  inconnu:        'Stock inconnu',
+  travaux_pieces: 'Travaux / pièces',
+};
+
+export const CAMION_STATUT_COLORS: Record<CamionStatut, string> = {
+  inventaire:     '#3b82f6',
+  vendu:          '#22c55e',
+  inconnu:        '#ef4444',
+  travaux_pieces: '#9ca3af',
+};
+
+export const CAMION_STATUT_EMOJIS: Record<CamionStatut, string> = {
+  inventaire:     '📦',
+  vendu:          '✅',
+  inconnu:        '❓',
+  travaux_pieces: '🔧',
+};
 
 // ─── Diff : compare avec l'état actuel de la base ─────────────────
 

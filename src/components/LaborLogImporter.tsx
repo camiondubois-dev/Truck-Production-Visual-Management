@@ -10,8 +10,9 @@
 
 import { useState, useRef } from 'react';
 import {
-  parseLaborLog, buildLaborDiff, executeLaborImport,
-  type LaborLogParse, type LaborDiff, type LaborImportResult,
+  parseLaborLog, buildLaborDiff, executeLaborImport, enrichirAvecCamions,
+  CAMION_STATUT_LABELS, CAMION_STATUT_COLORS, CAMION_STATUT_EMOJIS,
+  type LaborLogParse, type LaborDiff, type LaborImportResult, type CamionStatut,
 } from '../services/laborLogImportService';
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 }).format(n);
@@ -38,9 +39,12 @@ export function LaborLogImporter() {
         setBusy(false);
         return;
       }
-      const d = await buildLaborDiff(p);
+      // Enrichir avec le statut des camions (inventaire / vendu / pièces / inconnu)
+      const enriched = await enrichirAvecCamions(p.entries);
+      const pEnrichi: LaborLogParse = { ...p, entries: enriched };
+      const d = await buildLaborDiff(pEnrichi);
       setFileName(file.name);
-      setParse(p);
+      setParse(pEnrichi);
       setDiff(d);
       setEtape('preview');
     } catch (e: any) {
@@ -163,7 +167,7 @@ export function LaborLogImporter() {
         />
 
         {/* Répartition interne/externe */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div style={{ background: '#dbeafe', borderRadius: 8, padding: 12 }}>
             <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 700 }}>🏭 INTERNE (camions)</div>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#1e3a8a', marginTop: 4 }}>{fmt(heuresInternes)} h</div>
@@ -176,6 +180,52 @@ export function LaborLogImporter() {
           </div>
         </div>
 
+        {/* Détail des heures internes par statut camion */}
+        {internes.length > 0 && (() => {
+          const statuts: CamionStatut[] = ['inventaire', 'vendu', 'travaux_pieces', 'inconnu'];
+          const stats = statuts.map(s => {
+            const sub = internes.filter(e => e.camionStatut === s);
+            return {
+              statut: s,
+              nbEntries: sub.length,
+              nbWo:      new Set(sub.map(e => e.woNumero)).size,
+              heures:    sub.reduce((tot, e) => tot + e.heures, 0),
+            };
+          }).filter(s => s.nbEntries > 0);
+
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                🏭 Détail des heures internes par destination
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 8 }}>
+                {stats.map(s => (
+                  <div key={s.statut} style={{
+                    background: `${CAMION_STATUT_COLORS[s.statut]}15`,
+                    border: `1px solid ${CAMION_STATUT_COLORS[s.statut]}40`,
+                    borderRadius: 8, padding: 10,
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: CAMION_STATUT_COLORS[s.statut] }}>
+                      {CAMION_STATUT_EMOJIS[s.statut]} {CAMION_STATUT_LABELS[s.statut].toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#111827', marginTop: 4 }}>
+                      {fmt(s.heures)} h
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>
+                      {s.nbWo} WO · {s.nbEntries} entrées
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {stats.find(s => s.statut === 'inconnu') && (
+                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 6 }}>
+                  ⚠️ Stock(s) inconnu(s) : numéro(s) numérique(s) absent(s) de prod_inventaire et prod_ventes. À vérifier.
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {parse.erreurs.length > 0 && (
           <div style={{ background: '#fee2e2', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12, color: '#991b1b' }}>
             {parse.erreurs.map((e, i) => <div key={i}>⚠️ {e}</div>)}
@@ -187,14 +237,15 @@ export function LaborLogImporter() {
           <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#374151', padding: '8px 0' }}>
             ▶ Voir le détail des {parse.entries.length} entrées
           </summary>
-          <div style={{ marginTop: 10, maxHeight: 300, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+          <div style={{ marginTop: 10, maxHeight: 350, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
                 <tr style={{ color: '#6b7280' }}>
                   <th style={th}>Employé</th>
                   <th style={th}>WO</th>
                   <th style={th}>Type</th>
-                  <th style={th}>Client/Stock</th>
+                  <th style={th}>Client / Stock</th>
+                  <th style={th}>Camion</th>
                   <th style={{ ...th, textAlign: 'right' }}>Heures</th>
                 </tr>
               </thead>
@@ -211,6 +262,27 @@ export function LaborLogImporter() {
                       }}>{e.typeNormalise}</span>
                     </td>
                     <td style={{ ...td, fontFamily: 'monospace', color: '#6b7280' }}>{e.customerOrPart}</td>
+                    <td style={td}>
+                      {e.typeNormalise === 'interne' && e.camionStatut ? (
+                        <div>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                            background: `${CAMION_STATUT_COLORS[e.camionStatut]}20`,
+                            color:      CAMION_STATUT_COLORS[e.camionStatut],
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {CAMION_STATUT_EMOJIS[e.camionStatut]} {CAMION_STATUT_LABELS[e.camionStatut]}
+                          </span>
+                          {(e.camionMarque || e.camionModele) && (
+                            <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>
+                              {[e.camionAnnee, e.camionMarque, e.camionModele].filter(Boolean).join(' ')}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{fmt(e.heures)}</td>
                   </tr>
                 ))}
