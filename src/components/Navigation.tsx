@@ -40,10 +40,68 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
   const { deconnexion, profile } = useAuth();
   const { items } = useGarage();
   const adminRef = useRef<HTMLDivElement>(null);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
   const [dropdownLeft, setDropdownLeft] = useState(0);
 
   const [now, setNow] = useState(() => new Date());
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // Détection du débordement pour afficher les flèches
+  const updateScrollIndicators = () => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    setShowLeftArrow(el.scrollLeft > 2);
+    setShowRightArrow(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+
+  useEffect(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    updateScrollIndicators();
+    const handler = () => updateScrollIndicators();
+    el.addEventListener('scroll', handler, { passive: true });
+    window.addEventListener('resize', handler);
+    // Re-check après le rendu (les boutons peuvent prendre un tick à mesurer)
+    const tid = setTimeout(updateScrollIndicators, 50);
+    return () => {
+      el.removeEventListener('scroll', handler);
+      window.removeEventListener('resize', handler);
+      clearTimeout(tid);
+    };
+  }, [hiddenTabs.length, profile?.role]);
+
+  // Auto-scroll vers l'onglet actif quand currentTab change (si pas visible)
+  useEffect(() => {
+    const container = tabsScrollRef.current;
+    if (!container) return;
+    const activeBtn = container.querySelector<HTMLButtonElement>(`[data-tab-id="${currentTab}"]`);
+    if (!activeBtn) return;
+    const btnLeft = activeBtn.offsetLeft;
+    const btnRight = btnLeft + activeBtn.offsetWidth;
+    const viewLeft = container.scrollLeft;
+    const viewRight = viewLeft + container.clientWidth;
+    if (btnLeft < viewLeft) {
+      container.scrollTo({ left: btnLeft - 20, behavior: 'smooth' });
+    } else if (btnRight > viewRight) {
+      container.scrollTo({ left: btnRight - container.clientWidth + 20, behavior: 'smooth' });
+    }
+  }, [currentTab]);
+
+  const scrollTabs = (dir: 'left' | 'right') => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const delta = el.clientWidth * 0.6;  // scroll ~60% de la largeur visible
+    el.scrollBy({ left: dir === 'left' ? -delta : delta, behavior: 'smooth' });
+  };
+
+  // Mouse wheel vertical → scroll horizontal
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.currentTarget.scrollLeft += e.deltaY;
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -97,13 +155,45 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
         />
       </div>
 
-      {/* Onglets — zone scrollable, prend l'espace disponible */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, overflow: 'hidden' }}>
+      {/* Onglets — zone scrollable horizontalement avec flèches gauche/droite */}
+      <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+
+        {/* Flèche gauche (overlay) */}
+        {showLeftArrow && (
+          <button
+            onClick={() => scrollTabs('left')}
+            aria-label="Scroller vers la gauche"
+            style={{
+              position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+              zIndex: 5, width: 28, height: 40, borderRadius: 6, border: 'none',
+              background: 'linear-gradient(to right, #0f0e0b 60%, rgba(15,14,11,0))',
+              color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+              paddingLeft: 4, paddingRight: 24,
+            }}
+          >‹</button>
+        )}
+
+        {/* Container scrollable */}
+        <div
+          ref={tabsScrollRef}
+          onWheel={handleWheel}
+          className="nav-tabs-scroll"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            flex: 1, overflowX: 'auto', overflowY: 'hidden',
+            scrollBehavior: 'smooth',
+            // Padding pour que les onglets ne soient pas masqués par les flèches
+            paddingLeft: showLeftArrow ? 24 : 0,
+            paddingRight: showRightArrow ? 24 : 0,
+          }}
+        >
 
         {/* Onglets principaux */}
         {TABS.filter(tab => !isHidden(tab.id)).map((tab) => (
           <button
             key={tab.id}
+            data-tab-id={tab.id}
             onClick={() => onTabChange(tab.id)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
@@ -186,6 +276,30 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
             )}
           </div>
         )}
+        </div>
+        {/* /Container scrollable */}
+
+        {/* Flèche droite (overlay) */}
+        {showRightArrow && (
+          <button
+            onClick={() => scrollTabs('right')}
+            aria-label="Scroller vers la droite"
+            style={{
+              position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+              zIndex: 5, width: 28, height: 40, borderRadius: 6, border: 'none',
+              background: 'linear-gradient(to left, #0f0e0b 60%, rgba(15,14,11,0))',
+              color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              paddingRight: 4, paddingLeft: 24,
+            }}
+          >›</button>
+        )}
+
+        {/* Style global pour cacher la scrollbar */}
+        <style>{`
+          .nav-tabs-scroll::-webkit-scrollbar { display: none; }
+          .nav-tabs-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        `}</style>
       </div>
 
       {/* Droite — nouveau + horloge + déconnexion, toujours visible */}
