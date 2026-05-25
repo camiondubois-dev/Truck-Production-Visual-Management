@@ -13,6 +13,7 @@ import {
   parseLaborLog, buildLaborDiff, executeLaborImport, enrichirAvecCamions,
   CAMION_STATUT_LABELS, CAMION_STATUT_COLORS, CAMION_STATUT_EMOJIS,
   type LaborLogParse, type LaborDiff, type LaborImportResult, type CamionStatut,
+  type ValidationMsg,
 } from '../services/laborLogImportService';
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 }).format(n);
@@ -135,6 +136,13 @@ export function LaborLogImporter() {
             <> · Période <strong>{parse.periodeDebut}</strong> → <strong>{parse.periodeFin}</strong></>
           )}
         </div>
+
+        {/* Validations métier (erreurs bloquantes + avertissements) */}
+        {parse.validations.length > 0 && (
+          <div style={{ marginBottom: 16, display: 'grid', gap: 8 }}>
+            {parse.validations.map((v, i) => <ValidationBox key={i} validation={v} />)}
+          </div>
+        )}
 
         {/* Bloc Employés */}
         <BlocStat
@@ -342,12 +350,24 @@ export function LaborLogImporter() {
 
         {erreur && <Erreur message={erreur} />}
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={reset} disabled={busy} style={btnSecondary}>← Annuler</button>
-          <button onClick={lancerImport} disabled={busy} style={{ ...btnPrimary, flex: 1 }}>
-            {busy ? 'Import en cours…' : '✅ Confirmer et importer'}
-          </button>
-        </div>
+        {(() => {
+          const aDesErreurs = parse.validations.some(v => v.niveau === 'erreur');
+          return (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={reset} disabled={busy} style={btnSecondary}>← Annuler</button>
+              <button onClick={lancerImport} disabled={busy || aDesErreurs}
+                style={{
+                  ...btnPrimary, flex: 1,
+                  background: aDesErreurs ? '#9ca3af' : btnPrimary.background,
+                  cursor: aDesErreurs ? 'not-allowed' : 'pointer',
+                }}
+                title={aDesErreurs ? 'Corrige les erreurs avant d\'importer' : undefined}
+              >
+                {busy ? 'Import en cours…' : aDesErreurs ? '❌ Import bloqué (voir erreurs)' : '✅ Confirmer et importer'}
+              </button>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -412,6 +432,22 @@ function Erreur({ message }: { message: string }) {
   return (
     <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: 12, marginBottom: 12, color: '#991b1b', fontSize: 13 }}>
       ⚠️ {message}
+    </div>
+  );
+}
+
+function ValidationBox({ validation }: { validation: ValidationMsg }) {
+  const styles = {
+    erreur:        { bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', icon: '🚫', label: 'Erreur — import bloqué' },
+    avertissement: { bg: '#fef3c7', border: '#fbbf24', color: '#92400e', icon: '⚠️',  label: 'Avertissement'        },
+    info:          { bg: '#dbeafe', border: '#93c5fd', color: '#1e40af', icon: 'ℹ️',  label: 'Info'                 },
+  }[validation.niveau];
+  return (
+    <div style={{ background: styles.bg, border: `1px solid ${styles.border}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: styles.color }}>
+      <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {styles.icon} {styles.label}
+      </div>
+      <div>{validation.message}</div>
     </div>
   );
 }

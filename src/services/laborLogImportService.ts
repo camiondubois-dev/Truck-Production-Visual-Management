@@ -33,12 +33,18 @@ export interface LaborEntry {
   camionAnnee?:    number | null;
 }
 
+export interface ValidationMsg {
+  niveau:  'erreur' | 'avertissement' | 'info';
+  message: string;
+}
+
 export interface LaborLogParse {
   entries:      LaborEntry[];      // dédupliquées par (employeCode, woNumero)
   totalLignes:  number;             // nb lignes lues dans le CSV (avant dedupe)
   periodeDebut: string | null;     // 'YYYY-MM-DD'
   periodeFin:   string | null;     // 'YYYY-MM-DD'
-  erreurs:      string[];
+  erreurs:      string[];          // erreurs basiques de parsing
+  validations:  ValidationMsg[];   // checks métier (semaine, futur, etc.)
 }
 
 export interface LaborDiff {
@@ -113,16 +119,22 @@ export function parseLaborLog(csvText: string): LaborLogParse {
   const erreurs: string[] = [];
   let periodeDebut: string | null = null;
   let periodeFin:   string | null = null;
+  // On collecte TOUTES les périodes vues pour détecter incohérences
+  const periodesUniques = new Set<string>();
   const seen = new Set<string>();
   let totalLignes = 0;
 
   for (const row of rows) {
     // Extraire la période depuis le premier champ (info répétée à chaque ligne)
-    if (!periodeDebut && row[0]) {
+    if (row[0]) {
       const dates = row[0].match(/\d{4}-\d{2}-\d{2}/g);
       if (dates && dates.length >= 2) {
-        periodeDebut = dates[0];
-        periodeFin   = dates[1];
+        const key = `${dates[0]}|${dates[1]}`;
+        periodesUniques.add(key);
+        if (!periodeDebut) {
+          periodeDebut = dates[0];
+          periodeFin   = dates[1];
+        }
       }
     }
 
@@ -133,14 +145,11 @@ export function parseLaborLog(csvText: string): LaborLogParse {
     const customerOrPart = (row[11] ?? '').trim();
     const heuresStr      = (row[12] ?? '').trim();
 
-    // Ignorer les lignes qui ne contiennent pas de données utiles
     if (!employe || !woNumero || !typeBrut) continue;
-    // Ignorer les lignes qui sont juste les labels d'en-tête
     if (employe === 'Work Order' || woNumero === 'Work Order') continue;
 
     totalLignes++;
 
-    // Dédupe par (employé + WO) — l'iTrack répète les mêmes lignes
     const key = `${employe.toLowerCase()}|${woNumero}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -169,7 +178,78 @@ export function parseLaborLog(csvText: string): LaborLogParse {
     erreurs.push('⚠️ Aucune entrée détectée. Le format du fichier est-il correct ?');
   }
 
-  return { entries, totalLignes, periodeDebut, periodeFin, erreurs };
+  // ─── Validations métier ───────────────────────────────────────
+  const validations = validerPeriode(periodeDebut, periodeFin, periodesUniques);
+
+  return { entries, totalLignes, periodeDebut, periodeFin, erreurs, validations };
+}
+
+/** Validations sur la période détectée. */
+function validerPeriode(
+  debut:           string | null,
+  fin:             string | null,
+  periodesVues:    Set<string>,
+): ValidationMsg[] {
+  const v: ValidationMsg[] = [];
+  if (!debut || !fin) return v;
+
+  // 1. Plusieurs périodes différentes dans le même fichier
+  if (periodesVues.size > 1) {
+    v.push({
+      niveau: 'erreur',
+      message: `Le fichier contient ${periodesVues.size} périodes différentes : ${Array.from(periodesVues).join(' · ')}. L'import doit couvrir UNE seule semaine.`,
+    });
+  }
+
+  const d1 = new Date(debut + 'T00:00:00');
+  const d2 = new Date(fin   + 'T00:00:00');
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return v;
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  // Si iTrack utilise "du 17 au 24", c'est 7 jours d'écart calendrier (8 jours inclusifs).
+  // Si "du 17 au 23", 6 jours d'écart (7 jours inclusifs). Les 2 sont valides pour "1 semaine".
+  const ecartJours = Math.round((d2.getTime() - d1.getTime()) / msPerDay);
+
+  // 2. Période doit ressembler à une semaine
+  if (ecartJours < 6 || ecartJours > 7) {
+    v.push({
+      niveau: 'erreur',
+      message: `La période fait ${ecartJours + 1} jour${ecartJours !== 0 ? 's' : ''} (du ${debut} au ${fin}). Une semaine devrait faire 7 jours. Vérifie ton filtre iTrack.`,
+    });
+  }
+
+  // 3. Pas dans le futur
+  const aujourdhui = new Date();
+  aujourdhui.setHours(0, 0, 0, 0);
+  if (d2.getTime() > aujourdhui.getTime() + msPerDay) {
+    v.push({
+      niveau: 'erreur',
+      message: `La période se termine le ${fin}, dans le futur. Date probablement incorrecte.`,
+    });
+  }
+
+  // 4. Pas trop vieille (>6 mois)
+  const sixMoisAvant = new Date(aujourdhui);
+  sixMoisAvant.setMonth(sixMoisAvant.getMonth() - 6);
+  if (d2.getTime() < sixMoisAvant.getTime()) {
+    v.push({
+      niveau: 'avertissement',
+      message: `La période est vieille de plus de 6 mois (${fin}). Sûr de vouloir l'importer ?`,
+    });
+  }
+
+  // 5. Commence sur un lundi (norme entreprise)
+  // getDay() : 0=dim, 1=lun, ..., 6=sam
+  const dow = d1.getDay();
+  if (dow !== 1) {
+    const nomsJours = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    v.push({
+      niveau: 'avertissement',
+      message: `La semaine commence un ${nomsJours[dow]} (${debut}). Norme habituelle : lundi. Ton bilan hebdo risque de chevaucher 2 semaines.`,
+    });
+  }
+
+  return v;
 }
 
 // ─── Enrichissement : cross-check avec prod_inventaire + prod_ventes ───
