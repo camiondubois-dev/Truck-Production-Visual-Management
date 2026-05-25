@@ -191,6 +191,68 @@ export function VueMainOeuvre() {
     };
   }, [woCouts, heures, bounds]);
 
+  // ─── Catégorisation détaillée des heures internes (comme dans l'import preview) ──
+  const apercu = useMemo(() => {
+    // Index : nb entrées (employé×WO) par WO
+    const entriesByWo = new Map<string, number>();
+    for (const h of heures) {
+      if (!h.woNumero) continue;
+      entriesByWo.set(h.woNumero, (entriesByWo.get(h.woNumero) ?? 0) + 1);
+    }
+
+    const wosActifs = new Set(heures.map(h => h.woNumero).filter(Boolean));
+    const make = () => ({ heures: 0, wos: new Set<string>(), entries: 0 });
+    const interne = make();
+    const externe = make();
+    const cats = {
+      inventaire: make(),
+      vendu:      make(),
+      travaux:    make(),
+      inconnu:    make(),
+    };
+
+    for (const w of woCouts) {
+      if (bounds.from && !wosActifs.has(w.woNumero)) continue;
+      const nbEntries = entriesByWo.get(w.woNumero) ?? 0;
+
+      if (w.type === 'interne') {
+        interne.heures += w.totalHeures;
+        interne.wos.add(w.woNumero);
+        interne.entries += nbEntries;
+
+        // Sous-catégorisation interne
+        let cat: keyof typeof cats;
+        if (!w.stockNumero) {
+          cat = 'inconnu';
+        } else if (!estVraiStockCamion(w.stockNumero)) {
+          cat = 'travaux';
+        } else {
+          const meta = invMeta[w.stockNumero];
+          if (!meta)         cat = 'inconnu';
+          else if (meta.vendu) cat = 'vendu';
+          else                 cat = 'inventaire';
+        }
+        cats[cat].heures += w.totalHeures;
+        cats[cat].wos.add(w.woNumero);
+        cats[cat].entries += nbEntries;
+      } else {
+        externe.heures += w.totalHeures;
+        externe.wos.add(w.woNumero);
+        externe.entries += nbEntries;
+      }
+    }
+    return {
+      interne: { ...interne, nbWo: interne.wos.size },
+      externe: { ...externe, nbWo: externe.wos.size },
+      cats: {
+        inventaire: { ...cats.inventaire, nbWo: cats.inventaire.wos.size },
+        vendu:      { ...cats.vendu,      nbWo: cats.vendu.wos.size },
+        travaux:    { ...cats.travaux,    nbWo: cats.travaux.wos.size },
+        inconnu:    { ...cats.inconnu,    nbWo: cats.inconnu.wos.size },
+      },
+    };
+  }, [woCouts, heures, bounds, invMeta]);
+
   // ─── KPIs globaux ──
   const kpis = useMemo(() => {
     const totalHeures = heures.reduce((s, h) => s + h.heures, 0);
@@ -259,6 +321,47 @@ export function VueMainOeuvre() {
               <Kpi label="Profit sur M.O." value={fmt$(kpis.profitMoTotal)} color={kpis.profitMoTotal >= 0 ? C.green : C.red} sub={`Revenu facturable − coût réel`} />
             </div>
           </Section>
+
+          {/* ═══ Répartition Interne / Externe + sous-catégories ═══ */}
+          {(apercu.interne.heures > 0 || apercu.externe.heures > 0) && (
+            <Section titre="🏭 Répartition des heures">
+              {/* 2 gros blocs : INTERNE | EXTERNE */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <BlocGros
+                  titre="🏭 INTERNE (camions)" couleur="#3b82f6"
+                  bg="rgba(59,130,246,0.10)" border="rgba(59,130,246,0.35)"
+                  heures={apercu.interne.heures} sousTexte={`${apercu.interne.entries} entrées · ${apercu.interne.nbWo} WO`}
+                />
+                <BlocGros
+                  titre="🔧 EXTERNE (clients)" couleur="#ec4899"
+                  bg="rgba(236,72,153,0.10)" border="rgba(236,72,153,0.35)"
+                  heures={apercu.externe.heures} sousTexte={`${apercu.externe.entries} entrées · ${apercu.externe.nbWo} WO`}
+                />
+              </div>
+
+              {/* 4 sous-blocs : breakdown des INTERNES */}
+              {apercu.interne.heures > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    🏭 Détail des heures internes par destination
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    <BlocCat titre="EN INVENTAIRE"     emoji="📦" couleur={C.blue}   data={apercu.cats.inventaire} />
+                    <BlocCat titre="CAMION VENDU"      emoji="✅" couleur={C.green}  data={apercu.cats.vendu} />
+                    <BlocCat titre="TRAVAUX / PIÈCES"  emoji="🔧" couleur="#9ca3af" data={apercu.cats.travaux} />
+                    <BlocCat titre="STOCK INCONNU"     emoji="❓" couleur={C.red}    data={apercu.cats.inconnu} />
+                  </div>
+                  {apercu.cats.inconnu.heures > 0 && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.10)', border: `1px solid ${C.red}40`, borderRadius: 8, color: C.red, fontSize: 12 }}>
+                      ⚠️ <strong>{fmtH(apercu.cats.inconnu.heures)}</strong> de travail sur des stocks inconnus
+                      ({apercu.cats.inconnu.nbWo} WO). Numéro(s) numérique(s) absent(s) de <code>prod_inventaire</code> et <code>prod_ventes</code>.
+                      À vérifier — peut-être un nouveau camion pas encore créé.
+                    </div>
+                  )}
+                </>
+              )}
+            </Section>
+          )}
 
           {/* ═══ Par employé ═══ */}
           <Section titre="👥 Par employé">
@@ -402,6 +505,36 @@ function Section({ titre, children }: { titre: string; children: React.ReactNode
     <div style={{ marginBottom: 28 }}>
       <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 12, letterSpacing: '0.02em' }}>{titre}</div>
       {children}
+    </div>
+  );
+}
+
+function BlocGros({ titre, couleur, bg, border, heures, sousTexte }: {
+  titre: string; couleur: string; bg: string; border: string; heures: number; sousTexte: string;
+}) {
+  return (
+    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '14px 18px' }}>
+      <div style={{ fontSize: 11, color: couleur, fontWeight: 700, letterSpacing: '0.04em' }}>{titre}</div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: couleur, marginTop: 4 }}>{fmtH(heures)}</div>
+      <div style={{ fontSize: 11, color: couleur, opacity: 0.8, marginTop: 2 }}>{sousTexte}</div>
+    </div>
+  );
+}
+
+function BlocCat({ titre, emoji, couleur, data }: {
+  titre: string; emoji: string; couleur: string;
+  data: { heures: number; nbWo: number; entries: number };
+}) {
+  return (
+    <div style={{
+      background: `${couleur}15`, border: `1px solid ${couleur}40`,
+      borderRadius: 8, padding: 10,
+    }}>
+      <div style={{ fontSize: 10, color: couleur, fontWeight: 700 }}>{emoji} {titre}</div>
+      <div style={{ fontSize: 20, fontWeight: 900, color: C.text, marginTop: 4 }}>{fmtH(data.heures)}</div>
+      <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+        {data.nbWo} WO · {data.entries} entrée{data.entries !== 1 ? 's' : ''}
+      </div>
     </div>
   );
 }
