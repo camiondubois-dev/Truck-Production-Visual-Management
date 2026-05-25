@@ -12,8 +12,9 @@ import {
   parsePiecesCSV, loadPiecesExistantes, calculatePiecesDiff, executePiecesImport, nomVendeur,
   type PieceRow, type PiecesDiff, type PiecesImportResult, type ModeFichierPieces,
 } from '../services/piecesImportService';
+import { LaborLogImporter } from './LaborLogImporter';
 
-type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces';
+type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces' | 'labor_log';
 
 const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'couts',                label: 'Coûts HITRAC',           icon: '📥', color: '#3b82f6' },
@@ -21,6 +22,7 @@ const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'ventes_exportation',   label: 'Ventes Exportation',     icon: '🌍', color: '#7c3aed' },
   { id: 'ventes_encan',         label: 'Ventes Encan',           icon: '🔨', color: '#f59e0b' },
   { id: 'ventes_pieces',        label: 'Ventes Pièces',          icon: '🔧', color: '#10b981' },
+  { id: 'labor_log',            label: 'Heures M.O.',            icon: '⏰', color: '#a78bfa' },
 ];
 
 export function VueImport() {
@@ -66,6 +68,7 @@ export function VueImport() {
           {tab === 'ventes_exportation' && <VentesImporter wizard="exportation" />}
           {tab === 'ventes_encan'       && <VentesImporter wizard="encan" />}
           {tab === 'ventes_pieces'      && <PiecesImporter />}
+          {tab === 'labor_log'          && <LaborLogImporter />}
         </div>
       </div>
     </div>
