@@ -15,6 +15,11 @@ import {
   periodeBounds, type PreriodeOption,
   type Employe, type WoCoutMo, type HeureEmploye,
 } from '../services/mainOeuvreService';
+import { supabase } from '../lib/supabase';
+
+/** Test si un texte ressemble à un vrai numéro de stock de camion */
+const estVraiStockCamion = (s: string | null | undefined): boolean =>
+  !!s && /^\d{4,}$/.test(s.trim());
 
 // ─── Helpers d'affichage ──────────────────────────────────────────
 
@@ -47,6 +52,8 @@ export function VueMainOeuvre() {
   const [woCouts,    setWoCouts]    = useState<WoCoutMo[]>([]);
   const [heures,     setHeures]     = useState<HeureEmploye[]>([]);
   const [filtreType, setFiltreType] = useState<'tous' | 'interne' | 'externe'>('tous');
+  // Metadata camions (marque/modèle/année) pour enrichir le tableau Par camion
+  const [invMeta, setInvMeta] = useState<Record<string, { marque: string | null; modele: string | null; annee: number | null }>>({});
 
   const bounds = useMemo(() => periodeBounds(periode), [periode]);
 
@@ -62,6 +69,26 @@ export function VueMainOeuvre() {
         setEmployes(emps);
         setWoCouts(wos);
         setHeures(hrs);
+
+        // Fetch métadonnées camion pour tous les vrais numéros de stock présents
+        const stocksValides = Array.from(new Set(
+          wos
+            .filter(w => w.type === 'interne' && estVraiStockCamion(w.stockNumero))
+            .map(w => w.stockNumero!)
+        ));
+        if (stocksValides.length > 0) {
+          const { data } = await supabase
+            .from('prod_inventaire')
+            .select('numero, marque, modele, annee')
+            .in('numero', stocksValides);
+          const map: typeof invMeta = {};
+          for (const r of (data ?? []) as any[]) {
+            map[r.numero] = { marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null };
+          }
+          setInvMeta(map);
+        } else {
+          setInvMeta({});
+        }
       } finally {
         setLoading(false);
       }
@@ -105,21 +132,37 @@ export function VueMainOeuvre() {
     return rows.sort((a, b) => b.totalHeures - a.totalHeures);
   }, [woCouts, filtreType, heures, bounds]);
 
-  // ─── Calculs : par camion (cumul interne) ──
-  const parCamion = useMemo(() => {
+  // ─── Calculs : séparer vrais camions vs travaux génériques (pièces, temp, etc.) ──
+  const { parCamion, parTravaux } = useMemo(() => {
     const wosActifs = new Set(heures.map(h => h.woNumero).filter(Boolean));
-    const map = new Map<string, { stockNumero: string; nbWo: number; heures: number; cout: number }>();
+    const camionsMap  = new Map<string, { stockNumero: string; nbWo: number; heures: number; cout: number }>();
+    const travauxMap  = new Map<string, { reference: string; nbWo: number; heures: number; cout: number }>();
+
     for (const w of woCouts) {
       if (w.type !== 'interne' || !w.stockNumero) continue;
-      // Si on filtre par période, ne garder que les WO actifs
+      // Filtrer par période si active
       if (bounds.from && !wosActifs.has(w.woNumero)) continue;
-      const cur = map.get(w.stockNumero) ?? { stockNumero: w.stockNumero, nbWo: 0, heures: 0, cout: 0 };
-      cur.nbWo++;
-      cur.heures += w.totalHeures;
-      cur.cout   += w.coutMoReel;
-      map.set(w.stockNumero, cur);
+
+      if (estVraiStockCamion(w.stockNumero)) {
+        // VRAI camion
+        const cur = camionsMap.get(w.stockNumero) ?? { stockNumero: w.stockNumero, nbWo: 0, heures: 0, cout: 0 };
+        cur.nbWo++;
+        cur.heures += w.totalHeures;
+        cur.cout   += w.coutMoReel;
+        camionsMap.set(w.stockNumero, cur);
+      } else {
+        // Travail générique (pièces, temporaire, etc.)
+        const cur = travauxMap.get(w.stockNumero) ?? { reference: w.stockNumero, nbWo: 0, heures: 0, cout: 0 };
+        cur.nbWo++;
+        cur.heures += w.totalHeures;
+        cur.cout   += w.coutMoReel;
+        travauxMap.set(w.stockNumero, cur);
+      }
     }
-    return Array.from(map.values()).sort((a, b) => b.cout - a.cout);
+    return {
+      parCamion: Array.from(camionsMap.values()).sort((a, b) => b.cout - a.cout),
+      parTravaux: Array.from(travauxMap.values()).sort((a, b) => b.cout - a.cout),
+    };
   }, [woCouts, heures, bounds]);
 
   // ─── KPIs globaux ──
@@ -259,27 +302,54 @@ export function VueMainOeuvre() {
             )}
           </Section>
 
-          {/* ═══ Par camion (interne) ═══ */}
+          {/* ═══ Par camion (interne, vrais numéros de stock seulement) ═══ */}
           <Section titre="🏭 Par camion — coût M.O. réel cumulé">
             {parCamion.length === 0 ? (
-              <Vide message="Aucune heure de travail interne sur cette période." />
+              <Vide message="Aucune heure de travail sur un camion réel pendant cette période." />
             ) : (
-              <Table headers={['# Stock', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
-                {parCamion.map(r => (
-                  <Row key={r.stockNumero}>
-                    <Td bold><span style={{ color: C.blue }}>#{r.stockNumero}</span></Td>
+              <Table headers={['# Stock', 'Camion', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
+                {parCamion.map(r => {
+                  const meta = invMeta[r.stockNumero];
+                  const desc = meta
+                    ? [meta.annee, meta.marque, meta.modele].filter(Boolean).join(' ')
+                    : '';
+                  return (
+                    <Row key={r.stockNumero}>
+                      <Td bold><span style={{ color: C.blue }}>#{r.stockNumero}</span></Td>
+                      <Td color={desc ? undefined : C.faded}>{desc || '— inconnu dans prod_inventaire'}</Td>
+                      <Td right>{r.nbWo}</Td>
+                      <Td right bold>{fmtH(r.heures)}</Td>
+                      <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
+                    </Row>
+                  );
+                })}
+              </Table>
+            )}
+            <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
+              💡 Uniquement les vrais numéros de stock (≥4 chiffres purs). Coût = heures pointées × taux horaire =
+              <strong> vrai</strong> coût de production (peut différer du <code>cout_mo</code> importé Hitrac).
+            </div>
+          </Section>
+
+          {/* ═══ Travaux génériques (pièces, temporaire, etc.) ═══ */}
+          {parTravaux.length > 0 && (
+            <Section titre="🔧 Travaux génériques (pièces / temporaire / autres)">
+              <Table headers={['Référence', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
+                {parTravaux.map(r => (
+                  <Row key={r.reference}>
+                    <Td bold><span style={{ color: C.muted, fontFamily: 'monospace' }}>{r.reference}</span></Td>
                     <Td right>{r.nbWo}</Td>
                     <Td right bold>{fmtH(r.heures)}</Td>
                     <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
                   </Row>
                 ))}
               </Table>
-            )}
-            <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
-              💡 Ce coût provient des heures pointées × taux horaire. C'est le <strong>vrai</strong> coût de production.
-              Il peut différer du <code>cout_mo</code> importé Hitrac dans prod_ventes.
-            </div>
-          </Section>
+              <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
+                💡 Ces WO internes ne sont pas liés à un camion spécifique (suffixe <code>-1</code>, préfixe <code>PIECES-</code>,
+                texte libre, etc.). C'est du travail sur des pièces génériques ou des projets temporaires.
+              </div>
+            </Section>
+          )}
         </>
       )}
     </div>
