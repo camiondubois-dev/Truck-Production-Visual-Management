@@ -27,6 +27,7 @@ export function LaborLogImporter() {
   const [result,   setResult]   = useState<LaborImportResult | null>(null);
   const [busy,     setBusy]     = useState(false);
   const [erreur,   setErreur]   = useState<string | null>(null);
+  const [tauxFacturation, setTauxFacturation] = useState<string>('140');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -56,9 +57,14 @@ export function LaborLogImporter() {
 
   const lancerImport = async () => {
     if (!parse) return;
+    const taux = parseFloat(tauxFacturation);
+    if (!Number.isFinite(taux) || taux < 0) {
+      setErreur('Taux horaire facturé invalide.');
+      return;
+    }
     setBusy(true); setErreur(null);
     try {
-      const r = await executeLaborImport(parse, fileName);
+      const r = await executeLaborImport(parse, fileName, taux);
       setResult(r);
       setEtape('resultat');
     } catch (e: any) {
@@ -291,6 +297,49 @@ export function LaborLogImporter() {
           </div>
         </details>
 
+        {/* Taux horaire facturé + aperçu revenus calculés */}
+        {(() => {
+          const taux = parseFloat(tauxFacturation) || 0;
+          const totalHeures = parse.entries.reduce((s, e) => s + e.heures, 0);
+          const revenuTotal = totalHeures * taux;
+          const revenuInterne = parse.entries.filter(e => e.typeNormalise === 'interne').reduce((s, e) => s + e.heures * taux, 0);
+          const revenuExterne = parse.entries.filter(e => e.typeNormalise === 'externe').reduce((s, e) => s + e.heures * taux, 0);
+          return (
+            <div style={{
+              background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: 16, marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                💵 Taux horaire facturé (revenu)
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <label style={{ fontSize: 13, color: '#166534', fontWeight: 600 }}>Taux ($/h) :</label>
+                <input
+                  type="number" step="0.01" min="0"
+                  value={tauxFacturation}
+                  onChange={ev => setTauxFacturation(ev.target.value)}
+                  style={{
+                    padding: '8px 12px', border: '1px solid #86efac', borderRadius: 6,
+                    fontSize: 16, fontWeight: 700, color: '#166534', background: 'white',
+                    width: 110, textAlign: 'right',
+                  }}
+                />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  s'applique à <strong>tous les WO</strong> de cet import (défaut: 140 $)
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                <ChiffreCard label="Revenu total facturable" value={revenuTotal} color="#16a34a" sub={`${totalHeures.toFixed(1)} h × ${taux.toFixed(2)} $`} />
+                <ChiffreCard label="dont WO internes"        value={revenuInterne} color="#0ea5e9" />
+                <ChiffreCard label="dont WO externes"        value={revenuExterne} color="#ec4899" />
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                💡 Ce taux est sauvegardé par WO et réutilisé pour calculer le profit sur la M.O.
+                Tu peux ajuster un WO individuellement plus tard si besoin.
+              </div>
+            </div>
+          );
+        })()}
+
         {erreur && <Erreur message={erreur} />}
 
         <div style={{ display: 'flex', gap: 10 }}>
@@ -372,6 +421,17 @@ function Resume({ label, value, color }: { label: string; value: number; color: 
     <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
       <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 900, color }}>{value}</div>
+    </div>
+  );
+}
+
+function ChiffreCard({ label, value, color, sub }: { label: string; value: number; color: string; sub?: string }) {
+  const fmt$ = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 });
+  return (
+    <div style={{ background: 'white', border: '1px solid #d1fae5', borderRadius: 8, padding: 10 }}>
+      <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color }}>{fmt$.format(value)}</div>
+      {sub && <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }

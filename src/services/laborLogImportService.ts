@@ -321,6 +321,7 @@ export async function buildLaborDiff(parse: LaborLogParse): Promise<LaborDiff> {
 export async function executeLaborImport(
   parse: LaborLogParse,
   sourceFichier: string,
+  tauxFacturation: number = 140,
 ): Promise<LaborImportResult> {
   const result: LaborImportResult = {
     employesCrees: 0, wosCrees: 0, wosMisAJour: 0,
@@ -379,25 +380,27 @@ export async function executeLaborImport(
   for (const e of woMap.values()) {
     const isInterne = e.typeNormalise === 'interne';
     const woPayload = {
-      wo_numero:      e.woNumero,
-      type:           e.typeNormalise,
-      stock_numero:   isInterne ? e.customerOrPart : null,
-      client:         isInterne ? null : e.customerOrPart,
-      description:    e.typeBrut,
-      statut:         e.statutNormalise,
-      date_ouverture: parse.periodeDebut, // par défaut, on prend la période
-      source_fichier: sourceFichier,
+      wo_numero:        e.woNumero,
+      type:             e.typeNormalise,
+      stock_numero:     isInterne ? e.customerOrPart : null,
+      client:           isInterne ? null : e.customerOrPart,
+      description:      e.typeBrut,
+      statut:           e.statutNormalise,
+      date_ouverture:   parse.periodeDebut, // par défaut, on prend la période
+      source_fichier:   sourceFichier,
+      taux_facturation: tauxFacturation,    // applique le taux fourni à tous les WO
     };
     if (wosExistantsSet.has(e.woNumero)) {
       const { error } = await supabase
         .from('prod_work_orders')
         .update({
           // On ne touche pas date_ouverture / montant_facture / cout_pieces (déjà saisis manuellement peut-être)
-          statut:         woPayload.statut,
-          stock_numero:   woPayload.stock_numero,
-          client:         woPayload.client,
-          description:    woPayload.description,
-          source_fichier: woPayload.source_fichier,
+          statut:           woPayload.statut,
+          stock_numero:     woPayload.stock_numero,
+          client:           woPayload.client,
+          description:      woPayload.description,
+          source_fichier:   woPayload.source_fichier,
+          taux_facturation: woPayload.taux_facturation,
         })
         .eq('wo_numero', e.woNumero);
       if (error) result.erreurs.push(`Update WO ${e.woNumero}: ${error.message}`);

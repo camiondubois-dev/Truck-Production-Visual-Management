@@ -159,33 +159,35 @@ export function VueMainOeuvre() {
   // ─── Calculs : séparer vrais camions vs travaux génériques (pièces, temp, etc.) ──
   const { parCamion, parTravaux } = useMemo(() => {
     const wosActifs = new Set(heures.map(h => h.woNumero).filter(Boolean));
-    const camionsMap  = new Map<string, { stockNumero: string; nbWo: number; heures: number; cout: number }>();
-    const travauxMap  = new Map<string, { reference: string; nbWo: number; heures: number; cout: number }>();
+    type Agg = { stockNumero?: string; reference?: string; nbWo: number; heures: number; cout: number; revenu: number; profit: number };
+    const camionsMap = new Map<string, Agg>();
+    const travauxMap = new Map<string, Agg>();
 
     for (const w of woCouts) {
       if (w.type !== 'interne' || !w.stockNumero) continue;
-      // Filtrer par période si active
       if (bounds.from && !wosActifs.has(w.woNumero)) continue;
 
-      if (estVraiStockCamion(w.stockNumero)) {
-        // VRAI camion
-        const cur = camionsMap.get(w.stockNumero) ?? { stockNumero: w.stockNumero, nbWo: 0, heures: 0, cout: 0 };
-        cur.nbWo++;
-        cur.heures += w.totalHeures;
-        cur.cout   += w.coutMoReel;
-        camionsMap.set(w.stockNumero, cur);
-      } else {
-        // Travail générique (pièces, temporaire, etc.)
-        const cur = travauxMap.get(w.stockNumero) ?? { reference: w.stockNumero, nbWo: 0, heures: 0, cout: 0 };
-        cur.nbWo++;
-        cur.heures += w.totalHeures;
-        cur.cout   += w.coutMoReel;
-        travauxMap.set(w.stockNumero, cur);
-      }
+      const key = w.stockNumero;
+      const isCamion = estVraiStockCamion(key);
+      const map = isCamion ? camionsMap : travauxMap;
+      const cur: Agg = map.get(key) ?? {
+        ...(isCamion ? { stockNumero: key } : { reference: key }),
+        nbWo: 0, heures: 0, cout: 0, revenu: 0, profit: 0,
+      };
+      cur.nbWo++;
+      cur.heures += w.totalHeures;
+      cur.cout   += w.coutMoReel;
+      cur.revenu += w.revenuMoCalcule;
+      cur.profit += w.profitMo;
+      map.set(key, cur);
     }
     return {
-      parCamion: Array.from(camionsMap.values()).sort((a, b) => b.cout - a.cout),
-      parTravaux: Array.from(travauxMap.values()).sort((a, b) => b.cout - a.cout),
+      parCamion: Array.from(camionsMap.values())
+        .map(c => ({ stockNumero: c.stockNumero!, nbWo: c.nbWo, heures: c.heures, cout: c.cout, revenu: c.revenu, profit: c.profit }))
+        .sort((a, b) => b.cout - a.cout),
+      parTravaux: Array.from(travauxMap.values())
+        .map(c => ({ reference: c.reference!, nbWo: c.nbWo, heures: c.heures, cout: c.cout, revenu: c.revenu, profit: c.profit }))
+        .sort((a, b) => b.cout - a.cout),
     };
   }, [woCouts, heures, bounds]);
 
@@ -198,11 +200,13 @@ export function VueMainOeuvre() {
     }, 0);
     const wosInternes = parWo.filter(w => w.type === 'interne').length;
     const wosExternes = parWo.filter(w => w.type === 'externe').length;
-    const revenuExterne = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.montantFacture, 0);
-    const coutInterne   = parWo.filter(w => w.type === 'interne').reduce((s, w) => s + w.coutMoReel, 0);
-    const coutExterne   = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.coutMoReel, 0);
-    const profitExterne = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.profitBrut, 0);
-    return { totalHeures, totalCout, wosInternes, wosExternes, revenuExterne, coutInterne, coutExterne, profitExterne };
+    // Revenu MO facturable = somme(heures × taux_facturation) sur tous les WO
+    const revenuMoTotal    = parWo.reduce((s, w) => s + w.revenuMoCalcule, 0);
+    const revenuMoInterne  = parWo.filter(w => w.type === 'interne').reduce((s, w) => s + w.revenuMoCalcule, 0);
+    const revenuMoExterne  = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.revenuMoCalcule, 0);
+    const profitMoTotal    = parWo.reduce((s, w) => s + w.profitMo, 0);
+    return { totalHeures, totalCout, wosInternes, wosExternes,
+             revenuMoTotal, revenuMoInterne, revenuMoExterne, profitMoTotal };
   }, [heures, parWo, empById]);
 
   // ─── Sanity check : employés sans taux ──
@@ -249,11 +253,10 @@ export function VueMainOeuvre() {
           {/* ═══ KPIs globaux ═══ */}
           <Section titre="📊 Vue d'ensemble">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} />
+              <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
               <Kpi label="Coût M.O. réel" value={fmt$(kpis.totalCout)} color={C.amber} sub={`${employes.filter(e => e.actif).length} employés actifs`} />
-              <Kpi label="WO internes" value={String(kpis.wosInternes)} sub={`Coût: ${fmt$(kpis.coutInterne)}`} />
-              <Kpi label="WO externes" value={String(kpis.wosExternes)} sub={`Revenu: ${fmt$(kpis.revenuExterne)}`} />
-              <Kpi label="Profit jobs externes" value={fmt$(kpis.profitExterne)} color={kpis.profitExterne >= 0 ? C.green : C.red} sub={`Revenu − pièces − M.O.`} />
+              <Kpi label="Revenu M.O. facturable" value={fmt$(kpis.revenuMoTotal)} color={C.green} sub={`Interne: ${fmt$(kpis.revenuMoInterne)} · Externe: ${fmt$(kpis.revenuMoExterne)}`} />
+              <Kpi label="Profit sur M.O." value={fmt$(kpis.profitMoTotal)} color={kpis.profitMoTotal >= 0 ? C.green : C.red} sub={`Revenu facturable − coût réel`} />
             </div>
           </Section>
 
@@ -298,7 +301,7 @@ export function VueMainOeuvre() {
             {parWo.length === 0 ? (
               <Vide message="Aucun WO actif sur cette période." />
             ) : (
-              <Table headers={['WO', 'Type', 'Stock / Client', 'Heures', 'Coût M.O.', 'Pièces', 'Revenu', 'Profit']}>
+              <Table headers={['WO', 'Type', 'Stock / Client', 'Heures', 'Taux/h', 'Coût M.O.', 'Revenu M.O.', 'Profit M.O.']}>
                 {parWo.map(r => {
                   const ref = r.type === 'interne' ? r.stockNumero : r.client;
                   return (
@@ -313,12 +316,10 @@ export function VueMainOeuvre() {
                       </Td>
                       <Td color={ref ? undefined : C.faded}>{ref ?? '—'}</Td>
                       <Td right>{fmtH(r.totalHeures)}</Td>
+                      <Td right color={C.faded}>{fmt$(r.tauxFacturation)}</Td>
                       <Td right bold color={C.amber}>{fmt$(r.coutMoReel)}</Td>
-                      <Td right color={C.faded}>{fmt$(r.coutPieces)}</Td>
-                      <Td right>{r.type === 'externe' ? fmt$(r.montantFacture) : '—'}</Td>
-                      <Td right bold color={r.type === 'externe' ? (r.profitBrut >= 0 ? C.green : C.red) : C.faded}>
-                        {r.type === 'externe' ? fmt$(r.profitBrut) : '—'}
-                      </Td>
+                      <Td right bold color={C.green}>{fmt$(r.revenuMoCalcule)}</Td>
+                      <Td right bold color={r.profitMo >= 0 ? C.green : C.red}>{fmt$(r.profitMo)}</Td>
                     </Row>
                   );
                 })}
@@ -331,7 +332,7 @@ export function VueMainOeuvre() {
             {parCamion.length === 0 ? (
               <Vide message="Aucune heure de travail sur un camion réel pendant cette période." />
             ) : (
-              <Table headers={['# Stock', 'Statut', 'Camion', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
+              <Table headers={['# Stock', 'Statut', 'Camion', 'Nb WO', 'Heures', 'Coût M.O.', 'Revenu M.O.', 'Profit M.O.']}>
                 {parCamion.map(r => {
                   const meta = invMeta[r.stockNumero];
                   const desc = meta
@@ -354,6 +355,8 @@ export function VueMainOeuvre() {
                       <Td right>{r.nbWo}</Td>
                       <Td right bold>{fmtH(r.heures)}</Td>
                       <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
+                      <Td right bold color={C.green}>{fmt$(r.revenu)}</Td>
+                      <Td right bold color={r.profit >= 0 ? C.green : C.red}>{fmt$(r.profit)}</Td>
                     </Row>
                   );
                 })}
@@ -368,13 +371,15 @@ export function VueMainOeuvre() {
           {/* ═══ Travaux génériques (pièces, temporaire, etc.) ═══ */}
           {parTravaux.length > 0 && (
             <Section titre="🔧 Travaux génériques (pièces / temporaire / autres)">
-              <Table headers={['Référence', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
+              <Table headers={['Référence', 'Nb WO', 'Heures', 'Coût M.O.', 'Revenu M.O.', 'Profit M.O.']}>
                 {parTravaux.map(r => (
                   <Row key={r.reference}>
                     <Td bold><span style={{ color: C.muted, fontFamily: 'monospace' }}>{r.reference}</span></Td>
                     <Td right>{r.nbWo}</Td>
                     <Td right bold>{fmtH(r.heures)}</Td>
                     <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
+                    <Td right bold color={C.green}>{fmt$(r.revenu)}</Td>
+                    <Td right bold color={r.profit >= 0 ? C.green : C.red}>{fmt$(r.profit)}</Td>
                   </Row>
                 ))}
               </Table>

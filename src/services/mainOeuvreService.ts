@@ -21,17 +21,18 @@ export interface Employe {
 }
 
 export interface WorkOrder {
-  id:              string;
-  woNumero:        string;
-  type:            'interne' | 'externe';
-  dateOuverture:   string | null;
-  dateFermeture:   string | null;
-  stockNumero:     string | null;  // si interne
-  client:          string | null;  // si externe
-  description:    string | null;
-  statut:          'ouvert' | 'ferme' | 'facture';
-  montantFacture:  number;
-  coutPieces:      number;
+  id:               string;
+  woNumero:         string;
+  type:             'interne' | 'externe';
+  dateOuverture:    string | null;
+  dateFermeture:    string | null;
+  stockNumero:      string | null;  // si interne
+  client:           string | null;  // si externe
+  description:      string | null;
+  statut:           'ouvert' | 'ferme' | 'facture';
+  montantFacture:   number;
+  coutPieces:       number;
+  tauxFacturation:  number;          // $/h facturé (défaut 140)
 }
 
 export interface HeureEmploye {
@@ -51,17 +52,22 @@ export interface WoCoutMo {
   client:          string | null;
   montantFacture:  number;
   coutPieces:      number;
+  tauxFacturation: number;          // $/h facturé
   totalHeures:     number;
   coutMoReel:      number;
-  profitBrut:      number;
+  revenuMoCalcule: number;          // heures × taux_facturation
+  profitMo:        number;          // revenu_mo_calcule − cout_mo_reel
+  profitBrut:      number;          // (externe) montant_facture − pièces − cout_mo
 }
 
 /** Agrégat par camion (vue prod_camion_cout_mo_reel) */
 export interface CamionCoutMoReel {
-  stockNumero:        string;
-  nbWo:               number;
-  totalHeures:        number;
-  coutMoReelTotal:    number;
+  stockNumero:             string;
+  nbWo:                    number;
+  totalHeures:             number;
+  coutMoReelTotal:         number;
+  revenuMoCalculeTotal:    number;
+  profitMoTotal:           number;
 }
 
 // ─── Mappers ──────────────────────────────────────────────────────
@@ -82,17 +88,18 @@ function employeFromDB(row: any): Employe {
 
 function woFromDB(row: any): WorkOrder {
   return {
-    id:             row.id,
-    woNumero:       row.wo_numero,
-    type:           row.type,
-    dateOuverture:  row.date_ouverture ?? null,
-    dateFermeture:  row.date_fermeture ?? null,
-    stockNumero:    row.stock_numero ?? null,
-    client:         row.client ?? null,
-    description:    row.description ?? null,
-    statut:         row.statut ?? 'ouvert',
-    montantFacture: Number(row.montant_facture ?? 0),
-    coutPieces:     Number(row.cout_pieces ?? 0),
+    id:              row.id,
+    woNumero:        row.wo_numero,
+    type:            row.type,
+    dateOuverture:   row.date_ouverture ?? null,
+    dateFermeture:   row.date_fermeture ?? null,
+    stockNumero:     row.stock_numero ?? null,
+    client:          row.client ?? null,
+    description:     row.description ?? null,
+    statut:          row.statut ?? 'ouvert',
+    montantFacture:  Number(row.montant_facture ?? 0),
+    coutPieces:      Number(row.cout_pieces ?? 0),
+    tauxFacturation: Number(row.taux_facturation ?? 140),
   };
 }
 
@@ -226,8 +233,11 @@ export const workOrderService = {
       client:          r.client ?? null,
       montantFacture:  Number(r.montant_facture ?? 0),
       coutPieces:      Number(r.cout_pieces ?? 0),
+      tauxFacturation: Number(r.taux_facturation ?? 140),
       totalHeures:     Number(r.total_heures ?? 0),
       coutMoReel:      Number(r.cout_mo_reel ?? 0),
+      revenuMoCalcule: Number(r.revenu_mo_calcule ?? 0),
+      profitMo:        Number(r.profit_mo ?? 0),
       profitBrut:      Number(r.profit_brut ?? 0),
     }));
   },
@@ -240,10 +250,12 @@ export const workOrderService = {
     const map: Record<string, CamionCoutMoReel> = {};
     for (const r of (data ?? [])) {
       const c: CamionCoutMoReel = {
-        stockNumero:     (r as any).stock_numero,
-        nbWo:            Number((r as any).nb_wo ?? 0),
-        totalHeures:     Number((r as any).total_heures ?? 0),
-        coutMoReelTotal: Number((r as any).cout_mo_reel_total ?? 0),
+        stockNumero:          (r as any).stock_numero,
+        nbWo:                 Number((r as any).nb_wo ?? 0),
+        totalHeures:          Number((r as any).total_heures ?? 0),
+        coutMoReelTotal:      Number((r as any).cout_mo_reel_total ?? 0),
+        revenuMoCalculeTotal: Number((r as any).revenu_mo_calcule_total ?? 0),
+        profitMoTotal:        Number((r as any).profit_mo_total ?? 0),
       };
       map[c.stockNumero] = c;
     }
