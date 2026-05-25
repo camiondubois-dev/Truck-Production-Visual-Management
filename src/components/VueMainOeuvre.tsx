@@ -52,8 +52,8 @@ export function VueMainOeuvre() {
   const [woCouts,    setWoCouts]    = useState<WoCoutMo[]>([]);
   const [heures,     setHeures]     = useState<HeureEmploye[]>([]);
   const [filtreType, setFiltreType] = useState<'tous' | 'interne' | 'externe'>('tous');
-  // Metadata camions (marque/modèle/année) pour enrichir le tableau Par camion
-  const [invMeta, setInvMeta] = useState<Record<string, { marque: string | null; modele: string | null; annee: number | null }>>({});
+  // Metadata camions (marque/modèle/année + statut vendu) pour enrichir le tableau Par camion
+  const [invMeta, setInvMeta] = useState<Record<string, { marque: string | null; modele: string | null; annee: number | null; vendu: boolean }>>({});
 
   const bounds = useMemo(() => periodeBounds(periode), [periode]);
 
@@ -71,19 +71,43 @@ export function VueMainOeuvre() {
         setHeures(hrs);
 
         // Fetch métadonnées camion pour tous les vrais numéros de stock présents
+        // + statut vendu (via prod_inventaire.etat_commercial OU prod_ventes.statut)
         const stocksValides = Array.from(new Set(
           wos
             .filter(w => w.type === 'interne' && estVraiStockCamion(w.stockNumero))
             .map(w => w.stockNumero!)
         ));
         if (stocksValides.length > 0) {
-          const { data } = await supabase
-            .from('prod_inventaire')
-            .select('numero, marque, modele, annee')
-            .in('numero', stocksValides);
+          const [invRes, venRes] = await Promise.all([
+            supabase
+              .from('prod_inventaire')
+              .select('numero, marque, modele, annee, etat_commercial')
+              .in('numero', stocksValides),
+            supabase
+              .from('prod_ventes')
+              .select('stock_numero, statut')
+              .in('stock_numero', stocksValides),
+          ]);
+          // Set des stocks marqués vendu dans prod_ventes
+          const venduSet = new Set<string>();
+          for (const r of (venRes.data ?? []) as any[]) {
+            if (r.statut === 'vendu') venduSet.add(r.stock_numero);
+          }
           const map: typeof invMeta = {};
-          for (const r of (data ?? []) as any[]) {
-            map[r.numero] = { marque: r.marque ?? null, modele: r.modele ?? null, annee: r.annee ?? null };
+          for (const r of (invRes.data ?? []) as any[]) {
+            const venduInv = r.etat_commercial === 'vendu';
+            map[r.numero] = {
+              marque: r.marque ?? null,
+              modele: r.modele ?? null,
+              annee:  r.annee  ?? null,
+              vendu:  venduInv || venduSet.has(r.numero),
+            };
+          }
+          // Pour les stocks pas trouvés dans prod_inventaire mais présents dans prod_ventes
+          for (const num of venduSet) {
+            if (!map[num]) {
+              map[num] = { marque: null, modele: null, annee: null, vendu: true };
+            }
           }
           setInvMeta(map);
         } else {
@@ -307,16 +331,26 @@ export function VueMainOeuvre() {
             {parCamion.length === 0 ? (
               <Vide message="Aucune heure de travail sur un camion réel pendant cette période." />
             ) : (
-              <Table headers={['# Stock', 'Camion', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
+              <Table headers={['# Stock', 'Statut', 'Camion', 'Nb WO', 'Heures', 'Coût M.O. réel']}>
                 {parCamion.map(r => {
                   const meta = invMeta[r.stockNumero];
                   const desc = meta
                     ? [meta.annee, meta.marque, meta.modele].filter(Boolean).join(' ')
                     : '';
+                  const inconnu = !meta;
                   return (
                     <Row key={r.stockNumero}>
                       <Td bold><span style={{ color: C.blue }}>#{r.stockNumero}</span></Td>
-                      <Td color={desc ? undefined : C.faded}>{desc || '— inconnu dans prod_inventaire'}</Td>
+                      <Td>
+                        {inconnu ? (
+                          <span style={badgeStyle('#ef4444')}>❓ Inconnu</span>
+                        ) : meta.vendu ? (
+                          <span style={badgeStyle(C.green)}>✅ Vendu</span>
+                        ) : (
+                          <span style={badgeStyle(C.blue)}>📦 En inventaire</span>
+                        )}
+                      </Td>
+                      <Td color={desc ? undefined : C.faded}>{desc || '— pas dans prod_inventaire'}</Td>
                       <Td right>{r.nbWo}</Td>
                       <Td right bold>{fmtH(r.heures)}</Td>
                       <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
@@ -419,4 +453,11 @@ function Vide({ message }: { message: string }) {
       {message}
     </div>
   );
+}
+
+function badgeStyle(color: string): React.CSSProperties {
+  return {
+    fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+    background: `${color}22`, color, whiteSpace: 'nowrap',
+  };
 }
