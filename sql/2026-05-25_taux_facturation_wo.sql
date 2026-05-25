@@ -20,11 +20,9 @@ COMMENT ON COLUMN prod_work_orders.taux_facturation IS
 -- Initialiser les WO existants à 140 si NULL (cas de la colonne existante sans défaut)
 UPDATE prod_work_orders SET taux_facturation = 140 WHERE taux_facturation IS NULL;
 
--- 2. Recréer la vue prod_wo_cout_mo avec :
---    + revenu_mo_calcule = heures × taux_facturation
---    + profit_mo         = revenu_mo_calcule − cout_mo_reel
---    + profit_total_brut = montant_facture + revenu_mo_calcule − cout_pieces − cout_mo_reel
---      (cas externe : ce que le WO rapporte au total)
+-- 2. Recréer les vues — DROP dans l'ordre inverse de dépendance
+--    prod_camion_cout_mo_reel dépend de prod_wo_cout_mo, donc on la drop d'abord.
+DROP VIEW IF EXISTS prod_camion_cout_mo_reel;
 DROP VIEW IF EXISTS prod_wo_cout_mo;
 CREATE VIEW prod_wo_cout_mo AS
 SELECT
@@ -52,8 +50,7 @@ LEFT JOIN prod_employes        e  ON e.id          = he.employe_id
 GROUP BY wo.wo_numero, wo.type, wo.stock_numero, wo.client,
          wo.montant_facture, wo.cout_pieces, wo.taux_facturation;
 
--- Recréer la vue agrégée (pas de changement structurel mais dépend de la vue ci-dessus)
-DROP VIEW IF EXISTS prod_camion_cout_mo_reel;
+-- Recréer la vue agrégée (déjà droppée plus haut avant prod_wo_cout_mo)
 CREATE VIEW prod_camion_cout_mo_reel AS
 SELECT
   stock_numero,
