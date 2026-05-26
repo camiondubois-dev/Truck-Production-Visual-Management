@@ -257,14 +257,33 @@ export async function executeAgendrixImport(
   if (!parse.semaineDebut) throw new Error('Semaine de début non détectée. Vérifiez le fichier.');
   if (parse.entrees.length === 0) throw new Error('Aucune entrée valide trouvée dans le fichier.');
 
-  // 1. Charger les employés pour résoudre employe_id via no_employe_acomba
+  // 1. Charger les employés pour résoudre employe_id via no_employe_acomba ou nom
   const { data: empsRaw } = await supabase
     .from('prod_employes')
-    .select('id, no_employe_acomba');
+    .select('id, no_employe_acomba, nom_complet, nom');
 
+  // Index par numéro Acomba
   const empMap: Record<string, string> = {};
+  // Index par nom normalisé "PRENOM NOM" ou "NOM PRENOM" → id
+  const empByNom: Record<string, string> = {};
   for (const e of (empsRaw ?? []) as any[]) {
     if (e.no_employe_acomba) empMap[String(e.no_employe_acomba).trim()] = e.id;
+    const nomFull = (e.nom_complet ?? e.nom ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
+    if (nomFull) empByNom[nomFull] = e.id;
+  }
+
+  // Fonction : tenter de trouver un employé par numéro, puis par nom
+  function resolveEmployeId(noAcomba: string, prenom: string | null, nomAg: string | null): string | null {
+    // 1. Par numéro
+    const byNum = empMap[noAcomba.trim()];
+    if (byNum) return byNum;
+    // 2. Par nom Agendrix normalisé (ex: "BARBEAU Louis-Philippe" → "LOUIS-PHILIPPE BARBEAU")
+    if (prenom && nomAg) {
+      const v1 = `${prenom} ${nomAg}`.toUpperCase().replace(/\s+/g, ' ').trim();
+      const v2 = `${nomAg} ${prenom}`.toUpperCase().replace(/\s+/g, ' ').trim();
+      return empByNom[v1] ?? empByNom[v2] ?? null;
+    }
+    return null;
   }
 
   // 2. Supprimer les entrées existantes pour cette semaine
@@ -276,7 +295,7 @@ export async function executeAgendrixImport(
 
   // 3. Préparer et insérer les nouvelles entrées
   const rows = parse.entrees.map(e => ({
-    employe_id:        empMap[e.noEmployeAcomba] ?? null,
+    employe_id:        resolveEmployeId(e.noEmployeAcomba, e.prenom ?? null, e.nomAgendrix ?? null),
     no_employe_acomba: e.noEmployeAcomba,
     prenom:            e.prenom || null,
     nom_agendrix:      e.nomAgendrix || null,
@@ -348,15 +367,20 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
   // Employés pour les taux
   const { data: emps } = await supabase
     .from('prod_employes')
-    .select('id, nom_complet, taux_horaire, salaire_hebdomadaire');
+    .select('id, nom_complet, nom, no_employe_acomba, taux_horaire, salaire_hebdomadaire');
 
   const empById: Record<string, { nomComplet: string | null; taux: number | null; hebdo: number | null }> = {};
+  // Index secondaire : no_employe_acomba → id (pour retrouver les employés non liés à l'import)
+  const empByNoAcomba: Record<string, string> = {};
   for (const e of (emps ?? []) as any[]) {
     empById[e.id] = {
-      nomComplet: e.nom_complet ?? null,
+      nomComplet: e.nom_complet ?? e.nom ?? null,
       taux:       e.taux_horaire ?? null,
       hebdo:      e.salaire_hebdomadaire ?? null,
     };
+    if (e.no_employe_acomba) {
+      empByNoAcomba[String(e.no_employe_acomba).trim()] = e.id;
+    }
   }
 
   // Agrégation par no_employe_acomba (ou prenom_nom si pas de clé)
@@ -404,7 +428,11 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
   // Transformer en tableau avec coûts
   const result: AgendrixAnalyseEmploye[] = [];
   for (const agg of map.values()) {
-    const emp = agg.employeId ? empById[agg.employeId] : null;
+    // Si l'import n'a pas pu lier l'employé (employe_id = null),
+    // essayer de le retrouver maintenant par no_employe_acomba
+    const resolvedId = agg.employeId
+      ?? (agg.noAcomba ? empByNoAcomba[String(agg.noAcomba).trim()] ?? null : null);
+    const emp = resolvedId ? empById[resolvedId] : null;
     const taux  = emp?.taux ?? null;
     const hebdo = emp?.hebdo ?? null;
     const hTotalPaye = agg.hQuart + agg.hFerie + agg.hVacPaye + agg.hMalPaye + agg.hCPayeAutre;
@@ -429,7 +457,7 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
       noEmployeAcomba: agg.noAcomba,
       prenom:          agg.prenom,
       nomAgendrix:     agg.nomAg,
-      employeId:       agg.employeId,
+      employeId:       resolvedId,
       nomComplet:      emp?.nomComplet ?? null,
       tauxHoraire:     taux,
       salaireHebdo:    hebdo,
