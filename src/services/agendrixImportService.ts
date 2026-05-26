@@ -459,10 +459,16 @@ export async function getAgendrixCoutPeriode(
   from: string | null,
   to:   string | null,
 ): Promise<{ cout: number; coutAvecCharges: number; nbSemaines: number } | null> {
-  // Chercher les semaines dans la période
+  // Agendrix = semaines dim→sam ; iTrack = semaines lun→dim
+  // Une semaine Agendrix qui commence jusqu'à 6 jours avant `from` peut quand même chevaucher la période.
+  // Ex: iTrack semaine 18-24 mai, Agendrix semaine_debut 17 mai → chevauche (17+6=23 ≥ 18)
+  const fromAdjusted = from
+    ? new Date(new Date(from).getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    : null;
+
   let q = supabase.from('prod_agendrix_heures').select('semaine_debut');
-  if (from) q = q.gte('semaine_debut', from);
-  if (to)   q = q.lte('semaine_debut', to);
+  if (fromAdjusted) q = q.gte('semaine_debut', fromAdjusted);
+  if (to)           q = q.lte('semaine_debut', to);
 
   const { data } = await q;
   if (!data || data.length === 0) return null;
