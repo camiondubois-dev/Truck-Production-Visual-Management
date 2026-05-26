@@ -34,6 +34,9 @@ const fmt$ = (n: number | null | undefined) =>
 const fmtH = (n: number | null | undefined) =>
   n == null ? '—' : `${new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 1 }).format(n)} h`;
 
+// Taux de facturation interne M.O. ($/h utilisé pour calculer le revenu WO interne)
+const TAUX_MO_FACTURATION = 140;
+
 // Style : reste cohérent avec la palette dark de Profitabilité
 const C = {
   bg:        '#0f0e0b',
@@ -281,23 +284,16 @@ export function VueMainOeuvre() {
   // ─── KPIs globaux ──
   const kpis = useMemo(() => {
     const totalHeures = heures.reduce((s, h) => s + h.heures, 0);
-    const totalCout   = heures.reduce((s, h) => {
+    // Coût iTrack = heures WO × taux (garde comme référence / fallback)
+    const totalCoutItrack = heures.reduce((s, h) => {
       const e = empById[h.employeId];
       return s + (e ? h.heures * e.tauxHoraire : 0);
     }, 0);
     const wosInternes = parWo.filter(w => w.type === 'interne').length;
     const wosExternes = parWo.filter(w => w.type === 'externe').length;
-    // Revenu MO facturable = somme(heures × taux_facturation) sur tous les WO
-    const revenuMoTotal    = parWo.reduce((s, w) => s + w.revenuMoCalcule, 0);
-    const revenuMoInterne  = parWo.filter(w => w.type === 'interne').reduce((s, w) => s + w.revenuMoCalcule, 0);
-    const revenuMoExterne  = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.revenuMoCalcule, 0);
-    const profitMoTotal        = parWo.reduce((s, w) => s + w.profitMo, 0);
-    const totalCoutAvecCharges = totalCout * 1.23;                // + 23 % bénéfices marginaux
-    const pctRevenuVsCout      = totalCout > 0                   // % Revenu / Coût réel
-      ? (revenuMoTotal / totalCout) * 100
-      : 0;
-    return { totalHeures, totalCout, totalCoutAvecCharges, wosInternes, wosExternes,
-             revenuMoTotal, revenuMoInterne, revenuMoExterne, profitMoTotal, pctRevenuVsCout };
+    // Revenu WO = total heures iTrack × taux fixe de facturation M.O.
+    const revenuWo         = totalHeures * TAUX_MO_FACTURATION;
+    return { totalHeures, totalCoutItrack, wosInternes, wosExternes, revenuWo };
   }, [heures, parWo, empById]);
 
   // ─── Sanity check : employés sans taux ──
@@ -371,42 +367,47 @@ export function VueMainOeuvre() {
       ) : (
         <>
           {/* ═══ KPIs globaux ═══ */}
-          <Section titre="📊 Vue d'ensemble">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
-              {/* ── Coût M.O. réel (iTrack : heures WO × taux) ── */}
-              <Kpi
-                label="Coût M.O. réel"
-                value={fmt$(kpis.totalCout)}
-                color={C.amber}
-                sub={`${employes.filter(e => e.actif).length} employés actifs`}
-                sub2={coutAgendrix
-                  ? `Masse salariale totale : ${fmt$(coutAgendrix.cout)} (+23 % : ${fmt$(coutAgendrix.coutAvecCharges)})`
-                  : `+ 23 % charges : ${fmt$(kpis.totalCoutAvecCharges)}`}
-              />
+          {(() => {
+            // Coût réel = Agendrix (toutes heures payées × taux) si dispo, sinon iTrack fallback
+            const coutReel         = coutAgendrix?.cout         ?? kpis.totalCoutItrack;
+            const coutReelCharges  = coutAgendrix?.coutAvecCharges ?? (kpis.totalCoutItrack * 1.23);
+            const pct              = coutReel > 0 ? (kpis.revenuWo / coutReel) * 100 : 0;
+            const sourceLabel      = coutAgendrix
+              ? `Agendrix · ${coutAgendrix.nbSemaines} sem. · +23 % : ${fmt$(coutReelCharges)}`
+              : `iTrack fallback · +23 % : ${fmt$(coutReelCharges)}`;
+            return (
+              <Section titre="📊 Vue d'ensemble">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                  <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
 
-              {/* ── Revenu WO (iTrack) ── */}
-              <Kpi
-                label="Revenu WO (iTrack)"
-                value={fmt$(kpis.revenuMoTotal)}
-                color={C.green}
-                sub={`Interne : ${fmt$(kpis.revenuMoInterne)} · Externe : ${fmt$(kpis.revenuMoExterne)}`}
-              />
+                  {/* ── 1. Coût M.O. réel = Agendrix heures payées × taux ── */}
+                  <Kpi
+                    label="Coût M.O. réel"
+                    value={fmt$(coutReel)}
+                    color={C.amber}
+                    sub={`${employes.filter(e => e.actif).length} employés actifs`}
+                    sub2={sourceLabel}
+                  />
 
-              {/* ── % Revenu vs Coût M.O. réel ── */}
-              {(() => {
-                const pct = kpis.totalCout > 0 ? (kpis.revenuMoTotal / kpis.totalCout) * 100 : 0;
-                return (
+                  {/* ── 2. Revenu WO = heures iTrack × 140 $/h ── */}
+                  <Kpi
+                    label="Revenu WO (iTrack)"
+                    value={fmt$(kpis.revenuWo)}
+                    color={C.green}
+                    sub={`${fmtH(kpis.totalHeures)} × ${TAUX_MO_FACTURATION} $/h`}
+                  />
+
+                  {/* ── 3. % Revenu vs Coût M.O. réel ── */}
                   <Kpi
                     label="% Revenu vs Coût M.O."
-                    value={kpis.totalCout > 0 ? `${pct.toFixed(0)} %` : '—'}
+                    value={coutReel > 0 ? `${pct.toFixed(0)} %` : '—'}
                     color={pct >= 100 ? C.green : C.red}
-                    sub={`${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(kpis.totalCout)}`}
+                    sub={`${fmt$(kpis.revenuWo)} ÷ ${fmt$(coutReel)}`}
                   />
-                );
-              })()}
-            </div>
-          </Section>
+                </div>
+              </Section>
+            );
+          })()}
 
           {/* ═══ Répartition Interne / Externe + sous-catégories ═══ */}
           {(apercu.interne.heures > 0 || apercu.externe.heures > 0) && (
