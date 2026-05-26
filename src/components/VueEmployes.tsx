@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { employeService, type Employe, DEPARTEMENTS_SUGGEREES } from '../services/mainOeuvreService';
 
 const fmt$ = (n: number) =>
@@ -32,6 +33,7 @@ const FORM_VIDE: FormState = {
 };
 
 export function VueEmployes() {
+  const { profile } = useAuth();
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [filtre,   setFiltre]   = useState<'tous' | 'actifs' | 'inactifs'>('actifs');
@@ -184,6 +186,26 @@ export function VueEmployes() {
       alert(`Impossible de supprimer : ${err.message ?? err}\n\nAstuce : si l'employé a des heures pointées, désactive-le plutôt.`);
     }
   };
+
+  // ─── Garde d'accès : gestionnaire uniquement ──
+  // Cette section contient des données salariales confidentielles.
+  if (profile?.role !== 'gestion') {
+    return (
+      <div style={{
+        padding: 40, height: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 12,
+        background: '#f8fafc', color: '#6b7280', fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}>
+        <div style={{ fontSize: 56 }}>🔒</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>Accès réservé</div>
+        <div style={{ fontSize: 14, textAlign: 'center', maxWidth: 400 }}>
+          Cette section <strong>Employés / Main-d'œuvre</strong> contient des données salariales
+          confidentielles (taux horaires, salaires).<br/>
+          Seul un gestionnaire peut y accéder.
+        </div>
+      </div>
+    );
+  }
 
   // ─── Rendu : formulaire ──
   if (editMode && editForm) {
