@@ -17,6 +17,10 @@ import {
   periodeBounds, type PreriodeOption,
   type Employe, type WoCoutMo, type HeureEmploye,
 } from '../services/mainOeuvreService';
+import {
+  getAgendrixSemaines, getAgendrixAnalyse,
+  type AgendrixAnalyseEmploye,
+} from '../services/agendrixImportService';
 import { supabase } from '../lib/supabase';
 
 /** Test si un texte ressemble à un vrai numéro de stock de camion */
@@ -50,6 +54,7 @@ const C = {
 export function VueMainOeuvre() {
   const { profile } = useAuth();
   const peutVoirDetailEmploye = canSeeEmployesDetails(profile);
+  const [onglet,     setOnglet]     = useState<'itrack' | 'agendrix'>('itrack');
   const [periode,    setPeriode]    = useState<PreriodeOption>('semaine_passee');
   const [loading,    setLoading]    = useState(true);
   const [employes,   setEmployes]   = useState<Employe[]>([]);
@@ -298,6 +303,29 @@ export function VueMainOeuvre() {
   return (
     <div style={{ color: C.text, fontFamily: 'system-ui, sans-serif' }}>
 
+      {/* Sous-onglets : iTrack vs Agendrix */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {([
+          { id: 'itrack'   as const, label: '⏰ M.O. iTrack',       color: C.purple },
+          { id: 'agendrix' as const, label: '📅 Agendrix / Absences', color: '#f97316' },
+        ]).map(o => (
+          <button key={o.id} onClick={() => setOnglet(o.id)} style={{
+            padding: '8px 20px', borderRadius: 20, border: 'none',
+            background: onglet === o.id ? o.color : C.card,
+            color:      onglet === o.id ? C.bg    : C.muted,
+            fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            boxShadow: onglet === o.id ? `0 0 0 2px ${o.color}` : 'none',
+            transition: 'all 0.15s',
+          }}>{o.label}</button>
+        ))}
+      </div>
+
+      {/* ════ Onglet Agendrix ════ */}
+      {onglet === 'agendrix' && <SectionAgendrix peutVoirDetail={peutVoirDetailEmploye} />}
+
+      {/* ════ Onglet iTrack (contenu existant) ════ */}
+      {onglet === 'itrack' && <>
+
       {/* Sélecteur de période */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 11, color: C.muted, letterSpacing: '0.05em', marginRight: 4 }}>PÉRIODE :</div>
@@ -534,9 +562,232 @@ export function VueMainOeuvre() {
           )}
         </>
       )}
+
+      {/* Fermeture onglet iTrack */}
+      </>}
+
     </div>
   );
 }
+
+// ════════════════════════════════════════════════════════════════
+// ─── Section Agendrix / Absentéisme ────────────────────────────
+// ════════════════════════════════════════════════════════════════
+
+function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
+  const [semaines,        setSemaines]        = useState<string[]>([]);
+  const [semaine,         setSemaine]         = useState<string | null>(null);
+  const [analyse,         setAnalyse]         = useState<AgendrixAnalyseEmploye[]>([]);
+  const [loading,         setLoading]         = useState(false);
+  const [loadingSemaines, setLoadingSemaines] = useState(true);
+
+  // Charger la liste des semaines disponibles
+  useEffect(() => {
+    getAgendrixSemaines().then(s => {
+      setSemaines(s);
+      if (s.length > 0) setSemaine(s[0]);
+      setLoadingSemaines(false);
+    });
+  }, []);
+
+  // Charger l'analyse quand la semaine change
+  useEffect(() => {
+    if (!semaine) return;
+    setLoading(true);
+    getAgendrixAnalyse(semaine).then(a => {
+      setAnalyse(a);
+      setLoading(false);
+    });
+  }, [semaine]);
+
+  const fmtDate = (d: string) => {
+    if (!d) return '—';
+    const [y, m, j] = d.split('-');
+    return `${j}/${m}/${y}`;
+  };
+
+  // KPIs globaux de la semaine
+  const kpis = useMemo(() => {
+    const hQuartTotal   = analyse.reduce((s, e) => s + e.hQuart, 0);
+    const hCongePayeTotal = analyse.reduce((s, e) => s + e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre, 0);
+    const hAbsentTotal  = analyse.reduce((s, e) => s + e.hAbsentTotal, 0);
+    const hPayeTotal    = analyse.reduce((s, e) => s + e.hTotalPaye, 0);
+    const coutTotal     = analyse.reduce((s, e) => s + e.coutPrevu, 0);
+    const nbSansLien    = analyse.filter(e => !e.employeId).length;
+    const nbSansTaux    = analyse.filter(e => e.employeId && !e.salaireHebdo && !(e.tauxHoraire ?? 0)).length;
+    const hAttendues    = hQuartTotal + hCongePayeTotal + hAbsentTotal; // toutes heures enregistrées
+    const pctAbsent     = hAttendues > 0 ? (hAbsentTotal / hAttendues) * 100 : 0;
+    return { hQuartTotal, hCongePayeTotal, hAbsentTotal, hPayeTotal, coutTotal, nbSansLien, nbSansTaux, pctAbsent };
+  }, [analyse]);
+
+  if (loadingSemaines) {
+    return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Chargement…</div>;
+  }
+
+  if (semaines.length === 0) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📅</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Aucun rapport Agendrix importé</div>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 6 }}>
+          Va dans <strong>Import → Agendrix</strong> pour importer le rapport hebdomadaire.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Sélecteur de semaine */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, color: C.muted, letterSpacing: '0.05em' }}>SEMAINE :</div>
+        {semaines.slice(0, 8).map(s => (
+          <button key={s} onClick={() => setSemaine(s)} style={{
+            padding: '6px 14px', borderRadius: 18, border: 'none',
+            background: semaine === s ? '#f97316' : C.card,
+            color:      semaine === s ? C.bg      : C.muted,
+            fontWeight: semaine === s ? 800 : 600, fontSize: 12, cursor: 'pointer',
+          }}>{fmtDate(s)}</button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Chargement…</div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <Section titre="📊 Vue d'ensemble — semaine">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+              <Kpi label="Heures travaillées" value={`${kpis.hQuartTotal.toFixed(1)} h`} color={C.blue} sub={`${analyse.length} employés`} />
+              <Kpi label="Congés payés" value={`${kpis.hCongePayeTotal.toFixed(1)} h`} color={C.purple} sub="Férié · Vacances · Maladie" />
+              <Kpi label="Absences (non payé)" value={`${kpis.hAbsentTotal.toFixed(1)} h`} color={C.red} sub={`${kpis.pctAbsent.toFixed(1)} % absentéisme`} />
+              <Kpi label="Coût prévu" value={fmt$(kpis.coutTotal)} color={C.amber} sub="Agendrix × taux | salarié fixe" />
+              {kpis.nbSansLien > 0 && <Kpi label="Non liés Acomba" value={String(kpis.nbSansLien)} color={C.red} sub="Pas dans la table de référence" />}
+              {kpis.nbSansTaux > 0 && peutVoirDetail && <Kpi label="Sans taux" value={String(kpis.nbSansTaux)} color={C.amber} sub="Coût prévu = 0" />}
+            </div>
+          </Section>
+
+          {/* Légende des types d'absence */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', fontSize: 11 }}>
+            {[
+              { label: '🔵 Quart',          color: C.blue   },
+              { label: '🟣 Férié payé',     color: C.purple },
+              { label: '🟢 Vacances payées',color: C.green  },
+              { label: '🟡 Maladie payée',  color: C.amber  },
+              { label: '🔴 Absence non payée', color: C.red },
+            ].map(l => (
+              <span key={l.label} style={{ background: `${l.color}20`, color: l.color, padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>{l.label}</span>
+            ))}
+          </div>
+
+          {/* Tableau par employé */}
+          <Section titre="👤 Détail par employé">
+            <div style={{ overflowX: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: C.card }}>
+                    <th style={TH}>Employé</th>
+                    <th style={TH}>Succursale</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>🔵 Quart</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>🟣 Férié</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>🟢 Vac.</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>🟡 Mal.</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>🔴 Absent</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Total payé</th>
+                    {peutVoirDetail && <th style={{ ...TH, textAlign: 'right' }}>Coût prévu</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {analyse.map((e, i) => {
+                    const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+                    const hasAbsent  = e.hAbsentTotal > 0;
+                    const nonLie     = !e.employeId;
+                    return (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: hasAbsent ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>
+                          <div style={{ color: nonLie ? C.muted : C.text }}>{nomAffiche || '—'}</div>
+                          {nonLie && <div style={{ fontSize: 10, color: C.red }}>⚠️ non lié Acomba</div>}
+                        </td>
+                        <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted }}>{e.succursale ?? '—'}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.blue }}>
+                          {e.hQuart > 0 ? `${e.hQuart.toFixed(1)} h` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.purple }}>
+                          {e.hFerie > 0 ? `${e.hFerie.toFixed(1)} h` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.green }}>
+                          {e.hVacancesPaye > 0 ? `${e.hVacancesPaye.toFixed(1)} h` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
+                          {e.hMaladiePaye > 0 ? `${e.hMaladiePaye.toFixed(1)} h` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: e.hAbsentTotal > 0 ? 800 : 500, color: e.hAbsentTotal > 0 ? C.red : C.faded }}>
+                          {e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.text }}>
+                          {`${e.hTotalPaye.toFixed(1)} h`}
+                        </td>
+                        {peutVoirDetail && (
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
+                            {e.coutPrevu > 0 ? fmt$(e.coutPrevu) : <span style={{ color: C.faded }}>—</span>}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Total */}
+                <tfoot>
+                  <tr style={{ borderTop: `2px solid ${C.border}`, background: C.card }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: C.text }} colSpan={2}>TOTAL</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.blue }}>{kpis.hQuartTotal.toFixed(1)} h</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.purple }}>{analyse.reduce((s,e)=>s+e.hFerie,0).toFixed(1)} h</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.green }}>{analyse.reduce((s,e)=>s+e.hVacancesPaye,0).toFixed(1)} h</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.amber }}>{analyse.reduce((s,e)=>s+e.hMaladiePaye,0).toFixed(1)} h</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.red }}>{kpis.hAbsentTotal.toFixed(1)} h</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.text }}>{kpis.hPayeTotal.toFixed(1)} h</td>
+                    {peutVoirDetail && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.amber }}>{fmt$(kpis.coutTotal)}</td>}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Section>
+
+          {/* Absentéisme détaillé */}
+          {kpis.hAbsentTotal > 0 && (
+            <Section titre={`🔴 Absentéisme — ${kpis.pctAbsent.toFixed(1)} % cette semaine`}>
+              <Table headers={['Employé', 'Succursale', 'Vacances N.P.', 'Maladie N.P.', 'Abs. solde', 'CNESST', 'Total absent']}>
+                {analyse.filter(e => e.hAbsentTotal > 0).map((e, i) => {
+                  const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+                  return (
+                    <Row key={i}>
+                      <Td bold>{nomAffiche || '—'}</Td>
+                      <Td>{e.succursale ?? '—'}</Td>
+                      <Td right color={C.red}>{e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}</Td>
+                      <Td right color={C.red}>—</Td>
+                      <Td right color={C.red}>—</Td>
+                      <Td right color={C.red}>—</Td>
+                      <Td right bold color={C.red}>{e.hAbsentTotal.toFixed(1)} h</Td>
+                    </Row>
+                  );
+                })}
+              </Table>
+              <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
+                💡 % absentéisme = heures absentes non payées / (heures quart + congés payés + absences non payées)
+              </div>
+            </Section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+const TH: React.CSSProperties = {
+  padding: '10px 12px', textAlign: 'left',
+  fontSize: 10, fontWeight: 700, color: C.muted,
+  textTransform: 'uppercase', letterSpacing: '0.05em',
+};
 
 // ─── Sous-composants ──────────────────────────────────────────────
 

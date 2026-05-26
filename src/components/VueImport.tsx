@@ -13,8 +13,12 @@ import {
   type PieceRow, type PiecesDiff, type PiecesImportResult, type ModeFichierPieces,
 } from '../services/piecesImportService';
 import { LaborLogImporter } from './LaborLogImporter';
+import {
+  parseAgendrixXLSX, executeAgendrixImport,
+  type AgendrixParse, type AgendrixImportResult,
+} from '../services/agendrixImportService';
 
-type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces' | 'labor_log';
+type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces' | 'labor_log' | 'agendrix';
 
 const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'couts',                label: 'Coûts HITRAC',           icon: '📥', color: '#3b82f6' },
@@ -23,6 +27,7 @@ const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'ventes_encan',         label: 'Ventes Encan',           icon: '🔨', color: '#f59e0b' },
   { id: 'ventes_pieces',        label: 'Ventes Pièces',          icon: '🔧', color: '#10b981' },
   { id: 'labor_log',            label: 'Heures M.O.',            icon: '⏰', color: '#a78bfa' },
+  { id: 'agendrix',             label: 'Agendrix',               icon: '📅', color: '#f97316' },
 ];
 
 export function VueImport() {
@@ -69,6 +74,7 @@ export function VueImport() {
           {tab === 'ventes_encan'       && <VentesImporter wizard="encan" />}
           {tab === 'ventes_pieces'      && <PiecesImporter />}
           {tab === 'labor_log'          && <LaborLogImporter />}
+          {tab === 'agendrix'           && <AgendrixImporter />}
         </div>
       </div>
     </div>
@@ -931,6 +937,205 @@ function PiecesImporter() {
         </button>
       </div>
     </div>
+  );
+
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ─── IMPORTER AGENDRIX (entrées de temps .xlsx) ─────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+function AgendrixImporter() {
+  const { profile } = useAuth();
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const [step,     setStep]    = useState<'upload' | 'preview' | 'confirming' | 'done'>('upload');
+  const [error,    setError]   = useState<string | null>(null);
+  const [filename, setFilename] = useState('');
+  const [loading,  setLoading] = useState(false);
+  const [parse,    setParse]   = useState<AgendrixParse | null>(null);
+  const [result,   setResult]  = useState<AgendrixImportResult | null>(null);
+
+  const COLOR = '#f97316';
+
+  const handleFile = async (file: File) => {
+    setError(null); setLoading(true); setFilename(file.name);
+    try {
+      const p = await parseAgendrixXLSX(file);
+      if (p.entrees.length === 0) throw new Error('Aucune entrée valide trouvée. Vérifiez que le fichier est bien le rapport "Entrées de temps" Agendrix.');
+      if (!p.semaineDebut) throw new Error('Impossible de détecter la période. Vérifiez le format du fichier.');
+      setParse(p);
+      setStep('preview');
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!parse) return;
+    setStep('confirming'); setError(null);
+    try {
+      const r = await executeAgendrixImport(parse, filename, profile?.nom);
+      setResult(r);
+      setStep('done');
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      setStep('preview');
+    }
+  };
+
+  const reset = () => {
+    setStep('upload'); setParse(null); setError(null);
+    setFilename(''); setResult(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const fmtDate = (d: string) => {
+    if (!d) return '—';
+    const [y, m, j] = d.split('-');
+    return `${j}/${m}/${y}`;
+  };
+
+  // ── Upload ──────────────────────────────────────────────────────
+  if (step === 'upload') return (
+    <div>
+      <PageHeader
+        icon="📅"
+        title="Import Agendrix — Entrées de temps"
+        description={<>Importe le rapport <strong>hebdomadaire</strong> des heures pointées (feuille Sommaire). Le numéro d'employé Agendrix est automatiquement lié au code Acomba dans la table de référence. Les données de la semaine sont <strong>remplacées</strong> à chaque import.</>}
+      />
+
+      <div style={{
+        background: 'white', borderRadius: 14, padding: 32,
+        border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}>
+        <label htmlFor="agendrix-file" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', gap: 12, padding: '60px 24px', borderRadius: 12,
+          border: `2px dashed ${loading ? COLOR : '#d1d5db'}`,
+          background: '#fff7ed', cursor: loading ? 'wait' : 'pointer', color: '#6b7280',
+          transition: 'all 0.15s',
+        }}
+          onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLLabelElement).style.borderColor = COLOR; }}
+          onMouseLeave={e => { if (!loading) (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; }}
+        >
+          <span style={{ fontSize: 48 }}>📅</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#374151' }}>
+            {loading ? 'Analyse en cours...' : 'Déposez le fichier ou cliquez pour parcourir'}
+          </span>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>
+            Format attendu : <code>Agendrix_-_entrees-de-temps__AAAA-MM-JJ_au_AAAA-MM-JJ.xlsx</code>
+          </span>
+          <input id="agendrix-file" ref={fileRef} type="file" accept=".xlsx,.xls"
+            disabled={loading} style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          />
+        </label>
+      </div>
+
+      {error && <ErrorBox msg={error} />}
+
+      <RulesBox title="Ce que fait l'import :" items={[
+        <>Lit la feuille <strong>Sommaire</strong> (toutes succursales combinées)</>,
+        <>Lie chaque employé via son <strong>numéro Agendrix = numéro Acomba</strong> (ex : 82-1558, 1387)</>,
+        <>Normalise les types : <strong>Quart</strong>, Congé payé (Férié / Vacances / Maladie), Congé non payé (absentéisme), Banque d'heures</>,
+        <><strong>Remplace complètement</strong> les données de la semaine — idempotent, tu peux réimporter sans risque</>,
+        <>Employés sans numéro (ex : contractuels) sont importés mais <strong>non liés</strong> à la table de référence</>,
+      ]} />
+    </div>
+  );
+
+  // ── Preview ──────────────────────────────────────────────────────
+  if (step === 'preview' && parse) {
+    const nonLies = parse.sansCle;
+    const nbQuart    = parse.entrees.filter(e => e.type === 'quart').length;
+    const nbCPaye    = parse.entrees.filter(e => e.type === 'conge_paye').length;
+    const nbCNonPaye = parse.entrees.filter(e => e.type === 'conge_non_paye').length;
+    const hTotales   = parse.entrees.reduce((s, e) => s + e.heures, 0);
+
+    return (
+      <div>
+        <PageHeader icon="📅" title="Prévisualisation — Agendrix"
+          description={<>Semaine du <strong>{fmtDate(parse.semaineDebut)}</strong> au <strong>{fmtDate(parse.semaineFin)}</strong> · {filename}</>}
+        />
+
+        {/* KPIs */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 12, background: 'white', borderRadius: 14, padding: 16,
+          marginBottom: 16, border: '1px solid #e5e7eb',
+        }}>
+          <StatCard label="Employés"         value={parse.nbEmployes}  color="#0f172a" />
+          <StatCard label="Entrées totales"   value={parse.entrees.length} color={COLOR} highlight />
+          <StatCard label="Quarts travaillés" value={nbQuart}           color="#16a34a" />
+          <StatCard label="Congés payés"      value={nbCPaye}           color="#3b82f6" />
+          <StatCard label="Absences (non payé)" value={nbCNonPaye}      color="#ef4444" />
+          <StatCard label="Non liés Acomba"   value={nonLies.length}    color="#d97706" />
+        </div>
+
+        {/* Heures totales */}
+        <div style={{
+          background: `${COLOR}10`, border: `1px solid ${COLOR}40`,
+          borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 13,
+        }}>
+          <strong style={{ color: COLOR }}>Total : {hTotales.toFixed(1)} h</strong>
+          <span style={{ color: '#6b7280', marginLeft: 12 }}>
+            dans {parse.entrees.length} entrées pour {parse.nbEmployes} employés
+          </span>
+        </div>
+
+        {/* Avertissements parse */}
+        {parse.erreurs.length > 0 && (
+          <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 12, color: '#92400e' }}>
+            <strong>{parse.erreurs.length} avertissement(s) :</strong>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
+              {parse.erreurs.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* Employés sans lien Acomba */}
+        {nonLies.length > 0 && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12, color: '#92400e' }}>
+            <strong>⚠️ {nonLies.length} employé(s) sans numéro Acomba</strong> — importés mais non liés à la table de référence :
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {nonLies.map((n, i) => (
+                <span key={i} style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4, padding: '2px 8px', fontSize: 11 }}>{n}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && <ErrorBox msg={error} />}
+        <ActionsBar
+          onCancel={reset}
+          onConfirm={handleConfirm}
+          confirmLabel={`✅ Importer ${parse.entrees.length} entrées (semaine ${fmtDate(parse.semaineDebut)})`}
+        />
+      </div>
+    );
+  }
+
+  // ── En cours ─────────────────────────────────────────────────────
+  if (step === 'confirming') return <ProcessingBox />;
+
+  // ── Done ─────────────────────────────────────────────────────────
+  if (step === 'done' && result) return (
+    <SuccessBox onReset={reset}>
+      <div>Semaine du <strong>{fmtDate(result.semaine)}</strong></div>
+      <div><strong style={{ color: '#16a34a' }}>{result.nbEntrees}</strong> entrées importées</div>
+      <div><strong style={{ color: '#16a34a' }}>{result.nbEmployesLies}</strong> lignes liées à un employé Acomba</div>
+      {result.nbEmployesNonLies > 0 && (
+        <div><strong style={{ color: '#d97706' }}>{result.nbEmployesNonLies}</strong> lignes non liées (pas de numéro Acomba)</div>
+      )}
+      {result.sansCle.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#9ca3af' }}>
+          Non liés : {result.sansCle.join(', ')}
+        </div>
+      )}
+    </SuccessBox>
   );
 
   return null;
