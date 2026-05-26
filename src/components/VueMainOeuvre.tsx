@@ -288,9 +288,13 @@ export function VueMainOeuvre() {
     const revenuMoTotal    = parWo.reduce((s, w) => s + w.revenuMoCalcule, 0);
     const revenuMoInterne  = parWo.filter(w => w.type === 'interne').reduce((s, w) => s + w.revenuMoCalcule, 0);
     const revenuMoExterne  = parWo.filter(w => w.type === 'externe').reduce((s, w) => s + w.revenuMoCalcule, 0);
-    const profitMoTotal    = parWo.reduce((s, w) => s + w.profitMo, 0);
-    return { totalHeures, totalCout, wosInternes, wosExternes,
-             revenuMoTotal, revenuMoInterne, revenuMoExterne, profitMoTotal };
+    const profitMoTotal        = parWo.reduce((s, w) => s + w.profitMo, 0);
+    const totalCoutAvecCharges = totalCout * 1.23;                // + 23 % bénéfices marginaux
+    const pctRevenuVsCout      = totalCout > 0                   // % Revenu / Coût réel
+      ? (revenuMoTotal / totalCout) * 100
+      : 0;
+    return { totalHeures, totalCout, totalCoutAvecCharges, wosInternes, wosExternes,
+             revenuMoTotal, revenuMoInterne, revenuMoExterne, profitMoTotal, pctRevenuVsCout };
   }, [heures, parWo, empById]);
 
   // ─── Sanity check : employés sans taux ──
@@ -367,9 +371,14 @@ export function VueMainOeuvre() {
           <Section titre="📊 Vue d'ensemble">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
               <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
-              <Kpi label="Coût M.O. réel" value={fmt$(kpis.totalCout)} color={C.amber} sub={`${employes.filter(e => e.actif).length} employés actifs`} />
+              <Kpi label="Coût M.O. réel" value={fmt$(kpis.totalCout)} color={C.amber}
+                sub={`${employes.filter(e => e.actif).length} employés actifs`}
+                sub2={`+ 23 % charges : ${fmt$(kpis.totalCoutAvecCharges)}`} />
               <Kpi label="Revenu M.O. facturable" value={fmt$(kpis.revenuMoTotal)} color={C.green} sub={`Interne: ${fmt$(kpis.revenuMoInterne)} · Externe: ${fmt$(kpis.revenuMoExterne)}`} />
-              <Kpi label="Profit sur M.O." value={fmt$(kpis.profitMoTotal)} color={kpis.profitMoTotal >= 0 ? C.green : C.red} sub={`Revenu facturable − coût réel`} />
+              <Kpi label="% Revenu vs Coût réel"
+                value={kpis.totalCout > 0 ? `${kpis.pctRevenuVsCout.toFixed(0)} %` : '—'}
+                color={kpis.pctRevenuVsCout >= 100 ? C.green : C.red}
+                sub={`${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(kpis.totalCout)}`} />
             </div>
           </Section>
 
@@ -830,12 +839,13 @@ function BlocCat({ titre, emoji, couleur, data }: {
   );
 }
 
-function Kpi({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
+function Kpi({ label, value, color, sub, sub2 }: { label: string; value: string; color?: string; sub?: string; sub2?: string }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px' }}>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 900, color: color ?? C.text }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: C.faded, marginTop: 4 }}>{sub}</div>}
+      {sub  && <div style={{ fontSize: 10, color: C.faded,  marginTop: 4 }}>{sub}</div>}
+      {sub2 && <div style={{ fontSize: 10, color: C.amber,  marginTop: 2 }}>{sub2}</div>}
     </div>
   );
 }
