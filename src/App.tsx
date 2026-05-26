@@ -83,7 +83,9 @@ export default function App() {
   // et qu'aucune session TV n'est sélectionnée → déconnexion automatique
   useEffect(() => {
     if (profile?.role === 'tv' && !getTVSession()) {
-      supabase.auth.signOut().then(() => window.location.reload());
+      supabase.auth.signOut()
+        .then(() => window.location.reload())
+        .catch(() => window.location.reload());
     }
   }, [profile]);
 

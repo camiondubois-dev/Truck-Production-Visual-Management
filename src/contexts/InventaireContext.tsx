@@ -82,13 +82,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // ── Keep-alive pour TV / affichage permanent ──────────────────
-  useEffect(() => {
-    const heartbeat = setInterval(async () => {
-      await supabase.from('prod_inventaire').select('id').limit(1);
-    }, 25_000);
-    return () => clearInterval(heartbeat);
-  }, []);
+  // ── Keep-alive : géré par useSupabaseKeepAlive dans GarageContext ──
 
   useEffect(() => {
     const handleVisibility = () => {

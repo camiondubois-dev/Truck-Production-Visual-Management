@@ -6,7 +6,7 @@ export async function searchTable(
   columns: string[]
 ): Promise<any[]> {
   if (!query.trim()) {
-    const { data } = await supabase.from(table as any).select('*');
+    const { data } = await supabase.from(table as any).select('*').limit(200);
     return data || [];
   }
 
@@ -17,7 +17,8 @@ export async function searchTable(
   const { data, error } = await supabase
     .from(table as any)
     .select('*')
-    .or(filters);
+    .or(filters)
+    .limit(200);
 
   if (error) console.error(error);
   return data || [];

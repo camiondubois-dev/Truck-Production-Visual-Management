@@ -6,6 +6,7 @@ import { logEntreeGarage, logSortieGarage } from '../services/timeLogService';
 import { supabase } from '../lib/supabase';
 import { inventaireService } from '../services/inventaireService';
 import type { RoadMapEtape } from '../types/inventaireTypes';
+import { useSupabaseKeepAlive } from '../hooks/useSupabaseKeepAlive';
 
 export const GarageContext = createContext<GarageContextType | null>(null);
 
@@ -49,20 +50,16 @@ export const GarageProvider = ({ children }: { children: ReactNode }) => {
       .on(
         'postgres_changes' as any,
         { event: '*', schema: 'public', table: 'prod_items' },
-        async () => { await chargerItems(); }
+        () => { chargerItems().catch(err => console.error('[GarageContext] realtime refresh failed:', err)); }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.error('[GarageContext] subscription error:', err);
+      });
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // ── Keep-alive pour TV / affichage permanent ──────────────────
-  // Ping léger toutes les 25s pour garder le WebSocket Supabase ouvert
-  useEffect(() => {
-    const heartbeat = setInterval(async () => {
-      await supabase.from('prod_items').select('id').limit(1);
-    }, 25_000);
-    return () => clearInterval(heartbeat);
-  }, []);
+  // ── Keep-alive centralisé (hook partagé) ──────────────────────
+  useSupabaseKeepAlive();
 
   // Quand la TV "se réveille" (visibilité retrouvée), recharge les données
   useEffect(() => {

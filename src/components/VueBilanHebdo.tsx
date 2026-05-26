@@ -340,7 +340,8 @@ export function VueBilanHebdo() {
       let ytdPData: { sous_total: number }[] = [];
       let offset = 0;
       const PAGE = 1000;
-      while (true) {
+      const MAX_PAGES = 30; // garde-fou : max 30 000 lignes / année fiscale
+      for (let p = 0; p < MAX_PAGES; p++) {
         const { data: page } = await supabase
           .from('prod_ventes_pieces')
           .select('sous_total')
