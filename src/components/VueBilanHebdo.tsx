@@ -404,8 +404,18 @@ export function VueBilanHebdo() {
         const hWoExterne = hsPrev.filter(h => h.woNumero && woTypeMap[h.woNumero] === 'externe').reduce((s, h) => s + h.heures, 0);
 
         // Coût théorique employés (1 semaine)
+        // Contracteurs (notes contient 'contracteur') : heures iTrack réelles × taux
+        // Salariés / Horaires réguliers : salaire_hebdo ou 40h × taux
         const emps = await employeService.getAll();
+        const heuresParEmpBilan = new Map<string, number>();
+        for (const h of hsPrev) {
+          heuresParEmpBilan.set(h.employeId, (heuresParEmpBilan.get(h.employeId) ?? 0) + h.heures);
+        }
         const coutTheorique = emps.filter(e => e.actif).reduce((s, e) => {
+          const estContracteur = (e.notes ?? '').toLowerCase().includes('contracteur');
+          if (estContracteur) {
+            return s + (heuresParEmpBilan.get(e.id) ?? 0) * (e.tauxHoraire ?? 0);
+          }
           const hebdo = (e.salaireHebdomadaire ?? 0) > 0
             ? (e.salaireHebdomadaire ?? 0)
             : 40 * (e.tauxHoraire ?? 0);

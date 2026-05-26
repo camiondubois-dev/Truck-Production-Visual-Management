@@ -291,9 +291,9 @@ export function VueMainOeuvre() {
     const revenuWo = totalHeures * TAUX_MO_FACTURATION;
 
     // ── Coût M.O. réel : tous les employés actifs × coût hebdo × nb semaines ──
-    // Horaire  → 40 h × taux_horaire / sem
-    // Salarié  → salaire_hebdomadaire / sem
-    // Ne requiert PAS Agendrix — fonctionne toujours
+    // Horaire régulier → 40 h × taux / sem
+    // Salarié          → salaire_hebdomadaire / sem
+    // Contracteur      → heures iTrack réelles × taux (pas de 40h fixe)
     const nbJours = bounds.from && bounds.to
       ? Math.round(
           (new Date(bounds.to).getTime() - new Date(bounds.from).getTime())
@@ -301,9 +301,21 @@ export function VueMainOeuvre() {
         ) + 1
       : 7;
     const nbSemaines = Math.max(nbJours / 7, 1);
+
+    // Index : heures iTrack par employé (pour contracteurs)
+    const heuresParEmp = new Map<string, number>();
+    for (const h of heures) {
+      heuresParEmp.set(h.employeId, (heuresParEmp.get(h.employeId) ?? 0) + h.heures);
+    }
+
     const coutPayroll = employes
       .filter(e => e.actif)
       .reduce((s, e) => {
+        const estContracteur = (e.notes ?? '').toLowerCase().includes('contracteur');
+        if (estContracteur) {
+          // Contracteur : heures iTrack réelles × taux (pas de 40h estimé)
+          return s + (heuresParEmp.get(e.id) ?? 0) * (e.tauxHoraire ?? 0);
+        }
         const hebdo = (e.salaireHebdomadaire ?? 0) > 0
           ? (e.salaireHebdomadaire ?? 0)
           : 40 * (e.tauxHoraire ?? 0);
