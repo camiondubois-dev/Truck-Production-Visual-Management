@@ -150,7 +150,7 @@ export default function App() {
       case 'archive':       return canSeeArchive(profile);
       case 'reservoirs':    return canSeeReservoirs(profile);
       case 'profitabilite': return canSeeProfitabilite(profile);
-      case 'import':        return canImport(profile);
+      case 'import':        return canImport(profile) || !!profile?.onglets_import;
       case 'utilisateurs':  return canManageUsers(profile);
       case 'employes':      return canSeeEmployes(profile);   // admin uniquement (taux/salaires)
       case 'analyse':
