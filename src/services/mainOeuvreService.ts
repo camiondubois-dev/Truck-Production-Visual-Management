@@ -45,6 +45,8 @@ export interface HeureEmploye {
   date:          string;
   heures:        number;
   notes:         string | null;
+  /** Taux figé au moment de l'import iTrack (null pour données avant migration). */
+  tauxApplique:  number | null;
 }
 
 /** Agrégat par WO (vue prod_wo_cout_mo) */
@@ -111,12 +113,13 @@ function woFromDB(row: any): WorkOrder {
 
 function heureFromDB(row: any): HeureEmploye {
   return {
-    id:         row.id,
-    employeId:  row.employe_id,
-    woNumero:   row.wo_numero ?? null,
-    date:       row.date,
-    heures:     Number(row.heures),
-    notes:      row.notes ?? null,
+    id:           row.id,
+    employeId:    row.employe_id,
+    woNumero:     row.wo_numero ?? null,
+    date:         row.date,
+    heures:       Number(row.heures),
+    notes:        row.notes ?? null,
+    tauxApplique: row.taux_horaire_applique != null ? Number(row.taux_horaire_applique) : null,
   };
 }
 

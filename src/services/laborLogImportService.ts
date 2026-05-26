@@ -444,10 +444,16 @@ export async function executeLaborImport(
   const allCodes = Array.from(new Set(parse.entries.map(e => e.employeCode)));
   const { data: empsExistants } = await supabase
     .from('prod_employes')
-    .select('id, code_hitrac');
+    .select('id, code_hitrac, taux_horaire');
   const empsByCode: Record<string, string> = {};
+  // Capture du taux au moment de l'import → résistant aux futures modifications
+  const empsTaux: Record<string, number> = {};
   for (const e of (empsExistants ?? []) as any[]) {
-    if (e.code_hitrac) empsByCode[e.code_hitrac.toLowerCase()] = e.id;
+    if (e.code_hitrac) {
+      const key = e.code_hitrac.toLowerCase();
+      empsByCode[key] = e.id;
+      empsTaux[key]   = Number(e.taux_horaire ?? 0);
+    }
   }
 
   const empsACreer = allCodes.filter(c => !empsByCode[c.toLowerCase()]);
@@ -532,13 +538,17 @@ export async function executeLaborImport(
   }
 
   // Insertion en batch (chunks de 500)
-  const heuresPayload = parse.entries.map(e => ({
-    employe_id:     empsByCode[e.employeCode.toLowerCase()],
-    wo_numero:      e.woNumero,
-    date:           parse.periodeFin,    // on date à la FIN de période
-    heures:         e.heures,
-    source_fichier: sourceFichier,
-  })).filter(h => !!h.employe_id);  // skip si l'auto-création a échoué
+  const heuresPayload = parse.entries.map(e => {
+    const code = e.employeCode.toLowerCase();
+    return {
+      employe_id:             empsByCode[code],
+      wo_numero:              e.woNumero,
+      date:                   parse.periodeFin,    // on date à la FIN de période
+      heures:                 e.heures,
+      taux_horaire_applique:  empsTaux[code] ?? null,  // taux figé à l'import
+      source_fichier:         sourceFichier,
+    };
+  }).filter(h => !!h.employe_id);  // skip si l'auto-création a échoué
 
   const CHUNK = 500;
   for (let i = 0; i < heuresPayload.length; i += CHUNK) {

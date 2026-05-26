@@ -149,20 +149,38 @@ export function VueMainOeuvre() {
 
   // ─── Calculs : par employé sur la période ──
   const parEmploye = useMemo(() => {
-    const map = new Map<string, { id: string; nom: string; taux: number; heures: number; cout: number; nbWo: Set<string> }>();
+    // Index taux facturation par WO (pour revenu WO par employé)
+    const woTauxMap = new Map<string, number>();
+    for (const w of woCouts) woTauxMap.set(w.woNumero, w.tauxFacturation);
+
+    const map = new Map<string, {
+      id: string; nom: string; taux: number;
+      heures: number; cout: number; revenuWo: number; nbWo: Set<string>;
+    }>();
     for (const h of heures) {
       const e = empById[h.employeId];
       if (!e) continue;
-      const cur = map.get(e.id) ?? { id: e.id, nom: e.nom, taux: e.tauxHoraire, heures: 0, cout: 0, nbWo: new Set<string>() };
-      cur.heures += h.heures;
-      cur.cout   += h.heures * e.tauxHoraire;
+      // Taux coût : figé à l'import si dispo, sinon taux actuel (fallback)
+      const tauxCout = (h.tauxApplique != null && h.tauxApplique > 0)
+        ? h.tauxApplique
+        : e.tauxHoraire;
+      // Taux facturation : selon le WO, défaut 140
+      const tauxFact = h.woNumero ? (woTauxMap.get(h.woNumero) ?? TAUX_MO_FACTURATION) : 0;
+
+      const cur = map.get(e.id) ?? {
+        id: e.id, nom: e.nom, taux: e.tauxHoraire,
+        heures: 0, cout: 0, revenuWo: 0, nbWo: new Set<string>(),
+      };
+      cur.heures   += h.heures;
+      cur.cout     += h.heures * tauxCout;
+      cur.revenuWo += h.heures * tauxFact;
       if (h.woNumero) cur.nbWo.add(h.woNumero);
       map.set(e.id, cur);
     }
     return Array.from(map.values())
       .map(r => ({ ...r, nbWo: r.nbWo.size }))
       .sort((a, b) => b.heures - a.heures);
-  }, [heures, empById]);
+  }, [heures, empById, woCouts]);
 
   // ─── Calculs : par WO ──
   const parWo = useMemo(() => {
@@ -489,15 +507,18 @@ export function VueMainOeuvre() {
               {parEmploye.length === 0 ? (
                 <Vide message="Aucune heure pointée sur cette période." />
               ) : (
-                <Table headers={['Employé', 'Taux/h', 'Heures', 'Coût', 'Nb WO', '% des heures']}>
+                <Table headers={['Employé', 'Taux/h', 'Heures', 'Coût M.O.', 'Revenu WO', 'Profit', 'Nb WO', '% heures']}>
                   {parEmploye.map(r => {
-                    const pct = kpis.totalHeures > 0 ? (r.heures / kpis.totalHeures) * 100 : 0;
+                    const pct    = kpis.totalHeures > 0 ? (r.heures / kpis.totalHeures) * 100 : 0;
+                    const profit = r.revenuWo - r.cout;
                     return (
                       <Row key={r.id}>
                         <Td bold>{r.nom}</Td>
                         <Td right color={r.taux === 0 ? C.red : undefined}>{fmt$(r.taux)}</Td>
                         <Td right bold>{fmtH(r.heures)}</Td>
                         <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
+                        <Td right bold color={C.green}>{fmt$(r.revenuWo)}</Td>
+                        <Td right bold color={profit >= 0 ? C.green : C.red}>{fmt$(profit)}</Td>
                         <Td right>{r.nbWo}</Td>
                         <Td right color={C.faded}>{pct.toFixed(1)} %</Td>
                       </Row>
