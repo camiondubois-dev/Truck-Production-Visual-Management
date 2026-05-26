@@ -9,15 +9,18 @@ import { supabase } from '../lib/supabase';
 // ─── Types ────────────────────────────────────────────────────────
 
 export interface Employe {
-  id:           string;
-  nom:          string;
-  codeHitrac:   string | null;
-  departement:  string | null;
-  tauxHoraire:  number;          // $/h, coût employeur (avec charges)
-  actif:        boolean;
-  notes:        string | null;
-  createdAt:    string;
-  updatedAt:    string;
+  id:                  string;
+  nom:                 string;
+  nomComplet:          string | null;       // nom complet (vs nom = code court iTrack)
+  codeHitrac:          string | null;       // code iTrack (ex: 'atormis')
+  noEmployeAcomba:     string | null;       // numéro Acomba (ex: '1021', '82-1558')
+  departement:         string | null;
+  tauxHoraire:         number;              // $/h (0 si payé à la semaine)
+  salaireHebdomadaire: number | null;       // $/sem pour les salariés (sinon NULL)
+  actif:               boolean;
+  notes:               string | null;
+  createdAt:           string;
+  updatedAt:           string;
 }
 
 export interface WorkOrder {
@@ -74,15 +77,18 @@ export interface CamionCoutMoReel {
 
 function employeFromDB(row: any): Employe {
   return {
-    id:           row.id,
-    nom:          row.nom,
-    codeHitrac:   row.code_hitrac ?? null,
-    departement:  row.departement ?? null,
-    tauxHoraire:  Number(row.taux_horaire ?? 0),
-    actif:        row.actif !== false,
-    notes:        row.notes ?? null,
-    createdAt:    row.created_at,
-    updatedAt:    row.updated_at,
+    id:                  row.id,
+    nom:                 row.nom,
+    nomComplet:          row.nom_complet ?? null,
+    codeHitrac:          row.code_hitrac ?? null,
+    noEmployeAcomba:     row.no_employe_acomba ?? null,
+    departement:         row.departement ?? null,
+    tauxHoraire:         Number(row.taux_horaire ?? 0),
+    salaireHebdomadaire: row.salaire_hebdomadaire != null ? Number(row.salaire_hebdomadaire) : null,
+    actif:               row.actif !== false,
+    notes:               row.notes ?? null,
+    createdAt:           row.created_at,
+    updatedAt:           row.updated_at,
   };
 }
 
@@ -137,21 +143,27 @@ export const employeService = {
   },
 
   async creer(payload: {
-    nom:          string;
-    codeHitrac?:  string | null;
-    departement?: string | null;
-    tauxHoraire:  number;
-    notes?:       string | null;
+    nom:                  string;
+    nomComplet?:          string | null;
+    codeHitrac?:          string | null;
+    noEmployeAcomba?:     string | null;
+    departement?:         string | null;
+    tauxHoraire:          number;
+    salaireHebdomadaire?: number | null;
+    notes?:               string | null;
   }): Promise<Employe> {
     const { data, error } = await supabase
       .from('prod_employes')
       .insert({
-        nom:          payload.nom.trim(),
-        code_hitrac:  payload.codeHitrac ?? null,
-        departement:  payload.departement ?? null,
-        taux_horaire: payload.tauxHoraire,
-        notes:        payload.notes ?? null,
-        actif:        true,
+        nom:                  payload.nom.trim(),
+        nom_complet:          payload.nomComplet ?? null,
+        code_hitrac:          payload.codeHitrac ?? null,
+        no_employe_acomba:    payload.noEmployeAcomba ?? null,
+        departement:          payload.departement ?? null,
+        taux_horaire:         payload.tauxHoraire,
+        salaire_hebdomadaire: payload.salaireHebdomadaire ?? null,
+        notes:                payload.notes ?? null,
+        actif:                true,
       })
       .select()
       .single();
@@ -160,20 +172,26 @@ export const employeService = {
   },
 
   async modifier(id: string, patch: Partial<{
-    nom:          string;
-    codeHitrac:   string | null;
-    departement:  string | null;
-    tauxHoraire:  number;
-    actif:        boolean;
-    notes:        string | null;
+    nom:                  string;
+    nomComplet:           string | null;
+    codeHitrac:           string | null;
+    noEmployeAcomba:      string | null;
+    departement:          string | null;
+    tauxHoraire:          number;
+    salaireHebdomadaire:  number | null;
+    actif:                boolean;
+    notes:                string | null;
   }>): Promise<void> {
     const dbPatch: any = {};
-    if ('nom'          in patch) dbPatch.nom          = patch.nom?.trim();
-    if ('codeHitrac'   in patch) dbPatch.code_hitrac  = patch.codeHitrac;
-    if ('departement'  in patch) dbPatch.departement  = patch.departement;
-    if ('tauxHoraire'  in patch) dbPatch.taux_horaire = patch.tauxHoraire;
-    if ('actif'        in patch) dbPatch.actif        = patch.actif;
-    if ('notes'        in patch) dbPatch.notes        = patch.notes;
+    if ('nom'                 in patch) dbPatch.nom                  = patch.nom?.trim();
+    if ('nomComplet'          in patch) dbPatch.nom_complet          = patch.nomComplet;
+    if ('codeHitrac'          in patch) dbPatch.code_hitrac          = patch.codeHitrac;
+    if ('noEmployeAcomba'     in patch) dbPatch.no_employe_acomba    = patch.noEmployeAcomba;
+    if ('departement'         in patch) dbPatch.departement          = patch.departement;
+    if ('tauxHoraire'         in patch) dbPatch.taux_horaire         = patch.tauxHoraire;
+    if ('salaireHebdomadaire' in patch) dbPatch.salaire_hebdomadaire = patch.salaireHebdomadaire;
+    if ('actif'               in patch) dbPatch.actif                = patch.actif;
+    if ('notes'               in patch) dbPatch.notes                = patch.notes;
     const { error } = await supabase
       .from('prod_employes')
       .update(dbPatch)

@@ -13,16 +13,22 @@ const fmt$ = (n: number) =>
   new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 2 }).format(n);
 
 type FormState = {
-  id?:          string;
-  nom:          string;
-  codeHitrac:   string;
-  departement:  string;
-  tauxHoraire:  string;
-  notes:        string;
+  id?:                  string;
+  nom:                  string;
+  nomComplet:           string;
+  codeHitrac:           string;
+  noEmployeAcomba:      string;
+  departement:          string;
+  modeRemuneration:     'horaire' | 'hebdomadaire';
+  tauxHoraire:          string;
+  salaireHebdomadaire:  string;
+  notes:                string;
 };
 
 const FORM_VIDE: FormState = {
-  nom: '', codeHitrac: '', departement: '', tauxHoraire: '', notes: '',
+  nom: '', nomComplet: '', codeHitrac: '', noEmployeAcomba: '',
+  departement: '', modeRemuneration: 'horaire',
+  tauxHoraire: '', salaireHebdomadaire: '', notes: '',
 };
 
 export function VueEmployes() {
@@ -91,12 +97,16 @@ export function VueEmployes() {
 
   const ouvrirEdition = (e: Employe) => {
     setEditForm({
-      id:          e.id,
-      nom:         e.nom,
-      codeHitrac:  e.codeHitrac ?? '',
-      departement: e.departement ?? '',
-      tauxHoraire: String(e.tauxHoraire),
-      notes:       e.notes ?? '',
+      id:                  e.id,
+      nom:                 e.nom,
+      nomComplet:          e.nomComplet ?? '',
+      codeHitrac:          e.codeHitrac ?? '',
+      noEmployeAcomba:     e.noEmployeAcomba ?? '',
+      departement:         e.departement ?? '',
+      modeRemuneration:    (e.salaireHebdomadaire != null && e.salaireHebdomadaire > 0) ? 'hebdomadaire' : 'horaire',
+      tauxHoraire:         String(e.tauxHoraire),
+      salaireHebdomadaire: e.salaireHebdomadaire != null ? String(e.salaireHebdomadaire) : '',
+      notes:               e.notes ?? '',
     });
     setEditMode('edit');
     setErreur(null);
@@ -108,33 +118,47 @@ export function VueEmployes() {
     if (!editForm) return;
     setErreur(null);
     if (!editForm.nom.trim()) { setErreur('Nom requis'); return; }
-    const taux = parseFloat(editForm.tauxHoraire);
-    if (!Number.isFinite(taux) || taux < 0) { setErreur('Taux horaire invalide'); return; }
+
+    const estHebdo = editForm.modeRemuneration === 'hebdomadaire';
+    const taux  = estHebdo ? 0 : parseFloat(editForm.tauxHoraire);
+    const hebdo = estHebdo ? parseFloat(editForm.salaireHebdomadaire) : null;
+
+    if (!estHebdo) {
+      if (!Number.isFinite(taux) || taux < 0) { setErreur('Taux horaire invalide'); return; }
+    } else {
+      if (hebdo == null || !Number.isFinite(hebdo) || hebdo < 0) { setErreur('Salaire hebdomadaire invalide'); return; }
+    }
 
     setSaving(true);
     try {
       if (editMode === 'create') {
         await employeService.creer({
-          nom:          editForm.nom,
-          codeHitrac:   editForm.codeHitrac.trim() || null,
-          departement:  editForm.departement.trim() || null,
-          tauxHoraire:  taux,
-          notes:        editForm.notes.trim() || null,
+          nom:                 editForm.nom,
+          nomComplet:          editForm.nomComplet.trim() || null,
+          codeHitrac:          editForm.codeHitrac.trim() || null,
+          noEmployeAcomba:     editForm.noEmployeAcomba.trim() || null,
+          departement:         editForm.departement.trim() || null,
+          tauxHoraire:         taux,
+          salaireHebdomadaire: hebdo,
+          notes:               editForm.notes.trim() || null,
         });
       } else if (editMode === 'edit' && editForm.id) {
         await employeService.modifier(editForm.id, {
-          nom:          editForm.nom,
-          codeHitrac:   editForm.codeHitrac.trim() || null,
-          departement:  editForm.departement.trim() || null,
-          tauxHoraire:  taux,
-          notes:        editForm.notes.trim() || null,
+          nom:                 editForm.nom,
+          nomComplet:          editForm.nomComplet.trim() || null,
+          codeHitrac:          editForm.codeHitrac.trim() || null,
+          noEmployeAcomba:     editForm.noEmployeAcomba.trim() || null,
+          departement:         editForm.departement.trim() || null,
+          tauxHoraire:         taux,
+          salaireHebdomadaire: hebdo,
+          notes:               editForm.notes.trim() || null,
         });
       }
       await charger();
       fermerForm();
     } catch (e: any) {
       const msg = e?.message?.includes('duplicate key')
-        ? 'Ce code iTrac est déjà utilisé par un autre employé.'
+        ? 'Ce code iTrac ou numéro Acomba est déjà utilisé par un autre employé.'
         : (e?.message ?? 'Erreur sauvegarde');
       setErreur(msg);
     } finally {
@@ -174,7 +198,7 @@ export function VueEmployes() {
           </div>
 
           <div style={{ background: 'white', borderRadius: 12, padding: 24, border: '1px solid #e5e7eb', display: 'grid', gap: 16 }}>
-            <Champ label="Nom complet *">
+            <Champ label="Nom (court / d'affichage) *">
               <input
                 type="text"
                 value={editForm.nom}
@@ -185,15 +209,36 @@ export function VueEmployes() {
               />
             </Champ>
 
-            <Champ label="Code iTrac (utilisé dans les exports CSV)">
+            <Champ label="Nom complet (Prénom + Nom)">
               <input
                 type="text"
-                value={editForm.codeHitrac}
-                onChange={ev => setEditForm({ ...editForm, codeHitrac: ev.target.value })}
+                value={editForm.nomComplet}
+                onChange={ev => setEditForm({ ...editForm, nomComplet: ev.target.value })}
                 style={inputStyle}
-                placeholder="Ex: dleblanc, DL01"
+                placeholder="Ex: DANY LEBLANC TREMBLAY"
               />
             </Champ>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Champ label="Code iTrac (Labor Log)">
+                <input
+                  type="text"
+                  value={editForm.codeHitrac}
+                  onChange={ev => setEditForm({ ...editForm, codeHitrac: ev.target.value })}
+                  style={inputStyle}
+                  placeholder="Ex: dleblanc"
+                />
+              </Champ>
+              <Champ label="N° Employé Acomba">
+                <input
+                  type="text"
+                  value={editForm.noEmployeAcomba}
+                  onChange={ev => setEditForm({ ...editForm, noEmployeAcomba: ev.target.value })}
+                  style={inputStyle}
+                  placeholder="Ex: 1234 ou 82-1558"
+                />
+              </Champ>
+            </div>
 
             <Champ label="Département">
               <input
@@ -209,20 +254,55 @@ export function VueEmployes() {
               </datalist>
             </Champ>
 
-            <Champ label="Taux horaire ($/h) — coût employeur réel (avec charges) *">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={editForm.tauxHoraire}
-                onChange={ev => setEditForm({ ...editForm, tauxHoraire: ev.target.value })}
-                style={inputStyle}
-                placeholder="Ex: 45.50"
-              />
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-                💡 Conseil : salaire horaire × ~1.35 pour inclure les charges (CSST, RRQ, AE, vacances).
+            {/* ─── Mode de rémunération ─── */}
+            <div>
+              <div style={{ fontSize: 12, color: '#374151', marginBottom: 6, fontWeight: 600 }}>Mode de rémunération *</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['horaire', 'hebdomadaire'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, modeRemuneration: mode })}
+                    style={{
+                      flex: 1, padding: '10px 14px', borderRadius: 8,
+                      border: editForm.modeRemuneration === mode ? '2px solid #22c55e' : '1px solid #e5e7eb',
+                      background: editForm.modeRemuneration === mode ? '#f0fdf4' : 'white',
+                      color: editForm.modeRemuneration === mode ? '#15803d' : '#6b7280',
+                      fontWeight: editForm.modeRemuneration === mode ? 700 : 500, fontSize: 13, cursor: 'pointer',
+                    }}>
+                    {mode === 'horaire' ? '⏱  Payé à l\'heure' : '💼 Payé à la semaine'}
+                  </button>
+                ))}
               </div>
-            </Champ>
+            </div>
+
+            {editForm.modeRemuneration === 'horaire' ? (
+              <Champ label="Taux horaire ($/h) — coût employeur réel (avec charges) *">
+                <input
+                  type="number" step="0.01" min="0"
+                  value={editForm.tauxHoraire}
+                  onChange={ev => setEditForm({ ...editForm, tauxHoraire: ev.target.value })}
+                  style={inputStyle}
+                  placeholder="Ex: 45.50"
+                />
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                  💡 Conseil : salaire horaire × ~1.35 pour inclure les charges (CSST, RRQ, AE, vacances).
+                </div>
+              </Champ>
+            ) : (
+              <Champ label="Salaire hebdomadaire ($/sem) — montant fixe par semaine *">
+                <input
+                  type="number" step="0.01" min="0"
+                  value={editForm.salaireHebdomadaire}
+                  onChange={ev => setEditForm({ ...editForm, salaireHebdomadaire: ev.target.value })}
+                  style={inputStyle}
+                  placeholder="Ex: 2884.62"
+                />
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                  💡 Pour les salariés (actionnaires, direction, secrétariat). Si la paie est bi-hebdomadaire, divise par 2.
+                </div>
+              </Champ>
+            )}
 
             <Champ label="Notes">
               <textarea
@@ -321,14 +401,18 @@ export function VueEmployes() {
               <tr style={{ background: '#f9fafb', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
                 <th style={th}>Statut</th>
                 <th style={th}>Nom</th>
+                <th style={th}>N° Acomba</th>
                 <th style={th}>Code iTrac</th>
                 <th style={th}>Département</th>
-                <th style={{ ...th, textAlign: 'right' }}>Taux/h</th>
+                <th style={th}>Mode</th>
+                <th style={{ ...th, textAlign: 'right' }}>Rémunération</th>
                 <th style={th}></th>
               </tr>
             </thead>
             <tbody>
-              {filtres.map(e => (
+              {filtres.map(e => {
+                const estHebdo = e.salaireHebdomadaire != null && e.salaireHebdomadaire > 0;
+                return (
                 <tr key={e.id} style={{ borderTop: '1px solid #f3f4f6', opacity: e.actif ? 1 : 0.55 }}>
                   <td style={td}>
                     <span style={{
@@ -339,10 +423,29 @@ export function VueEmployes() {
                       {e.actif ? '✅ Actif' : '⏸ Inactif'}
                     </span>
                   </td>
-                  <td style={{ ...td, fontWeight: 700, color: '#111827' }}>{e.nom}</td>
+                  <td style={{ ...td, fontWeight: 700, color: '#111827' }}>
+                    {e.nomComplet ?? e.nom}
+                    {e.nomComplet && e.nom !== e.nomComplet && (
+                      <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 400 }}>{e.nom}</div>
+                    )}
+                  </td>
+                  <td style={{ ...td, fontFamily: 'monospace', color: '#6b7280' }}>{e.noEmployeAcomba ?? '—'}</td>
                   <td style={{ ...td, fontFamily: 'monospace', color: '#6b7280' }}>{e.codeHitrac ?? '—'}</td>
                   <td style={td}>{e.departement ?? '—'}</td>
-                  <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>{fmt$(e.tauxHoraire)}</td>
+                  <td style={td}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                      background: estHebdo ? '#ede9fe' : '#fef3c7',
+                      color:      estHebdo ? '#6d28d9' : '#92400e',
+                    }}>
+                      {estHebdo ? '💼 Hebdo' : '⏱ Horaire'}
+                    </span>
+                  </td>
+                  <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: estHebdo ? '#7c3aed' : '#f59e0b' }}>
+                    {estHebdo
+                      ? `${fmt$(e.salaireHebdomadaire ?? 0)} / sem`
+                      : `${fmt$(e.tauxHoraire)} / h`}
+                  </td>
                   <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
                     <button onClick={() => ouvrirEdition(e)} style={iconBtn} title="Éditer">✏️</button>
                     <button onClick={() => toggleActif(e)} style={iconBtn} title={e.actif ? 'Désactiver' : 'Réactiver'}>
@@ -351,7 +454,8 @@ export function VueEmployes() {
                     <button onClick={() => supprimer(e)} style={{ ...iconBtn, color: '#ef4444' }} title="Supprimer">🗑</button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
