@@ -284,17 +284,34 @@ export function VueMainOeuvre() {
   // ─── KPIs globaux ──
   const kpis = useMemo(() => {
     const totalHeures = heures.reduce((s, h) => s + h.heures, 0);
-    // Coût iTrack = heures WO × taux (garde comme référence / fallback)
-    const totalCoutItrack = heures.reduce((s, h) => {
-      const e = empById[h.employeId];
-      return s + (e ? h.heures * e.tauxHoraire : 0);
-    }, 0);
     const wosInternes = parWo.filter(w => w.type === 'interne').length;
     const wosExternes = parWo.filter(w => w.type === 'externe').length;
+
     // Revenu WO = total heures iTrack × taux fixe de facturation M.O.
-    const revenuWo         = totalHeures * TAUX_MO_FACTURATION;
-    return { totalHeures, totalCoutItrack, wosInternes, wosExternes, revenuWo };
-  }, [heures, parWo, empById]);
+    const revenuWo = totalHeures * TAUX_MO_FACTURATION;
+
+    // ── Coût M.O. réel : tous les employés actifs × coût hebdo × nb semaines ──
+    // Horaire  → 40 h × taux_horaire / sem
+    // Salarié  → salaire_hebdomadaire / sem
+    // Ne requiert PAS Agendrix — fonctionne toujours
+    const nbJours = bounds.from && bounds.to
+      ? Math.round(
+          (new Date(bounds.to).getTime() - new Date(bounds.from).getTime())
+          / (1000 * 60 * 60 * 24)
+        ) + 1
+      : 7;
+    const nbSemaines = Math.max(nbJours / 7, 1);
+    const coutPayroll = employes
+      .filter(e => e.actif)
+      .reduce((s, e) => {
+        const hebdo = (e.salaireHebdomadaire ?? 0) > 0
+          ? (e.salaireHebdomadaire ?? 0)
+          : 40 * (e.tauxHoraire ?? 0);
+        return s + hebdo * nbSemaines;
+      }, 0);
+
+    return { totalHeures, wosInternes, wosExternes, revenuWo, coutPayroll, nbSemaines };
+  }, [heures, parWo, employes, bounds]);
 
   // ─── Sanity check : employés sans taux ──
   const empSansTaux = useMemo(
@@ -368,24 +385,26 @@ export function VueMainOeuvre() {
         <>
           {/* ═══ KPIs globaux ═══ */}
           {(() => {
-            // Coût réel = Agendrix (toutes heures payées × taux) si dispo, sinon iTrack fallback
-            const coutReel         = coutAgendrix?.cout         ?? kpis.totalCoutItrack;
-            const coutReelCharges  = coutAgendrix?.coutAvecCharges ?? (kpis.totalCoutItrack * 1.23);
-            const pct              = coutReel > 0 ? (kpis.revenuWo / coutReel) * 100 : 0;
-            const sourceLabel      = coutAgendrix
-              ? `Agendrix · ${coutAgendrix.nbSemaines} sem. · +23 % : ${fmt$(coutReelCharges)}`
-              : `iTrack fallback · +23 % : ${fmt$(coutReelCharges)}`;
+            // Coût réel = tous les employés actifs × coût hebdo × nb semaines (depuis table employés)
+            // Si Agendrix chargé pour la période : on utilise ses chiffres réels (plus précis)
+            const coutReel        = coutAgendrix?.cout         ?? kpis.coutPayroll;
+            const coutAvecCharges = coutAgendrix?.coutAvecCharges ?? (kpis.coutPayroll * 1.23);
+            const pct             = coutReel > 0 ? (kpis.revenuWo / coutReel) * 100 : 0;
+            const nbActifs        = employes.filter(e => e.actif).length;
+            const sourceLabel     = coutAgendrix
+              ? `Agendrix réel · ${coutAgendrix.nbSemaines} sem. · +23 % : ${fmt$(coutAvecCharges)}`
+              : `${nbActifs} empl. actifs · ${kpis.nbSemaines.toFixed(1)} sem. · +23 % : ${fmt$(coutAvecCharges)}`;
             return (
               <Section titre="📊 Vue d'ensemble">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                   <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
 
-                  {/* ── 1. Coût M.O. réel = Agendrix heures payées × taux ── */}
+                  {/* ── 1. Coût M.O. réel = employés actifs × (salaire ou 40h×taux) × nb semaines ── */}
                   <Kpi
                     label="Coût M.O. réel"
                     value={fmt$(coutReel)}
                     color={C.amber}
-                    sub={`${employes.filter(e => e.actif).length} employés actifs`}
+                    sub={`${nbActifs} employés actifs`}
                     sub2={sourceLabel}
                   />
 
