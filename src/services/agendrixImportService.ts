@@ -264,24 +264,27 @@ export async function executeAgendrixImport(
 
   // Index par numéro Acomba
   const empMap: Record<string, string> = {};
-  // Index par nom normalisé "PRENOM NOM" ou "NOM PRENOM" → id
-  const empByNom: Record<string, string> = {};
+  // Normalisation nom (même algo que getAgendrixAnalyse)
+  const normNomImport = (s: string) =>
+    s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[''`´]/g, "'").replace(/\s+/g, ' ').trim();
+
+  // Index par nom normalisé → id
+  const empByNomImport: Record<string, string> = {};
   for (const e of (empsRaw ?? []) as any[]) {
     if (e.no_employe_acomba) empMap[String(e.no_employe_acomba).trim()] = e.id;
-    const nomFull = (e.nom_complet ?? e.nom ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
-    if (nomFull) empByNom[nomFull] = e.id;
+    const nomFull = normNomImport(e.nom_complet ?? e.nom ?? '');
+    if (nomFull) empByNomImport[nomFull] = e.id;
   }
 
-  // Fonction : tenter de trouver un employé par numéro, puis par nom
+  // Résolution : numéro → nom (PRENOM NOM) → nom (NOM PRENOM)
   function resolveEmployeId(noAcomba: string, prenom: string | null, nomAg: string | null): string | null {
-    // 1. Par numéro
     const byNum = empMap[noAcomba.trim()];
     if (byNum) return byNum;
-    // 2. Par nom Agendrix normalisé (ex: "BARBEAU Louis-Philippe" → "LOUIS-PHILIPPE BARBEAU")
-    if (prenom && nomAg) {
-      const v1 = `${prenom} ${nomAg}`.toUpperCase().replace(/\s+/g, ' ').trim();
-      const v2 = `${nomAg} ${prenom}`.toUpperCase().replace(/\s+/g, ' ').trim();
-      return empByNom[v1] ?? empByNom[v2] ?? null;
+    if (prenom || nomAg) {
+      const v1 = normNomImport(`${prenom ?? ''} ${nomAg ?? ''}`);
+      const v2 = normNomImport(`${nomAg ?? ''} ${prenom ?? ''}`);
+      return empByNomImport[v1] ?? empByNomImport[v2] ?? null;
     }
     return null;
   }
@@ -370,8 +373,16 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
     .select('id, nom_complet, nom, no_employe_acomba, taux_horaire, salaire_hebdomadaire');
 
   const empById: Record<string, { nomComplet: string | null; taux: number | null; hebdo: number | null }> = {};
-  // Index secondaire : no_employe_acomba → id (pour retrouver les employés non liés à l'import)
+  // Index par no_employe_acomba
   const empByNoAcomba: Record<string, string> = {};
+  // Index par nom normalisé (pour les contracteurs sans numéro Acomba)
+  const empByNom: Record<string, string> = {};
+
+  // Normalise un nom : majuscules, apostrophes uniformes, espaces multiples
+  const normNom = (s: string) =>
+    s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[''`´]/g, "'").replace(/\s+/g, ' ').trim();
+
   for (const e of (emps ?? []) as any[]) {
     empById[e.id] = {
       nomComplet: e.nom_complet ?? e.nom ?? null,
@@ -381,7 +392,18 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
     if (e.no_employe_acomba) {
       empByNoAcomba[String(e.no_employe_acomba).trim()] = e.id;
     }
+    // Indexer aussi par nom normalisé (fallback pour contracteurs sans numéro)
+    const nomFull = normNom(e.nom_complet ?? e.nom ?? '');
+    if (nomFull) empByNom[nomFull] = e.id;
   }
+
+  // Résolution nom : essaie "PRENOM NOM" et "NOM PRENOM"
+  const resolveByNom = (prenom: string | null, nomAg: string | null): string | null => {
+    if (!prenom && !nomAg) return null;
+    const v1 = normNom(`${prenom ?? ''} ${nomAg ?? ''}`);
+    const v2 = normNom(`${nomAg ?? ''} ${prenom ?? ''}`);
+    return empByNom[v1] ?? empByNom[v2] ?? null;
+  };
 
   // Agrégation par no_employe_acomba (ou prenom_nom si pas de clé)
   type Agg = {
@@ -428,10 +450,12 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
   // Transformer en tableau avec coûts
   const result: AgendrixAnalyseEmploye[] = [];
   for (const agg of map.values()) {
-    // Si l'import n'a pas pu lier l'employé (employe_id = null),
-    // essayer de le retrouver maintenant par no_employe_acomba
+    // Si l'import n'a pas pu lier l'employé (employe_id = null) :
+    // 1. Essai par no_employe_acomba
+    // 2. Essai par nom (pour contracteurs sans numéro Acomba, ex: ylitalien)
     const resolvedId = agg.employeId
-      ?? (agg.noAcomba ? empByNoAcomba[String(agg.noAcomba).trim()] ?? null : null);
+      ?? (agg.noAcomba ? empByNoAcomba[String(agg.noAcomba).trim()] ?? null : null)
+      ?? resolveByNom(agg.prenom, agg.nomAg);
     const emp = resolvedId ? empById[resolvedId] : null;
     const taux  = emp?.taux ?? null;
     const hebdo = emp?.hebdo ?? null;
