@@ -26,6 +26,13 @@ const isGestionOrAdmin = (p?: ProfileLike | null): boolean => {
   return r === 'admin' || r === 'gestion';
 };
 
+/** Helper : a-t-il un rôle opérationnel (gestion + tous les rôles qui travaillent
+ *  sur les camions au jour le jour) — utilisé pour les onglets non-financiers. */
+const isOperationnel = (p?: ProfileLike | null): boolean => {
+  const r = role(p);
+  return r === 'admin' || r === 'gestion' || r === 'planification' || r === 'vendeur';
+};
+
 /** Helper : a-t-il les droits d'admin uniquement ? */
 export function isAdmin(p?: ProfileLike | null): boolean {
   return role(p) === 'admin';
@@ -53,12 +60,14 @@ export function canSeeBilan(p?: ProfileLike | null): boolean {
   return isGestionOrAdmin(p);
 }
 
-/** Peut voir l'onglet Plans de vente (création de projections). */
+/** Peut voir l'onglet Plans de vente (création de projections).
+ *  Planification = oui (production planning), vendeur = oui (création), gestion/admin = oui. */
 export function canSeePlansVente(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+  return isOperationnel(p);
 }
 
-/** Peut entrer des ventes / modifier les prix dans Suivi vente. */
+/** Peut entrer des ventes / modifier les prix dans Suivi vente.
+ *  Planification : NON (pas un vendeur — accès lecture seule au suivi de vente). */
 export function canEditVentes(p?: ProfileLike | null): boolean {
   return isGestionOrAdmin(p) || role(p) === 'vendeur';
 }
@@ -80,27 +89,27 @@ export function canImport(p?: ProfileLike | null): boolean {
 
 /** Peut voir l'onglet Inventaire (liste de tous les camions). */
 export function canSeeInventaire(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+  return isOperationnel(p);
 }
 
-/** Peut voir Suivi vente. */
+/** Peut voir Suivi vente (lecture seule pour planification). */
 export function canSeeSuiviVente(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+  return isOperationnel(p);
 }
 
 /** Peut voir les onglets Camions Eau / Détail / Clients. */
 export function canSeeCamionsParType(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+  return isOperationnel(p);
 }
 
 /** Peut voir Archive. */
 export function canSeeArchive(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p);
+  return isOperationnel(p);
 }
 
 /** Peut voir Réservoirs. */
 export function canSeeReservoirs(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p);
+  return isOperationnel(p);
 }
 
 /** ★ EXCLUSIF ADMIN : peut gérer les utilisateurs et leurs rôles. */
