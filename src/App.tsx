@@ -38,9 +38,33 @@ type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-ven
 const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','employes','utilisateurs','activite'];
 const LS_TAB_KEY = 'app_current_tab';
 
+// ─── Lire un deep link depuis le hash URL ────────────────────────────────────
+// Format : #import/agendrix  →  { tab: 'import', subTab: 'agendrix' }
+//          #import            →  { tab: 'import', subTab: null }
+//          (Supabase auth hash : #access_token=... → ignoré)
+function parseDeepLink(): { tab: Tab | null; subTab: string | null } {
+  try {
+    const hash = window.location.hash.replace(/^#/, '');
+    if (!hash || hash.includes('=')) return { tab: null, subTab: null }; // auth Supabase → ignorer
+    const parts = hash.split('/');
+    const tab   = parts[0] as Tab;
+    const subTab = parts[1] ?? null;
+    if ((VALID_TABS as string[]).includes(tab)) return { tab, subTab };
+  } catch { /* ignore */ }
+  return { tab: null, subTab: null };
+}
+
 export default function App() {
   const { profile, loading } = useAuth();
+
+  // Deep link détecté au démarrage (URL #import/agendrix)
+  const [initialImportSubTab] = useState<string | null>(() => parseDeepLink().subTab);
+
   const [currentTab, setCurrentTab] = useState<Tab>(() => {
+    // 1. Deep link dans l'URL a priorité
+    const deepLink = parseDeepLink();
+    if (deepLink.tab) return deepLink.tab;
+    // 2. localStorage (onglet de la dernière session)
     try {
       const saved = localStorage.getItem(LS_TAB_KEY);
       if (saved && (VALID_TABS as string[]).includes(saved)) return saved as Tab;
@@ -165,7 +189,12 @@ export default function App() {
         {/* Administration — gestion seulement */}
         {safeTab === 'analyse'       && <VueAnalyse />}
         {safeTab === 'tv-admin'      && <VueAdminTV />}
-        {safeTab === 'import'        && <VueImport />}
+        {safeTab === 'import'        && (
+          <VueImport
+            initialSubTab={initialImportSubTab ?? undefined}
+            ongletsAutorises={profile?.onglets_import ?? null}
+          />
+        )}
         {safeTab === 'profitabilite' && <VueProfitabilite />}
         {safeTab === 'employes'      && <VueEmployes />}
         {safeTab === 'utilisateurs'  && <VueUtilisateurs />}

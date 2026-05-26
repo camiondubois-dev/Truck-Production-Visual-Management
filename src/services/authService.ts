@@ -7,6 +7,13 @@ export interface Profile {
   role: 'admin' | 'gestion' | 'planification' | 'vendeur' | 'employe' | 'tv';
   departement?: string;
   actif: boolean;
+  /**
+   * Onglets d'import autorisés.
+   * null  = tous les onglets (admin/gestion)
+   * 'agendrix' = seulement Agendrix
+   * 'itrack,pieces,hitrac' = liste séparée par virgule
+   */
+  onglets_import?: string | null;
 }
 
 export const authService = {

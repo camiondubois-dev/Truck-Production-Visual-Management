@@ -30,13 +30,39 @@ const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'agendrix',             label: 'Agendrix',               icon: '📅', color: '#f97316' },
 ];
 
-export function VueImport() {
-  const { profile } = useAuth();
-  const [tab, setTab] = useState<TabId>('couts');
+interface VueImportProps {
+  /** Sous-onglet à ouvrir immédiatement (deep link URL). Ex: 'agendrix' */
+  initialSubTab?: string;
+  /** Onglets autorisés pour cet utilisateur (null = tous). Ex: 'agendrix' ou 'itrack,pieces' */
+  ongletsAutorises?: string | null;
+}
 
-  // Accès : admin + gestion + vendeur (les vendeurs ont besoin d'importer leurs ventes iTrack)
+export function VueImport({ initialSubTab, ongletsAutorises }: VueImportProps = {}) {
+  const { profile } = useAuth();
+
+  // Filtrer les onglets selon les permissions du compte
+  const tabsVisibles = useMemo(() => {
+    if (!ongletsAutorises) return TABS; // null = tous
+    const autorises = ongletsAutorises.split(',').map(s => s.trim().toLowerCase());
+    return TABS.filter(t => autorises.includes(t.id));
+  }, [ongletsAutorises]);
+
+  // Onglet initial : deep link > premier onglet autorisé
+  const premierOnglet = (tabsVisibles[0]?.id ?? 'couts') as TabId;
+  const [tab, setTab] = useState<TabId>(() => {
+    if (initialSubTab && tabsVisibles.some(t => t.id === initialSubTab)) {
+      return initialSubTab as TabId;
+    }
+    return premierOnglet;
+  });
+
+  // Accès : admin + gestion + vendeur
   if (profile?.role !== 'admin' && profile?.role !== 'gestion' && profile?.role !== 'vendeur') {
     return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Accès réservé aux gestionnaires et vendeurs.</div>;
+  }
+
+  if (tabsVisibles.length === 0) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Aucun onglet d'import autorisé pour ce compte.</div>;
   }
 
   return (
@@ -52,7 +78,7 @@ export function VueImport() {
         display: 'flex', gap: 6, overflowX: 'auto',
         borderBottom: '2px solid #1e293b',
       }}>
-        {TABS.map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
             padding: '9px 16px', borderRadius: 8,
