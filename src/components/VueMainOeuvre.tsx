@@ -18,7 +18,7 @@ import {
   type Employe, type WoCoutMo, type HeureEmploye,
 } from '../services/mainOeuvreService';
 import {
-  getAgendrixSemaines, getAgendrixAnalyse,
+  getAgendrixSemaines, getAgendrixAnalyse, getAgendrixCoutPeriode,
   type AgendrixAnalyseEmploye,
 } from '../services/agendrixImportService';
 import { supabase } from '../lib/supabase';
@@ -56,11 +56,12 @@ export function VueMainOeuvre() {
   const peutVoirDetailEmploye = canSeeEmployesDetails(profile);
   const [onglet,     setOnglet]     = useState<'itrack' | 'agendrix'>('itrack');
   const [periode,    setPeriode]    = useState<PreriodeOption>('semaine_passee');
-  const [loading,    setLoading]    = useState(true);
-  const [employes,   setEmployes]   = useState<Employe[]>([]);
-  const [woCouts,    setWoCouts]    = useState<WoCoutMo[]>([]);
-  const [heures,     setHeures]     = useState<HeureEmploye[]>([]);
-  const [filtreType, setFiltreType] = useState<'tous' | 'interne' | 'externe'>('tous');
+  const [loading,         setLoading]         = useState(true);
+  const [employes,        setEmployes]        = useState<Employe[]>([]);
+  const [woCouts,         setWoCouts]         = useState<WoCoutMo[]>([]);
+  const [heures,          setHeures]          = useState<HeureEmploye[]>([]);
+  const [filtreType,      setFiltreType]      = useState<'tous' | 'interne' | 'externe'>('tous');
+  const [coutAgendrix,    setCoutAgendrix]    = useState<{ cout: number; coutAvecCharges: number; nbSemaines: number } | null>(null);
   // Metadata camions + moteurs (marque/modèle/année + statut vendu)
   type MetaEntry = { marque: string | null; modele: string | null; annee: number | null; vendu: boolean; type: 'camion' | 'moteur' };
   const [invMeta, setInvMeta] = useState<Record<string, MetaEntry>>({});
@@ -71,11 +72,13 @@ export function VueMainOeuvre() {
     (async () => {
       setLoading(true);
       try {
-        const [emps, wos, hrs] = await Promise.all([
+        const [emps, wos, hrs, coutAg] = await Promise.all([
           employeService.getAll(),
           workOrderService.getCoutsByWo(),
           heuresService.getAll(bounds.from ?? undefined, bounds.to ?? undefined),
+          getAgendrixCoutPeriode(bounds.from, bounds.to),
         ]);
+        setCoutAgendrix(coutAg);
         setEmployes(emps);
         setWoCouts(wos);
         setHeures(hrs);
@@ -371,14 +374,37 @@ export function VueMainOeuvre() {
           <Section titre="📊 Vue d'ensemble">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
               <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
-              <Kpi label="Coût M.O. réel" value={fmt$(kpis.totalCout)} color={C.amber}
-                sub={`${employes.filter(e => e.actif).length} employés actifs`}
-                sub2={`+ 23 % charges : ${fmt$(kpis.totalCoutAvecCharges)}`} />
+              {/* Coût réel = Agendrix si dispo, sinon iTrack WO seulement */}
+              {coutAgendrix ? (
+                <Kpi
+                  label="Coût M.O. réel (Agendrix)"
+                  value={fmt$(coutAgendrix.cout)}
+                  color={C.amber}
+                  sub={`Tous employés · ${coutAgendrix.nbSemaines} sem. Agendrix`}
+                  sub2={`+ 23 % charges : ${fmt$(coutAgendrix.coutAvecCharges)}`}
+                />
+              ) : (
+                <Kpi
+                  label="Coût M.O. (WO seulement)"
+                  value={fmt$(kpis.totalCout)}
+                  color={C.amber}
+                  sub={`⚠️ Importer Agendrix pour le coût réel`}
+                  sub2={`+ 23 % charges : ${fmt$(kpis.totalCoutAvecCharges)}`}
+                />
+              )}
               <Kpi label="Revenu M.O. facturable" value={fmt$(kpis.revenuMoTotal)} color={C.green} sub={`Interne: ${fmt$(kpis.revenuMoInterne)} · Externe: ${fmt$(kpis.revenuMoExterne)}`} />
-              <Kpi label="% Revenu vs Coût réel"
-                value={kpis.totalCout > 0 ? `${kpis.pctRevenuVsCout.toFixed(0)} %` : '—'}
-                color={kpis.pctRevenuVsCout >= 100 ? C.green : C.red}
-                sub={`${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(kpis.totalCout)}`} />
+              {/* % Revenu vs coût réel — utilise Agendrix si dispo */}
+              {(() => {
+                const coutRef = coutAgendrix ? coutAgendrix.cout : kpis.totalCout;
+                const pct     = coutRef > 0 ? (kpis.revenuMoTotal / coutRef) * 100 : 0;
+                return (
+                  <Kpi label="% Revenu vs Coût réel"
+                    value={coutRef > 0 ? `${pct.toFixed(0)} %` : '—'}
+                    color={pct >= 100 ? C.green : C.red}
+                    sub={`${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(coutRef)}${coutAgendrix ? '' : ' (WO)'}`}
+                  />
+                );
+              })()}
             </div>
           </Section>
 

@@ -449,3 +449,34 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
   // Tri : les employés avec le plus d'heures en premier
   return result.sort((a, b) => (b.hQuart + b.hFerie) - (a.hQuart + a.hFerie));
 }
+
+/**
+ * Retourne le coût total réel (Agendrix) pour une période donnée.
+ * Cherche toutes les semaines Agendrix qui chevauchent la période from→to.
+ * Si from/to sont null → toutes les semaines disponibles.
+ */
+export async function getAgendrixCoutPeriode(
+  from: string | null,
+  to:   string | null,
+): Promise<{ cout: number; coutAvecCharges: number; nbSemaines: number } | null> {
+  // Chercher les semaines dans la période
+  let q = supabase.from('prod_agendrix_heures').select('semaine_debut');
+  if (from) q = q.gte('semaine_debut', from);
+  if (to)   q = q.lte('semaine_debut', to);
+
+  const { data } = await q;
+  if (!data || data.length === 0) return null;
+
+  // Semaines uniques
+  const semaines = [...new Set((data as any[]).map(r => r.semaine_debut as string))];
+
+  // Analyser chaque semaine et sommer les coûts prévus
+  const analyses = await Promise.all(semaines.map(s => getAgendrixAnalyse(s)));
+  const cout = analyses.flat().reduce((s, e) => s + e.coutPrevu, 0);
+
+  return {
+    cout,
+    coutAvecCharges: cout * 1.23,
+    nbSemaines: semaines.length,
+  };
+}
