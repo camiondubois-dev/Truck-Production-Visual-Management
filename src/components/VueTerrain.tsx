@@ -605,7 +605,7 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
 }) {
   // Terrain (PIN) → pas de AuthProvider → on affiche tout. Desktop → gestion seulement.
   const auth = useAuthOptional();
-  const isGestion = !auth || auth.profile?.role === 'gestion';
+  const isGestion = !auth || auth.profile?.role === 'gestion' || auth.profile?.role === 'admin';
   const finStockNumeros = useMemo(() => isGestion && v.numero ? [v.numero] : [], [isGestion, v.numero]);
   const { dataByNumero: finMap, updatePrixDemande, setLocalPrixDemande } = useFinancialData(finStockNumeros);
   const finData = finMap[v.numero];

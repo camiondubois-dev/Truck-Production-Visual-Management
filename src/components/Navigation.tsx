@@ -33,6 +33,7 @@ const ADMIN_TABS = [
   { id: 'tv-admin',      label: 'Modifications TV', icon: '📺', color: '#f97316' },
   { id: 'profitabilite', label: 'Profitabilité',    icon: '💹', color: '#22c55e' },
   { id: 'employes',      label: 'Employés (M.O.)',  icon: '👥', color: '#0ea5e9' },
+  { id: 'utilisateurs',  label: 'Utilisateurs 🔑',  icon: '🔑', color: '#dc2626' },
   { id: 'activite',      label: 'Activité',         icon: '👁️', color: '#06b6d4' },
 ];
 
@@ -215,7 +216,7 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
         ))}
 
         {/* ── Menu Administration (gestion seulement) ── */}
-        {profile?.role === 'gestion' && (
+        {(profile?.role === 'gestion' || profile?.role === 'admin') && (
           <div ref={adminRef} style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={() => {
@@ -249,7 +250,11 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
                 boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
                 minWidth: 200,
               }}>
-                {ADMIN_TABS.map(tab => (
+                {ADMIN_TABS.filter(tab => {
+                  // 'utilisateurs' réservé à admin uniquement
+                  if (tab.id === 'utilisateurs') return profile?.role === 'admin';
+                  return true;
+                }).map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => { onTabChange(tab.id); setShowAdmin(false); }}

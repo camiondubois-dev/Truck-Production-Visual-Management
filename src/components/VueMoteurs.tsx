@@ -53,7 +53,7 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
       .eq('actif', true)
       .then(({ data }) => {
         const list = (data ?? [])
-          .filter(p => p.role === 'employe' || p.role === 'gestion')
+          .filter(p => p.role === 'employe' || p.role === 'gestion' || p.role === 'admin')
           .map(p => ({ id: p.id, nom: p.nom ?? 'Sans nom', departement: p.departement ?? undefined, role: p.role }));
         // Tri : mécanos moteur d'abord
         list.sort((a, b) => {

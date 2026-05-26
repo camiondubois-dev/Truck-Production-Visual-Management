@@ -255,7 +255,7 @@ export function VueInventaire() {
     return map;
   }, [items]);
   const { profile: session } = useAuth();
-  const isGestion = session?.role === 'gestion';
+  const isGestion = session?.role === 'gestion' || session?.role === 'admin';
 
   const INVENTAIRE_COLS = ['numero', 'marque', 'modele', 'nom_client', 'client_acheteur', 'notes'];
   const [filtreStatut, setFiltreStatut] = useState<FiltreStatut>('tous');

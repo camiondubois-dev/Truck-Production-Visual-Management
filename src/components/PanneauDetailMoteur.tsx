@@ -46,14 +46,14 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
       .eq('actif', true)
       .then(({ data }) => {
         const all = (data ?? [])
-          .filter(p => p.role === 'employe' || p.role === 'gestion')
+          .filter(p => p.role === 'employe' || p.role === 'gestion' || p.role === 'admin')
           .map(p => ({ id: p.id, nom: p.nom ?? 'Sans nom', departement: p.departement ?? undefined, role: p.role }));
-        // Tri : mécanos moteur d'abord (alpha), puis autres employés (alpha), puis gestion (alpha)
+        // Tri : mécanos moteur d'abord (alpha), puis autres employés (alpha), puis gestion/admin (alpha)
         all.sort((a, b) => {
           const prio = (p: typeof a) =>
-            p.departement === 'mecanique-moteur' ? 0 :
-            p.role === 'employe'                 ? 1 :
-            p.role === 'gestion'                 ? 2 : 3;
+            p.departement === 'mecanique-moteur'              ? 0 :
+            p.role === 'employe'                              ? 1 :
+            (p.role === 'gestion' || p.role === 'admin')      ? 2 : 3;
           const pa = prio(a), pb = prio(b);
           if (pa !== pb) return pa - pb;
           return a.nom.localeCompare(b.nom);
@@ -168,7 +168,7 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     setEtapeAssign(null);
   };
 
-  const isGestion = profile?.role === 'gestion';
+  const isGestion = profile?.role === 'gestion' || profile?.role === 'admin';
 
   return (
     <div onClick={onClose} style={{
@@ -345,7 +345,7 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
                 {(() => {
                   const mecanos = employes.filter(e => e.departement === 'mecanique-moteur');
                   const autresEmployes = employes.filter(e => e.role === 'employe' && e.departement !== 'mecanique-moteur');
-                  const gestion = employes.filter(e => e.role === 'gestion');
+                  const gestion = employes.filter(e => e.role === 'gestion' || e.role === 'admin');
                   return (
                     <>
                       {mecanos.length > 0 && (

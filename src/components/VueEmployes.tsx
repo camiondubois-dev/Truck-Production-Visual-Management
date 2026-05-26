@@ -187,9 +187,9 @@ export function VueEmployes() {
     }
   };
 
-  // ─── Garde d'accès : gestionnaire uniquement ──
+  // ─── Garde d'accès : gestionnaire / admin uniquement ──
   // Cette section contient des données salariales confidentielles.
-  if (profile?.role !== 'gestion') {
+  if (profile?.role !== 'gestion' && profile?.role !== 'admin') {
     return (
       <div style={{
         padding: 40, height: '100%', display: 'flex', flexDirection: 'column',

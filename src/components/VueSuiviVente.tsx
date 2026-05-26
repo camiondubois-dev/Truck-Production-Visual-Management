@@ -41,7 +41,7 @@ function VueSuiviVenteDesktop() {
   const { vehicules } = useInventaire();
   const { items } = useGarageOptional();
   const { profile } = useAuth();
-  const isGestion = profile?.role === 'gestion';
+  const isGestion = profile?.role === 'gestion' || profile?.role === 'admin';
   // Détecte si on est connecté via un code TV (rôle 'tv' avec session TV) — affiche bouton déconnexion
   const isTVSession = !!getTVSession() && profile?.role === 'tv';
   const handleDeconnexionTV = async () => {
@@ -888,7 +888,7 @@ function VueSuiviVenteMobile({ onClose, onSelectVehicule }: {
   const { vehicules } = useInventaire();
   // Terrain (PIN, pas de AuthProvider) → on affiche tout. Desktop gestion → tout. Sinon rien.
   const auth = useAuthOptional();
-  const isGestion = !auth || auth.profile?.role === 'gestion';
+  const isGestion = !auth || auth.profile?.role === 'gestion' || auth.profile?.role === 'admin';
   const [vendeurs, setVendeurs] = useState<Vendeur[]>([]);
   const [recherche, setRecherche] = useState('');
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');

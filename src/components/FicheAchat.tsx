@@ -237,7 +237,7 @@ export function FicheAchat({ achat, onClose }: { achat: Achat; onClose: () => vo
           )}
 
           {/* ── Transfert vers inventaire (Phase 9) ── */}
-          {achat.statut === 'arrive' && (isInventaireAdmin || me?.role === 'gestion') && (
+          {achat.statut === 'arrive' && (isInventaireAdmin || me?.role === 'gestion' || me?.role === 'admin') && (
             <SectionTransfert achat={achat} onTransfert={async (typeInventaire) => {
               if (!me) return;
               // Créer véhicule dans prod_inventaire

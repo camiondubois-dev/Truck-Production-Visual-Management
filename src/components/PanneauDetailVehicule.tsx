@@ -184,7 +184,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const [savingDepot, setSavingDepot]             = useState(false);
 
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
-  const isGestion = session?.role === 'gestion';
+  const isGestion = session?.role === 'gestion' || session?.role === 'admin';
   const montrerCommercial = v.type === 'eau' || v.type === 'detail';
   const etatCommercial = v.etatCommercial ?? 'non-vendu';
   const clientLie = v.clientId ? clients.find(c => c.id === v.clientId) : null;

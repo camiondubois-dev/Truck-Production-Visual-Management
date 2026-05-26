@@ -31,7 +31,7 @@ export function VueAsana({ type, config }: VueAsanaProps) {
   const { items, ajouterItem } = useGarage();
   const { vehicules } = useInventaire();
   const { profile } = useAuth();
-  const isGestion = profile?.role === 'gestion';
+  const isGestion = profile?.role === 'gestion' || profile?.role === 'admin';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [filtreActif, setFiltreActif] = useState<FiltreVue>('tous');

@@ -98,7 +98,7 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
   const { vehicules } = useInventaire();
   const { items } = useGarageOptional();
   const { profile } = useAuth();
-  const isGestion = profile?.role === 'gestion';
+  const isGestion = profile?.role === 'gestion' || profile?.role === 'admin';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
@@ -809,7 +809,7 @@ function VueLivraisonsMobile({ onClose, onSelectVehicule }: VueLivraisonsProps) 
   // Sur l'app terrain (PIN), pas de AuthProvider → on affiche les coûts (terrain protégé par PIN).
   // Sur desktop avec auth Supabase, gestion seulement.
   const auth = useAuthOptional();
-  const isGestion = !auth || auth.profile?.role === 'gestion';
+  const isGestion = !auth || auth.profile?.role === 'gestion' || auth.profile?.role === 'admin';
 
   const [filtreCommercial, setFiltreCommercial] = useState<FiltreCommercial>('engagés');
   const [filtreType, setFiltreType] = useState<FiltreType>('tous');

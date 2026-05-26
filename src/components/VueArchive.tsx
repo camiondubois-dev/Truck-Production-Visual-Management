@@ -270,7 +270,7 @@ function PanneauDetailArchive({ item, onClose, onReouvrir, onSupprimer }: {
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const { supprimerItem } = useGarage();
   const { profile: session } = useAuth();
-  const isGestion = session?.role === 'gestion';
+  const isGestion = session?.role === 'gestion' || session?.role === 'admin';
   const typeColor = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
   const dateArchive = item.dateArchive
     ? new Date(item.dateArchive).toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })

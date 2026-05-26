@@ -21,20 +21,21 @@ import { VueImport } from './components/VueImport';
 import { VueProfitabilite } from './components/VueProfitabilite';
 import { VuePlansVente } from './components/VuePlansVente';
 import { VueEmployes } from './components/VueEmployes';
+import { VueUtilisateurs } from './components/VueUtilisateurs';
 import { VueActivite } from './components/VueActivite';
 import {
   canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin, canImport,
   canSeeInventaire, canSeeSuiviVente, canSeeCamionsParType,
-  canSeeArchive, canSeeReservoirs,
+  canSeeArchive, canSeeReservoirs, canManageUsers,
 } from './lib/permissions';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
 import { useActiviteTracker } from './hooks/useActiviteTracker';
 import { useAutoReload } from './hooks/useAutoReload';
 
-type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'plans-vente' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'employes' | 'activite';
+type Tab = 'plancher' | 'eau' | 'clients' | 'detail' | 'livraisons' | 'suivi-vente' | 'moteurs' | 'inventaire' | 'plans-vente' | 'reservoirs' | 'archive' | 'analyse' | 'tv-admin' | 'import' | 'profitabilite' | 'employes' | 'utilisateurs' | 'activite';
 
-const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','employes','activite'];
+const VALID_TABS: Tab[] = ['plancher','eau','clients','detail','livraisons','suivi-vente','moteurs','inventaire','plans-vente','reservoirs','archive','analyse','tv-admin','import','profitabilite','employes','utilisateurs','activite'];
 const LS_TAB_KEY = 'app_current_tab';
 
 export default function App() {
@@ -124,6 +125,7 @@ export default function App() {
       case 'reservoirs':    return canSeeReservoirs(profile);
       case 'profitabilite': return canSeeProfitabilite(profile);
       case 'import':        return canImport(profile);
+      case 'utilisateurs':  return canManageUsers(profile);
       case 'analyse':
       case 'tv-admin':
       case 'employes':
@@ -166,6 +168,7 @@ export default function App() {
         {safeTab === 'import'        && <VueImport />}
         {safeTab === 'profitabilite' && <VueProfitabilite />}
         {safeTab === 'employes'      && <VueEmployes />}
+        {safeTab === 'utilisateurs'  && <VueUtilisateurs />}
         {safeTab === 'activite'      && <VueActivite />}
       </div>
     </div>
