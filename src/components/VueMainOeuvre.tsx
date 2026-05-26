@@ -10,6 +10,8 @@
 // ════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { canSeeEmployesDetails } from '../lib/permissions';
 import {
   employeService, workOrderService, heuresService,
   periodeBounds, type PreriodeOption,
@@ -46,6 +48,8 @@ const C = {
 // ─── Composant principal ──────────────────────────────────────────
 
 export function VueMainOeuvre() {
+  const { profile } = useAuth();
+  const peutVoirDetailEmploye = canSeeEmployesDetails(profile);
   const [periode,    setPeriode]    = useState<PreriodeOption>('semaine_passee');
   const [loading,    setLoading]    = useState(true);
   const [employes,   setEmployes]   = useState<Employe[]>([]);
@@ -320,7 +324,7 @@ export function VueMainOeuvre() {
         </span>
       </div>
 
-      {empSansTaux > 0 && (
+      {empSansTaux > 0 && peutVoirDetailEmploye && (
         <div style={{ background: 'rgba(245,158,11,0.1)', border: `1px solid ${C.amber}`, borderRadius: 8, padding: 12, marginBottom: 20, fontSize: 12, color: C.amber }}>
           ⚠️ <strong>{empSansTaux} employés actifs ont un taux horaire = 0 $/h.</strong> Leur travail ne sera pas compté dans le coût M.O.
           Va dans <em>Administration → Employés (M.O.)</em> pour les ajuster.
@@ -384,28 +388,43 @@ export function VueMainOeuvre() {
             </Section>
           )}
 
-          {/* ═══ Par employé ═══ */}
-          <Section titre="👥 Par employé">
-            {parEmploye.length === 0 ? (
-              <Vide message="Aucune heure pointée sur cette période." />
-            ) : (
-              <Table headers={['Employé', 'Taux/h', 'Heures', 'Coût', 'Nb WO', '% des heures']}>
-                {parEmploye.map(r => {
-                  const pct = kpis.totalHeures > 0 ? (r.heures / kpis.totalHeures) * 100 : 0;
-                  return (
-                    <Row key={r.id}>
-                      <Td bold>{r.nom}</Td>
-                      <Td right color={r.taux === 0 ? C.red : undefined}>{fmt$(r.taux)}</Td>
-                      <Td right bold>{fmtH(r.heures)}</Td>
-                      <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
-                      <Td right>{r.nbWo}</Td>
-                      <Td right color={C.faded}>{pct.toFixed(1)} %</Td>
-                    </Row>
-                  );
-                })}
-              </Table>
-            )}
-          </Section>
+          {/* ═══ Par employé (visible uniquement aux super-admins) ═══ */}
+          {peutVoirDetailEmploye && (
+            <Section titre="👥 Par employé">
+              {parEmploye.length === 0 ? (
+                <Vide message="Aucune heure pointée sur cette période." />
+              ) : (
+                <Table headers={['Employé', 'Taux/h', 'Heures', 'Coût', 'Nb WO', '% des heures']}>
+                  {parEmploye.map(r => {
+                    const pct = kpis.totalHeures > 0 ? (r.heures / kpis.totalHeures) * 100 : 0;
+                    return (
+                      <Row key={r.id}>
+                        <Td bold>{r.nom}</Td>
+                        <Td right color={r.taux === 0 ? C.red : undefined}>{fmt$(r.taux)}</Td>
+                        <Td right bold>{fmtH(r.heures)}</Td>
+                        <Td right bold color={C.amber}>{fmt$(r.cout)}</Td>
+                        <Td right>{r.nbWo}</Td>
+                        <Td right color={C.faded}>{pct.toFixed(1)} %</Td>
+                      </Row>
+                    );
+                  })}
+                </Table>
+              )}
+            </Section>
+          )}
+
+          {/* Message pour gestion (pas admin) qui explique que les données employés sont masquées */}
+          {!peutVoirDetailEmploye && (
+            <div style={{
+              background: 'rgba(168,139,250,0.10)', border: `1px solid #a78bfa40`,
+              borderRadius: 8, padding: '12px 16px', marginBottom: 28, fontSize: 12, color: C.muted,
+            }}>
+              🔒 <strong>Détails par employé masqués.</strong> Les taux horaires et salaires
+              individuels sont confidentiels et réservés au super-admin. Tu vois ici les
+              <strong> coûts agrégés par WO et par camion</strong>, ainsi que le coût total
+              de main-d'œuvre, mais pas la ventilation par personne.
+            </div>
+          )}
 
           {/* ═══ Par Work Order ═══ */}
           <Section titre="🔧 Par Work Order">

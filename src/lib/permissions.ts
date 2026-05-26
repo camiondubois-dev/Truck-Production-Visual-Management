@@ -108,6 +108,21 @@ export function canManageUsers(p?: ProfileLike | null): boolean {
   return role(p) === 'admin';
 }
 
+/** ★ EXCLUSIF ADMIN : peut voir/modifier la fiche employés (taux horaires, salaires). */
+export function canSeeEmployes(p?: ProfileLike | null): boolean {
+  return role(p) === 'admin';
+}
+
+/** ★ EXCLUSIF ADMIN : peut voir les salaires individuels et taux par employé. */
+export function canSeeSalaires(p?: ProfileLike | null): boolean {
+  return role(p) === 'admin';
+}
+
+/** Peut voir le détail par employé dans les analyses (heures, coût par personne). */
+export function canSeeEmployesDetails(p?: ProfileLike | null): boolean {
+  return role(p) === 'admin';
+}
+
 // ─── Helpers d'affichage ──────────────────────────────────────────
 
 export const ROLE_LABELS: Record<Role, string> = {

@@ -26,7 +26,7 @@ import { VueActivite } from './components/VueActivite';
 import {
   canSeeProfitabilite, canSeeBilan, canSeePlansVente, canSeeAdmin, canImport,
   canSeeInventaire, canSeeSuiviVente, canSeeCamionsParType,
-  canSeeArchive, canSeeReservoirs, canManageUsers,
+  canSeeArchive, canSeeReservoirs, canManageUsers, canSeeEmployes,
 } from './lib/permissions';
 import { getTVSession } from './hooks/useTVAccess';
 import { supabase } from './lib/supabase';
@@ -126,9 +126,9 @@ export default function App() {
       case 'profitabilite': return canSeeProfitabilite(profile);
       case 'import':        return canImport(profile);
       case 'utilisateurs':  return canManageUsers(profile);
+      case 'employes':      return canSeeEmployes(profile);   // admin uniquement (taux/salaires)
       case 'analyse':
       case 'tv-admin':
-      case 'employes':
       case 'activite':      return canSeeAdmin(profile);
       default:              return false;
     }

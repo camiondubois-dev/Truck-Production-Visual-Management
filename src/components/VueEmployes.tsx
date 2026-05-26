@@ -187,21 +187,23 @@ export function VueEmployes() {
     }
   };
 
-  // ─── Garde d'accès : gestionnaire / admin uniquement ──
-  // Cette section contient des données salariales confidentielles.
-  if (profile?.role !== 'gestion' && profile?.role !== 'admin') {
+  // ─── Garde d'accès : ADMIN uniquement ──
+  // Cette section contient les taux horaires et salaires individuels — donc
+  // exclusive à l'admin. Même 'gestion' ne peut pas voir ces données.
+  if (profile?.role !== 'admin') {
     return (
       <div style={{
         padding: 40, height: '100%', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 12,
         background: '#f8fafc', color: '#6b7280', fontFamily: 'system-ui, -apple-system, sans-serif',
       }}>
-        <div style={{ fontSize: 56 }}>🔒</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>Accès réservé</div>
-        <div style={{ fontSize: 14, textAlign: 'center', maxWidth: 400 }}>
-          Cette section <strong>Employés / Main-d'œuvre</strong> contient des données salariales
-          confidentielles (taux horaires, salaires).<br/>
-          Seul un gestionnaire peut y accéder.
+        <div style={{ fontSize: 56 }}>🔑</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#374151' }}>Accès Super-Admin requis</div>
+        <div style={{ fontSize: 14, textAlign: 'center', maxWidth: 420 }}>
+          Cette section <strong>Employés / Main-d'œuvre</strong> contient les
+          <strong> taux horaires et salaires individuels</strong> — données strictement
+          confidentielles.<br/>
+          Seul un <strong>super-admin</strong> peut y accéder.
         </div>
       </div>
     );

@@ -251,8 +251,8 @@ export function Navigation({ currentTab, onTabChange, onNouveau, hiddenTabs = []
                 minWidth: 200,
               }}>
                 {ADMIN_TABS.filter(tab => {
-                  // 'utilisateurs' réservé à admin uniquement
-                  if (tab.id === 'utilisateurs') return profile?.role === 'admin';
+                  // 'utilisateurs' + 'employes' : exclusif admin (données salariales confidentielles)
+                  if (tab.id === 'utilisateurs' || tab.id === 'employes') return profile?.role === 'admin';
                   return true;
                 }).map(tab => (
                   <button
