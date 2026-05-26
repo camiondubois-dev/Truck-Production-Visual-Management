@@ -374,34 +374,44 @@ export function VueMainOeuvre() {
           <Section titre="📊 Vue d'ensemble">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
               <Kpi label="Heures totales" value={fmtH(kpis.totalHeures)} color={C.blue} sub={`${kpis.wosInternes + kpis.wosExternes} WO actifs`} />
-              {/* Coût réel = Agendrix si dispo, sinon iTrack WO seulement */}
+              {/* ── Coût réel = AGENDRIX (salaires tous employés) ── */}
               {coutAgendrix ? (
                 <Kpi
-                  label="Coût M.O. réel (Agendrix)"
+                  label="Coût réel employés"
                   value={fmt$(coutAgendrix.cout)}
                   color={C.amber}
-                  sub={`Tous employés · ${coutAgendrix.nbSemaines} sem. Agendrix`}
+                  sub={`${coutAgendrix.nbSemaines} sem. · tous employés`}
                   sub2={`+ 23 % charges : ${fmt$(coutAgendrix.coutAvecCharges)}`}
                 />
               ) : (
                 <Kpi
-                  label="Coût M.O. (WO seulement)"
-                  value={fmt$(kpis.totalCout)}
+                  label="Coût réel employés"
+                  value="—"
                   color={C.amber}
-                  sub={`⚠️ Importer Agendrix pour le coût réel`}
-                  sub2={`+ 23 % charges : ${fmt$(kpis.totalCoutAvecCharges)}`}
+                  sub="Importer Agendrix pour voir le coût réel"
                 />
               )}
-              <Kpi label="Revenu M.O. facturable" value={fmt$(kpis.revenuMoTotal)} color={C.green} sub={`Interne: ${fmt$(kpis.revenuMoInterne)} · Externe: ${fmt$(kpis.revenuMoExterne)}`} />
-              {/* % Revenu vs coût réel — utilise Agendrix si dispo */}
+
+              {/* ── Revenu WO (iTrack) ── */}
+              <Kpi
+                label="Revenu WO (iTrack)"
+                value={fmt$(kpis.revenuMoTotal)}
+                color={C.green}
+                sub={`Interne : ${fmt$(kpis.revenuMoInterne)} · Externe : ${fmt$(kpis.revenuMoExterne)}`}
+              />
+
+              {/* ── % Revenu vs Coût réel ── */}
               {(() => {
-                const coutRef = coutAgendrix ? coutAgendrix.cout : kpis.totalCout;
-                const pct     = coutRef > 0 ? (kpis.revenuMoTotal / coutRef) * 100 : 0;
+                const cout = coutAgendrix?.cout ?? 0;
+                const pct  = cout > 0 ? (kpis.revenuMoTotal / cout) * 100 : 0;
                 return (
-                  <Kpi label="% Revenu vs Coût réel"
-                    value={coutRef > 0 ? `${pct.toFixed(0)} %` : '—'}
+                  <Kpi
+                    label="% Revenu WO vs Coût réel"
+                    value={cout > 0 ? `${pct.toFixed(0)} %` : '—'}
                     color={pct >= 100 ? C.green : C.red}
-                    sub={`${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(coutRef)}${coutAgendrix ? '' : ' (WO)'}`}
+                    sub={cout > 0
+                      ? `${fmt$(kpis.revenuMoTotal)} ÷ ${fmt$(cout)}`
+                      : 'Importer Agendrix'}
                   />
                 );
               })()}
