@@ -52,7 +52,17 @@ export function VueArchive() {
     return dateB.localeCompare(dateA);
   });
 
-  const selectedItem = tries.find(i => i.id === selectedId) ?? null;
+  // ── Dédupliquer : 1 camion = 1 ligne (job le plus récent par numéro de stock)
+  // On conserve un compte du nombre de passages pour afficher le badge "🔁 Nx"
+  const passagesCount = new Map<string, number>();
+  for (const item of tries) {
+    passagesCount.set(item.numero, (passagesCount.get(item.numero) ?? 0) + 1);
+  }
+  const dedupliques = tries.filter((item, idx, arr) =>
+    arr.findIndex(i => i.numero === item.numero) === idx
+  );
+
+  const selectedItem = dedupliques.find(i => i.id === selectedId) ?? null;
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', background: '#f8fafc', fontSize: 18, color: '#9ca3af' }}>
@@ -75,8 +85,13 @@ export function VueArchive() {
             <span style={{ fontSize: 28 }}>📦</span>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#374151', margin: 0 }}>Archive</h1>
             <span style={{ background: '#6b7280', color: 'white', fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 12 }}>
-              {archives.length} job{archives.length !== 1 ? 's' : ''}
+              {dedupliques.length} camion{dedupliques.length !== 1 ? 's' : ''}
             </span>
+            {archives.length !== dedupliques.length && (
+              <span style={{ background: '#e5e7eb', color: '#6b7280', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
+                {archives.length} passages total
+              </span>
+            )}
           </div>
           <input
             type="text"
@@ -123,7 +138,7 @@ export function VueArchive() {
                   color: actif ? 'white' : '#9ca3af',
                   padding: '1px 7px', borderRadius: 10,
                 }}>
-                  {archives.filter(i => i.type === f.id).length}
+                  {new Set(archives.filter(i => i.type === f.id).map(i => i.numero)).size}
                 </span>
               </button>
             );
@@ -131,7 +146,7 @@ export function VueArchive() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-          {tries.length === 0 ? (
+          {dedupliques.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
               <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
@@ -143,7 +158,7 @@ export function VueArchive() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {tries.map(item => (
+              {dedupliques.map(item => (
                 <CarteArchive
                   key={item.id}
                   item={item}
@@ -151,6 +166,7 @@ export function VueArchive() {
                   onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
                   confirmerReouverture={confirmerReouverture}
                   setConfirmerReouverture={setConfirmerReouverture}
+                  nbPassages={passagesCount.get(item.numero) ?? 1}
                   onReouvrir={() => {
                     reouvrirItem(item.id);
                     setArchives(prev => prev.filter(a => a.id !== item.id));
@@ -183,13 +199,14 @@ export function VueArchive() {
   );
 }
 
-function CarteArchive({ item, selected, onClick, confirmerReouverture, setConfirmerReouverture, onReouvrir }: {
+function CarteArchive({ item, selected, onClick, confirmerReouverture, setConfirmerReouverture, onReouvrir, nbPassages }: {
   item: Item;
   selected: boolean;
   onClick: () => void;
   confirmerReouverture: string | null;
   setConfirmerReouverture: (id: string | null) => void;
   onReouvrir: () => void;
+  nbPassages: number;
 }) {
   const typeColor = item.type === 'eau' ? '#f97316' : item.type === 'client' ? '#3b82f6' : '#22c55e';
   const typeLabel = item.type === 'eau' ? 'Camion à eau' : item.type === 'client' ? 'Client externe' : 'Camion détail';
@@ -216,6 +233,7 @@ function CarteArchive({ item, selected, onClick, confirmerReouverture, setConfir
           <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: typeColor }}>#{item.numero}</span>
           <span style={{ fontSize: 11, background: `${typeColor}18`, color: typeColor, padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{typeLabel}</span>
           {item.urgence && <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>⚡ URGENT</span>}
+          {nbPassages > 1 && <span style={{ fontSize: 11, background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>🔁 {nbPassages}x</span>}
         </div>
         <div style={{ fontSize: 14, color: '#374151', fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {item.label}
