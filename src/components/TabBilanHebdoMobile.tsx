@@ -6,6 +6,10 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { heuresService, employeService } from '../services/mainOeuvreService';
+import { getAgendrixSemaines, getAgendrixAnalyse } from '../services/agendrixImportService';
+
+const TAUX_MO_FACTURATION = 140;
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const AMBER  = '#f59e0b';
@@ -106,6 +110,15 @@ export function TabBilanHebdoMobile() {
   const { monday, prevMonday, today, monDate } = getWeekBounds();
   const fy = currentFY();
 
+  type MoData = {
+    hWoTotal: number; hWoInterne: number; hWoExterne: number;
+    revenuWo: number; revenuInterne: number; revenuExterne: number;
+    coutEmployes: number; coutAvecCharges: number;
+    hTravail: number; hFerie: number; hVacances: number; hMaladie: number;
+    hAbsent: number; hTotalPaye: number; nbEmployes: number;
+    agendrixSemaine: string | null;
+  };
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -117,6 +130,7 @@ export function TabBilanHebdoMobile() {
   const [ventesCAweek, setVentesCAweek] = useState({ curr: 0, prev: 0, margeCurr: 0, nbCurr: 0, nbPrev: 0 });
   const [depotsCAweek, setDepotsCAweek] = useState({ curr: 0, prev: 0, nbCurr: 0, nbPrev: 0 });
   const [ytd, setYtd] = useState({ caVentes: 0, margeVentes: 0, nbVentes: 0, caPieces: 0, nbPieces: 0 });
+  const [moData, setMoData] = useState<MoData | null>(null);
 
   // ─── Drawer (détail camion) ──
   // Le drawer fait son propre fetch (photo + coûts) à partir du stockNumero.
@@ -280,6 +294,68 @@ export function TabBilanHebdoMobile() {
         caPieces:    sumPieces(ytdPData),
         nbPieces:    ytdPData.length,
       });
+      // ── Main-d'œuvre : semaine passée (iTrack + Agendrix + employés) ──
+      try {
+        const mondayMinus1 = new Date(new Date(monday).getTime() - 86400000).toISOString().slice(0, 10);
+
+        const hsPrev = await heuresService.getAll(prevMonday, mondayMinus1);
+        const woNums = [...new Set(hsPrev.map((h: any) => h.woNumero).filter(Boolean) as string[])];
+        let woTypeMap: Record<string, 'interne' | 'externe'> = {};
+        if (woNums.length > 0) {
+          const { data: wosD } = await supabase
+            .from('prod_work_orders').select('wo_numero, type').in('wo_numero', woNums);
+          for (const w of (wosD ?? []) as any[]) woTypeMap[w.wo_numero] = w.type;
+        }
+        const hWoTotal    = hsPrev.reduce((s: number, h: any) => s + h.heures, 0);
+        const hWoInterne  = hsPrev.filter((h: any) => h.woNumero && woTypeMap[h.woNumero] === 'interne').reduce((s: number, h: any) => s + h.heures, 0);
+        const hWoExterne  = hsPrev.filter((h: any) => h.woNumero && woTypeMap[h.woNumero] === 'externe').reduce((s: number, h: any) => s + h.heures, 0);
+
+        const emps = await employeService.getAll();
+        const heuresParEmp = new Map<string, number>();
+        for (const h of hsPrev) heuresParEmp.set((h as any).employeId, (heuresParEmp.get((h as any).employeId) ?? 0) + (h as any).heures);
+
+        const coutTheorique = (emps as any[]).filter((e: any) => e.actif).reduce((s: number, e: any) => {
+          if ((e.notes ?? '').toLowerCase().includes('contracteur')) {
+            return s + (heuresParEmp.get(e.id) ?? 0) * (e.tauxHoraire ?? 0);
+          }
+          const hebdo = (e.salaireHebdomadaire ?? 0) > 0 ? (e.salaireHebdomadaire ?? 0) : 40 * (e.tauxHoraire ?? 0);
+          return s + hebdo;
+        }, 0);
+
+        const semaines = await getAgendrixSemaines();
+        const prevSun = new Date(new Date(prevMonday).getTime() - 86400000).toISOString().slice(0, 10);
+        const agendrixSem = semaines.find((s: string) => s >= prevSun && s <= prevMonday) ?? null;
+
+        let hTravail = 0, hFerie = 0, hVacances = 0, hMaladie = 0, hAbsent = 0, hTotalPaye = 0, coutAgendrix = 0, nbEmployes = 0;
+        if (agendrixSem) {
+          const analyse = await getAgendrixAnalyse(agendrixSem);
+          for (const e of analyse as any[]) {
+            hTravail   += e.hQuart;
+            hFerie     += e.hFerie;
+            hVacances  += e.hVacancesPaye;
+            hMaladie   += e.hMaladiePaye;
+            hAbsent    += e.hAbsentTotal;
+            hTotalPaye += e.hTotalPaye;
+            coutAgendrix += e.coutPrevu;
+            nbEmployes++;
+          }
+        }
+
+        const coutFinal = coutAgendrix > 0 ? coutAgendrix : coutTheorique;
+        setMoData({
+          hWoTotal, hWoInterne, hWoExterne,
+          revenuWo:      hWoTotal   * TAUX_MO_FACTURATION,
+          revenuInterne: hWoInterne * TAUX_MO_FACTURATION,
+          revenuExterne: hWoExterne * TAUX_MO_FACTURATION,
+          coutEmployes:    coutFinal,
+          coutAvecCharges: coutFinal * 1.23,
+          hTravail, hFerie, hVacances, hMaladie, hAbsent, hTotalPaye, nbEmployes,
+          agendrixSemaine: agendrixSem,
+        });
+      } catch (err) {
+        console.warn('[BilanHebdoMobile] MO data error:', err);
+      }
+
     } catch (e) {
       console.error('[BilanHebdoMobile]', e);
     } finally {
@@ -622,6 +698,75 @@ export function TabBilanHebdoMobile() {
         </SectionRepliable>
       )}
 
+      {/* ── Main-d'œuvre — Semaine passée ── */}
+      {moData && (() => {
+        const fmtH = (h: number) => `${h.toFixed(1)} h`;
+        const hPayeTotal = moData.hTotalPaye + moData.hAbsent;
+        const pctAbsent  = hPayeTotal > 0 ? (moData.hAbsent / hPayeTotal) * 100 : 0;
+        const profit     = moData.revenuWo - moData.coutAvecCharges;
+        const label      = moData.agendrixSemaine ? `sem. ${moData.agendrixSemaine}` : 'théorique';
+        return (
+          <SectionRepliable
+            titre="🏭 Main-d'œuvre"
+            badge={moData.nbEmployes > 0 ? `${moData.nbEmployes} emp.` : 'théorique'}
+            couleur={PURPLE}
+            defaultOuvert={false}
+            resume={[
+              { label: 'Revenu WO', value: fmt$(moData.revenuWo), color: GREEN },
+              { label: 'Coût',      value: fmt$(moData.coutAvecCharges), color: AMBER },
+              { label: 'Profit',    value: fmt$(profit), color: profit >= 0 ? GREEN : RED },
+            ]}
+          >
+            {/* Sous-titre source */}
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 8, paddingLeft: 2 }}>
+              iTrack WO + Agendrix ({label})
+            </div>
+
+            {/* Ligne Revenu + Coût */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+              <MoCard label="💰 Revenu WO" value={fmt$(moData.revenuWo)} sub={`${fmtH(moData.hWoTotal)} × ${TAUX_MO_FACTURATION} $/h`} color={GREEN} />
+              <MoCard label="💸 Coût employés" value={fmt$(moData.coutAvecCharges)} sub={`+23% charges`} color={AMBER} />
+              <MoCard label="↳ WO Interne" value={fmt$(moData.revenuInterne)} sub={fmtH(moData.hWoInterne)} color={BLUE} />
+              <MoCard label="↳ WO Externe" value={fmt$(moData.revenuExterne)} sub={fmtH(moData.hWoExterne)} color="#ec4899" />
+            </div>
+
+            {/* Profit MO */}
+            <div style={{
+              background: profit >= 0 ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
+              border: `1px solid ${profit >= 0 ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}`,
+              borderRadius: 8, padding: '10px 12px', marginBottom: 6,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>📊 Profit M.O. net (+23% charges)</span>
+              <span style={{ fontSize: 15, fontWeight: 900, color: profit >= 0 ? GREEN : RED }}>{fmt$(profit)}</span>
+            </div>
+
+            {/* Heures Agendrix (si dispo) */}
+            {moData.agendrixSemaine && (
+              <>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', margin: '8px 0 6px', paddingLeft: 2 }}>
+                  📅 HEURES AGENDRIX — {moData.agendrixSemaine}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <MoCard label="⏱ Quart travaillé" value={fmtH(moData.hTravail)} color={PURPLE} />
+                  <MoCard label="🎉 Férier + Maladie"
+                    value={fmtH(moData.hFerie + moData.hMaladie)}
+                    sub={`Fér. ${fmtH(moData.hFerie)} · Mal. ${fmtH(moData.hMaladie)}`}
+                    color="#818cf8"
+                  />
+                  <MoCard label="🏖 Vacances" value={fmtH(moData.hVacances)} color="#34d399" />
+                  <MoCard label="🔴 Absence non payée"
+                    value={fmtH(moData.hAbsent)}
+                    sub={pctAbsent > 0 ? `${pctAbsent.toFixed(1)} % des heures` : 'Aucune'}
+                    color={moData.hAbsent > 0 ? RED : 'rgba(255,255,255,0.3)'}
+                  />
+                </div>
+              </>
+            )}
+          </SectionRepliable>
+        );
+      })()}
+
       {/* ── YTD (Année fiscale) ── */}
       <div style={{
         background: CARD_BG, border: `1px solid ${BORDER}`,
@@ -776,6 +921,21 @@ function CarteCamion({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function MoCard({ label, value, sub, color }: {
+  label: string; value: string; sub?: string; color: string;
+}) {
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 8, padding: '9px 11px',
+    }}>
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
