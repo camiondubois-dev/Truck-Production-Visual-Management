@@ -9,6 +9,11 @@ import { locationService, type LocationAvecCumul } from '../services/locationSer
 import { LocationsManager } from './LocationsManager';
 import { paiementService, type VentePaiement, STATUT_LABELS, STATUT_COLORS, STATUT_EMOJIS } from '../services/paiementService';
 import { PaiementsManager } from './PaiementsManager';
+import { heuresService, employeService } from '../services/mainOeuvreService';
+import { getAgendrixSemaines, getAgendrixAnalyse } from '../services/agendrixImportService';
+
+// Taux de facturation M.O. ($/h — même constante que VueMainOeuvre)
+const TAUX_MO_FACTURATION = 140;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -168,6 +173,18 @@ export function VueBilanHebdo() {
   // Vendus non payés (prod_ventes statut_paiement != 'paye')
   const [vendusNonPayes,    setVendusNonPayes]    = useState<VentePaiement[]>([]);
   const [showPaiements,     setShowPaiements]     = useState(false);
+  const [paiementsErreur,   setPaiementsErreur]   = useState<string | null>(null);
+
+  // ── Données Main-d'œuvre (semaine passée) ──
+  type MoData = {
+    hWoTotal: number; hWoInterne: number; hWoExterne: number;
+    revenuWo: number; revenuInterne: number; revenuExterne: number;
+    coutEmployes: number; coutAvecCharges: number;
+    hTravail: number; hFerie: number; hVacances: number; hMaladie: number;
+    hAbsent: number; hTotalPaye: number; nbEmployes: number;
+    agendrixSemaine: string | null;
+  };
+  const [moData, setMoData] = useState<MoData | null>(null);
 
   // ── Chargement ────────────────────────────────────────────────
   useEffect(() => { charger(); }, []);
@@ -362,9 +379,74 @@ export function VueBilanHebdo() {
       try {
         const nonPayes = await paiementService.getNonPayes();
         setVendusNonPayes(nonPayes);
-      } catch (e) {
-        console.warn('[VueBilanHebdo] Paiements non chargés (colonnes manquantes ? Lance le SQL.):', e);
+        setPaiementsErreur(null);
+      } catch (e: any) {
+        console.warn('[VueBilanHebdo] Paiements non chargés:', e);
         setVendusNonPayes([]);
+        setPaiementsErreur(e?.message ?? 'Erreur inconnue');
+      }
+
+      // 14. Données Main-d'œuvre — semaine passée (iTrack + Agendrix + employés)
+      try {
+        const mondayMinus1 = new Date(new Date(monday).getTime() - 86400000).toISOString().slice(0, 10);
+
+        // iTrack : heures WO semaine passée
+        const hsPrev = await heuresService.getAll(prevMonday, mondayMinus1);
+        const woNums = [...new Set(hsPrev.map(h => h.woNumero).filter(Boolean) as string[])];
+        let woTypeMap: Record<string, 'interne' | 'externe'> = {};
+        if (woNums.length > 0) {
+          const { data: wosD } = await supabase
+            .from('prod_work_orders').select('wo_numero, type').in('wo_numero', woNums);
+          for (const w of (wosD ?? []) as any[]) woTypeMap[w.wo_numero] = w.type;
+        }
+        const hWoTotal   = hsPrev.reduce((s, h) => s + h.heures, 0);
+        const hWoInterne = hsPrev.filter(h => h.woNumero && woTypeMap[h.woNumero] === 'interne').reduce((s, h) => s + h.heures, 0);
+        const hWoExterne = hsPrev.filter(h => h.woNumero && woTypeMap[h.woNumero] === 'externe').reduce((s, h) => s + h.heures, 0);
+
+        // Coût théorique employés (1 semaine)
+        const emps = await employeService.getAll();
+        const coutTheorique = emps.filter(e => e.actif).reduce((s, e) => {
+          const hebdo = (e.salaireHebdomadaire ?? 0) > 0
+            ? (e.salaireHebdomadaire ?? 0)
+            : 40 * (e.tauxHoraire ?? 0);
+          return s + hebdo;
+        }, 0);
+
+        // Agendrix : trouver la semaine qui chevauche semaine passée
+        const semaines = await getAgendrixSemaines();
+        const prevSun = new Date(new Date(prevMonday).getTime() - 86400000).toISOString().slice(0, 10);
+        const agendrixSem = semaines.find(s => s >= prevSun && s <= prevMonday) ?? null;
+
+        let hTravail = 0, hFerie = 0, hVacances = 0, hMaladie = 0, hAbsent = 0;
+        let hTotalPaye = 0, coutAgendrix = 0, nbEmployes = 0;
+
+        if (agendrixSem) {
+          const analyse = await getAgendrixAnalyse(agendrixSem);
+          for (const e of analyse) {
+            hTravail   += e.hQuart;
+            hFerie     += e.hFerie;
+            hVacances  += e.hVacancesPaye;
+            hMaladie   += e.hMaladiePaye;
+            hAbsent    += e.hAbsentTotal;
+            hTotalPaye += e.hTotalPaye;
+            coutAgendrix += e.coutPrevu;
+            nbEmployes++;
+          }
+        }
+
+        const coutFinal = coutAgendrix > 0 ? coutAgendrix : coutTheorique;
+        setMoData({
+          hWoTotal, hWoInterne, hWoExterne,
+          revenuWo:     hWoTotal   * TAUX_MO_FACTURATION,
+          revenuInterne: hWoInterne * TAUX_MO_FACTURATION,
+          revenuExterne: hWoExterne * TAUX_MO_FACTURATION,
+          coutEmployes:    coutFinal,
+          coutAvecCharges: coutFinal * 1.23,
+          hTravail, hFerie, hVacances, hMaladie, hAbsent, hTotalPaye, nbEmployes,
+          agendrixSemaine: agendrixSem,
+        });
+      } catch (err) {
+        console.warn('[VueBilanHebdo] MO data error:', err);
       }
 
     } catch (err) {
@@ -558,6 +640,99 @@ export function VueBilanHebdo() {
           </div>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* ── Section Main-d'œuvre — Semaine passée ──────────────── */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {moData && (() => {
+        const hAbsTotal = moData.hAbsent;
+        const hPayeTotal = moData.hTotalPaye + moData.hAbsent;   // toutes heures planifiées
+        const pctAbsent  = hPayeTotal > 0 ? (hAbsTotal / hPayeTotal) * 100 : 0;
+        const fmtH2 = (h: number) => `${h.toFixed(1)} h`;
+        const label = moData.agendrixSemaine
+          ? `Agendrix (sem. ${moData.agendrixSemaine})`
+          : `Théorique (table employés)`;
+        return (
+          <>
+            <SectionTitle>🏭 Main-d'œuvre — Semaine passée</SectionTitle>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10, marginTop: -8 }}>
+              iTrack WO + {label} · {moData.nbEmployes > 0 ? `${moData.nbEmployes} employés` : 'calcul théorique'}
+            </div>
+
+            {/* Ligne 1 : Revenue WO + Coût employés */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
+              {[
+                {
+                  label: '💰 Revenu WO total',
+                  value: fmt$(moData.revenuWo),
+                  sub: `${fmtH2(moData.hWoTotal)} × ${TAUX_MO_FACTURATION} $/h`,
+                  color: '#22c55e',
+                },
+                {
+                  label: '↳ Interne (camions)',
+                  value: fmt$(moData.revenuInterne),
+                  sub: `${fmtH2(moData.hWoInterne)} WO internes`,
+                  color: '#60a5fa',
+                },
+                {
+                  label: '↳ Externe (clients)',
+                  value: fmt$(moData.revenuExterne),
+                  sub: `${fmtH2(moData.hWoExterne)} WO externes`,
+                  color: '#ec4899',
+                },
+                {
+                  label: '💸 Coût total employés',
+                  value: fmt$(moData.coutEmployes),
+                  sub: `+23 % charges : ${fmt$(moData.coutAvecCharges)}`,
+                  color: '#f59e0b',
+                },
+              ].map(k => (
+                <div key={k.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 18px' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: k.color }}>{k.value}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Ligne 2 : Heures Agendrix (seulement si données dispo) */}
+            {moData.agendrixSemaine && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 10 }}>
+                {[
+                  {
+                    label: '⏱ Heures travaillées (quart)',
+                    value: fmtH2(moData.hTravail),
+                    color: '#a78bfa',
+                  },
+                  {
+                    label: '🎉 Heure férié + maladie',
+                    value: fmtH2(moData.hFerie + moData.hMaladie),
+                    sub: `Férier : ${fmtH2(moData.hFerie)} · Maladie : ${fmtH2(moData.hMaladie)}`,
+                    color: '#818cf8',
+                  },
+                  {
+                    label: '🏖 Heures vacances',
+                    value: fmtH2(moData.hVacances),
+                    color: '#34d399',
+                  },
+                  {
+                    label: '🔴 Absence non payée',
+                    value: fmtH2(hAbsTotal),
+                    sub: pctAbsent > 0 ? `${pctAbsent.toFixed(1)} % des heures planifiées` : 'Aucune',
+                    color: hAbsTotal > 0 ? '#f87171' : 'rgba(255,255,255,0.3)',
+                  },
+                ].map(k => (
+                  <div key={k.label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{k.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: k.color }}>{k.value}</div>
+                    {'sub' in k && k.sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 3 }}>{k.sub}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* ── Détail : Camions vendus cette semaine ───────────────── */}
       <SectionTitle>🚚 Camions vendus cette semaine ({ventesWeek.length})</SectionTitle>
@@ -860,7 +1035,13 @@ export function VueBilanHebdo() {
                 💰 Suivi des paiements
               </button>
             </div>
-            {vendusNonPayes.length === 0 ? (
+            {paiementsErreur && (
+              <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#f87171' }}>
+                ⚠️ <strong>Erreur chargement paiements :</strong> {paiementsErreur}
+                <br /><span style={{ opacity: 0.7 }}>Vérifie que le SQL d'ajout de <code>statut_paiement</code> a été exécuté dans Supabase.</span>
+              </div>
+            )}
+            {vendusNonPayes.length === 0 && !paiementsErreur ? (
               <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, padding: '12px 0' }}>
                 ✅ Tous tes vendus sont marqués comme payés.
               </div>
