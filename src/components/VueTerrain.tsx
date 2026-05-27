@@ -1366,30 +1366,16 @@ function PanneauTournee({
         </button>
       </div>
 
-      {/* FicheCamion complète — s'ouvre par-dessus la tournée */}
+      {/* FicheCamion complète — s'ouvre par-dessus la tournée.
+          Pas de wrapper z-index supplémentaire : FicheCamion (z-index 100)
+          s'affiche au-dessus du contenu de la liste (pas de z-index) dans le
+          contexte de PanneauTournee. Fermer la fiche → handleFicheClose → ✓ */}
       {ficheId && camionEnFiche && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
-          {/* Bandeau "retour à la tournée" */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, zIndex: 410,
-            background: '#22c55e', color: 'white',
-            padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
-            fontSize: 13, fontWeight: 700,
-          }}>
-            <button onClick={handleFicheClose} style={{
-              background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
-              color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer',
-              padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4,
-            }}>← Tournée</button>
-            <span style={{ flex: 1 }}>#{camionEnFiche.numero} — {[camionEnFiche.annee, camionEnFiche.marque].filter(Boolean).join(' ')}</span>
-            <span style={{ fontSize: 11, opacity: 0.85 }}>Sera marqué ✓ à la fermeture</span>
-          </div>
-          <FicheCamion
-            vehicule={camionEnFiche}
-            onClose={handleFicheClose}
-            onMisAJour={handleFicheMisAJour}
-          />
-        </div>
+        <FicheCamion
+          vehicule={camionEnFiche}
+          onClose={handleFicheClose}
+          onMisAJour={handleFicheMisAJour}
+        />
       )}
     </div>
   );
