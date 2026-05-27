@@ -12,7 +12,7 @@ const TYPE_COLORS: Record<TypeReservoir, string> = {
   '5000g': '#ef4444',
 };
 
-const genId = () => `res-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const genId = () => crypto.randomUUID();
 
 type SourceCamion = 'production' | 'inventaire';
 

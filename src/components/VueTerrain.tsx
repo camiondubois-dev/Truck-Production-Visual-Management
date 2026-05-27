@@ -49,7 +49,7 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
     setSaving(true);
     try {
       const r: Reservoir = {
-        id: `res-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+        id: crypto.randomUUID(),
         numero: newNumero.trim(),
         type: newType,
         etat: 'disponible',
