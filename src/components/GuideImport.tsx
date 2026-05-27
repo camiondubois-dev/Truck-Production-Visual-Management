@@ -295,45 +295,46 @@ export function GuideCoutsHitrac() {
       etapes={[
         {
           numero: 1,
-          titre: 'Ouvrir iTrack → Report Viewer → Vehicle Cost Detail (9025)',
+          titre: 'Ouvrir iTrack → Report Viewer → Inventory → Vehicle Cost Detail',
           description: (
             <>
               Ouvre <strong>iTrack Enterprise</strong>. Dans le menu de gauche, clique sur{' '}
-              <strong>Report Viewer</strong>. Dans la liste des rapports, déroule la section{' '}
-              <strong>Inventory</strong>. Clique sur <strong>Vehicle Cost Detail</strong> (il se
-              met en surbrillance bleue). Dans les paramètres en bas, assure-toi que{' '}
-              <strong>Sort By = Stock #</strong>. Pour les camions d'exportation, met{' '}
-              Part Type = <strong>9025 : Export Vehicles</strong>.
+              <strong>Report Viewer</strong>. Dans la liste, déroule la section{' '}
+              <strong>Inventory</strong>. Clique sur <strong>Vehicle Cost Detail</strong>{' '}
+              (il se met en surbrillance bleue). Paramètres en bas :{' '}
+              Part Type = <strong>9025 : Export Vehicles</strong>,{' '}
+              Store = <strong>1 : Camions A & R Dubois inc.</strong>,{' '}
+              Sort By = <strong>Stock #</strong>. Clique sur <strong>Preview</strong>.
             </>
           ),
           image: '/guide/hitrac-couts-step-1.png',
         },
         {
           numero: 2,
-          titre: 'Configurer pour les camions eau/détail (9000)',
+          titre: 'Répéter pour les camions eau/détail (Part Type 9000)',
           description: (
             <>
-              Pour les camions <strong>eau et détail</strong>, change Part Type à{' '}
-              <strong>9000 : Vehicle For Sale</strong>. Store = <strong>1 : Camions A & R Dubois inc.</strong>,
-              Sort By = <strong>Stock #</strong>. Clique sur <strong>Preview</strong> (bouton
-              en bas à gauche) pour générer le rapport.
+              Reviens au Report Selector. Change Part Type à{' '}
+              <strong>9000 : Vehicle For Sale</strong>, garde Store et Sort By identiques.
+              Clique sur <strong>Preview</strong>.
             </>
           ),
           image: '/guide/hitrac-couts-step-2.png',
-          note: 'Tu dois faire 2 exports séparés : un pour 9000 (eau/détail) et un pour 9025 (exportation). Importe-les l\'un après l\'autre dans l\'application.',
+          note: 'Tu fais 2 exports séparés (9000 puis 9025) et tu les importes l\'un après l\'autre dans l\'application.',
         },
         {
           numero: 3,
           titre: 'Exporter en CSV depuis Crystal Report Viewer',
           description: (
             <>
-              Dans la fenêtre Crystal Report Viewer qui s'ouvre, clique sur l'icône{' '}
-              <strong>Export</strong> (disquette avec flèche). Choisis le format{' '}
-              <strong>CSV (délimité par virgules)</strong> et sauvegarde le fichier.
-              Le fichier s'appelle <code>vehiclecostdetail.csv</code>.
+              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>{' '}
+              (feuille avec flèche, barre d'outils en haut). La fenêtre "Exporter" s'ouvre.{' '}
+              Choisis Format = <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
+              et sauvegarde sous le nom <code>vehiclecostdetail.csv</code>.
             </>
           ),
-          note: 'Si Crystal Report Viewer demande un mot de passe ou un filtre supplémentaire, laisse les valeurs par défaut.',
+          image: '/guide/hitrac-export-csv.png',
         },
         {
           numero: 4,
@@ -341,8 +342,7 @@ export function GuideCoutsHitrac() {
           description: (
             <>
               Glisse le fichier <code>vehiclecostdetail.csv</code> dans la zone de dépôt
-              ci-dessous, ou clique pour le sélectionner. L'application affichera un
-              aperçu des changements avant de confirmer.
+              ci-dessous. L'application montre un aperçu des changements avant de confirmer.
             </>
           ),
         },
@@ -385,14 +385,17 @@ export function GuideVentesEauDetail() {
         },
         {
           numero: 3,
-          titre: 'Exporter en CSV',
+          titre: 'Exporter en CSV depuis Crystal Report Viewer',
           description: (
             <>
-              Dans Crystal Report Viewer, clique sur l'icône <strong>Export</strong> et
-              choisis <strong>CSV</strong>. Sauvegarde le fichier{' '}
-              <code>salesbyinventorytype.csv</code>.
+              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>.
+              La fenêtre "Exporter" s'ouvre. Choisis Format ={' '}
+              <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
+              et sauvegarde le fichier <code>salesbyinventorytype.csv</code>.
             </>
           ),
+          image: '/guide/hitrac-export-csv.png',
         },
         {
           numero: 4,
@@ -438,14 +441,17 @@ export function GuideVentesExportation() {
         },
         {
           numero: 3,
-          titre: 'Exporter en CSV',
+          titre: 'Exporter en CSV depuis Crystal Report Viewer',
           description: (
             <>
-              Dans Crystal Report Viewer, clique sur l'icône <strong>Export</strong> et
-              choisis <strong>CSV</strong>. Sauvegarde le fichier{' '}
-              <code>salesbyinventorytype.csv</code>.
+              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>.
+              Choisis Format ={' '}
+              <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
+              et sauvegarde le fichier <code>salesbyinventorytype.csv</code>.
             </>
           ),
+          image: '/guide/hitrac-export-csv.png',
         },
         {
           numero: 4,
@@ -493,14 +499,17 @@ export function GuideVentesEncan() {
         },
         {
           numero: 3,
-          titre: 'Exporter en CSV',
+          titre: 'Exporter en CSV depuis Crystal Report Viewer',
           description: (
             <>
-              Dans Crystal Report Viewer, clique sur l'icône <strong>Export</strong> et
-              choisis <strong>CSV</strong>. Sauvegarde le fichier{' '}
-              <code>salesbycustomer.csv</code>.
+              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>.
+              Choisis Format ={' '}
+              <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
+              et sauvegarde le fichier <code>salesbycustomer.csv</code>.
             </>
           ),
+          image: '/guide/hitrac-export-csv.png',
         },
         {
           numero: 4,
@@ -520,21 +529,121 @@ export function GuideVentesPieces() {
       etapes={[
         {
           numero: 1,
-          titre: 'Ouvrir Hightrack → Sales Orders (rapport par vendeur ou combiné)',
-          description: <>Dans <strong>Hightrack</strong>, génère le rapport <strong>Sales Orders</strong>. Exporte en CSV.</>,
-          image: '/guide/hitrac-pieces-step-1.png',
+          titre: 'Ouvrir iTrack → Transaction List',
+          description: (
+            <>
+              Dans <strong>iTrack</strong>, clique sur <strong>Transaction List</strong> dans
+              le menu de gauche. La liste de toutes les transactions s'ouvre.
+            </>
+          ),
         },
         {
           numero: 2,
-          titre: 'Télécharger le fichier CSV',
-          description: <>Le rapport peut être <strong>combiné</strong> (avec colonne Counterperson) ou <strong>par vendeur</strong> (ancien format). Les deux sont acceptés.</>,
-          image: '/guide/hitrac-pieces-step-2.png',
-          note: 'Nouveau format (avec Counterperson) : sélectionne "Rapport combiné ✦" dans l\'application. Ancien format : sélectionne le vendeur correspondant.',
+          titre: 'Appliquer les filtres : Inventory + Closed + Invoice + This Week',
+          description: (
+            <>
+              Dans "Filter results by", assure-toi que ces filtres sont actifs :{' '}
+              <strong>Source = Inventory ✓</strong>,{' '}
+              <strong>Closed ✓</strong>,{' '}
+              <strong>Date = This Week</strong> (ou la période souhaitée),{' '}
+              <strong>Document Type = Invoice</strong>. Dans "Fields to display" à droite,
+              la colonne <strong>Counterperson</strong> doit être visible. Clique sur{' '}
+              <strong>Search</strong> pour charger les résultats.
+            </>
+          ),
+          image: '/guide/hitrac-pieces-step-1.png',
+          note: 'La colonne Counterperson dans le CSV permet à l\'application d\'identifier automatiquement le vendeur — pas besoin de le sélectionner manuellement.',
         },
         {
           numero: 3,
+          titre: 'Exporter → Export to CSV (with raw values)',
+          description: (
+            <>
+              En bas à droite de la liste, clique sur la flèche à côté du bouton{' '}
+              <strong>Export</strong>. Choisis{' '}
+              <strong>Export to CSV (with raw values)</strong> — pas "formatted values".
+              Sauvegarde le fichier CSV.
+            </>
+          ),
+          image: '/guide/hitrac-pieces-step-1.png',
+          note: 'Toujours choisir "with raw values" — le format "formatted values" ajoute des guillemets et des séparateurs qui peuvent causer des erreurs.',
+        },
+        {
+          numero: 4,
           titre: 'Déposer le fichier dans l\'application',
-          description: <>Glisse le fichier CSV dans la zone de dépôt ci-dessous.</>,
+          description: (
+            <>
+              Glisse le fichier CSV dans la zone de dépôt ci-dessous. Le système
+              détecte automatiquement le format et identifie chaque vendeur via la
+              colonne Counterperson.
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ─── GUIDE LABOR LOG (Heures M.O. iTrack) ───────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+export function GuideLaborLog() {
+  return (
+    <GuideSection
+      couleur="#a78bfa"
+      defaultOuvert={false}
+      etapes={[
+        {
+          numero: 1,
+          titre: 'Ouvrir iTrack → Report Viewer → Labor Log By Employee',
+          description: (
+            <>
+              Dans <strong>iTrack</strong>, clique sur <strong>Report Viewer</strong>.
+              Cherche le rapport <strong>Labor Log By Employee</strong> dans la liste
+              (section Work Orders ou via la barre de recherche). Clique dessus pour
+              le sélectionner.
+            </>
+          ),
+        },
+        {
+          numero: 2,
+          titre: 'Configurer les paramètres',
+          description: (
+            <>
+              Dans les paramètres en bas, configure :{' '}
+              <strong>Start Date / End Date</strong> = la semaine à importer (lundi au dimanche),{' '}
+              <strong>Store = 1 : Camions A & R Dubois inc.</strong>,{' '}
+              <strong>Work Order Types = All Work Order Types</strong>,{' '}
+              <strong>User Groups = All User Groups</strong>,{' '}
+              <strong>Summarized By = WO</strong>. Clique sur <strong>Preview</strong>.
+            </>
+          ),
+        },
+        {
+          numero: 3,
+          titre: 'Exporter en CSV depuis Crystal Report Viewer',
+          description: (
+            <>
+              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>{' '}
+              (barre d'outils en haut). La fenêtre "Exporter" s'ouvre. Choisis :{' '}
+              Format = <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
+              et sauvegarde le fichier.
+            </>
+          ),
+          image: '/guide/hitrac-export-csv.png',
+          note: 'Le rapport doit couvrir exactement une semaine (lundi au dimanche) pour que l\'import fonctionne correctement.',
+        },
+        {
+          numero: 4,
+          titre: 'Déposer le fichier dans l\'application',
+          description: (
+            <>
+              Glisse le fichier CSV dans la zone de dépôt ci-dessous. L'application
+              associe automatiquement chaque employé iTrack à son code Acomba.
+            </>
+          ),
         },
       ]}
     />

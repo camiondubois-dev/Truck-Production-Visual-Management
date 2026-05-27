@@ -24,6 +24,7 @@ import {
   GuideVentesExportation,
   GuideVentesEncan,
   GuideVentesPieces,
+  GuideLaborLog,
 } from './GuideImport';
 
 type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces' | 'labor_log' | 'agendrix';
@@ -107,7 +108,7 @@ export function VueImport({ initialSubTab, ongletsAutorises }: VueImportProps = 
           {tab === 'ventes_exportation' && <VentesImporter wizard="exportation" />}
           {tab === 'ventes_encan'       && <VentesImporter wizard="encan" />}
           {tab === 'ventes_pieces'      && <PiecesImporter />}
-          {tab === 'labor_log'          && <LaborLogImporter />}
+          {tab === 'labor_log'          && <><GuideLaborLog /><LaborLogImporter /></>}
           {tab === 'agendrix'           && <AgendrixImporter />}
         </div>
       </div>
