@@ -596,44 +596,49 @@ export function GuideLaborLog() {
       etapes={[
         {
           numero: 1,
-          titre: 'Ouvrir iTrack → Report Viewer → Labor Log By Employee',
+          titre: 'Ouvrir iTrack → Report Viewer → Administration → Labor Log By Employee',
           description: (
             <>
-              Dans <strong>iTrack</strong>, clique sur <strong>Report Viewer</strong>.
-              Cherche le rapport <strong>Labor Log By Employee</strong> dans la liste
-              (section Work Orders ou via la barre de recherche). Clique dessus pour
-              le sélectionner.
+              Dans <strong>iTrack</strong>, clique sur <strong>Report Viewer</strong> dans
+              le menu de gauche. Dans la liste des rapports, déroule la section{' '}
+              <strong>Administration</strong>. Clique sur{' '}
+              <strong>Labor Log By Employee</strong> (il se met en surbrillance bleue).
             </>
           ),
         },
         {
           numero: 2,
-          titre: 'Configurer les paramètres',
+          titre: 'Configurer les paramètres et cliquer Preview',
           description: (
             <>
               Dans les paramètres en bas, configure :{' '}
-              <strong>Start Date / End Date</strong> = la semaine à importer (lundi au dimanche),{' '}
+              <strong>Start Date</strong> = lundi de la semaine à importer,{' '}
+              <strong>End Date</strong> = dimanche de la même semaine,{' '}
               <strong>Store = 1 : Camions A & R Dubois inc.</strong>,{' '}
-              <strong>Work Order Types = All Work Order Types</strong>,{' '}
-              <strong>User Groups = All User Groups</strong>,{' '}
-              <strong>Summarized By = WO</strong>. Clique sur <strong>Preview</strong>.
+              <strong>Work Order Type = All Work Order Types</strong>,{' '}
+              <strong>User = All Users</strong>,{' '}
+              <strong>User Group = Everyone</strong>,{' '}
+              <strong>User GL Department = All User GL Departments</strong>,{' '}
+              <strong>Summarize By = WO</strong>. Clique sur <strong>Preview</strong>.
             </>
           ),
+          image: '/guide/hitrac-laborlog-step-1.png',
+          note: 'Toujours importer une semaine complète du lundi au dimanche. Le paramètre "Summarize By = WO" est obligatoire.',
         },
         {
           numero: 3,
           titre: 'Exporter en CSV depuis Crystal Report Viewer',
           description: (
             <>
-              Dans Crystal Report Viewer, clique sur l'icône <strong>Exporter</strong>{' '}
-              (barre d'outils en haut). La fenêtre "Exporter" s'ouvre. Choisis :{' '}
-              Format = <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
+              Crystal Report Viewer s'ouvre avec le rapport. Clique sur l'icône{' '}
+              <strong>Exporter</strong> dans la barre d'outils (feuille avec flèche).
+              Dans la fenêtre "Exporter" : Format ={' '}
+              <strong>Valeurs délimitées par des caractères (CSV)</strong>,{' '}
               Destination = <strong>Fichier disque</strong>. Clique <strong>OK</strong>{' '}
               et sauvegarde le fichier.
             </>
           ),
           image: '/guide/hitrac-export-csv.png',
-          note: 'Le rapport doit couvrir exactement une semaine (lundi au dimanche) pour que l\'import fonctionne correctement.',
         },
         {
           numero: 4,
