@@ -32,6 +32,7 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
   const [newNumero, setNewNumero] = useState('');
   const [newType, setNewType] = useState<TypeReservoir>('2500g');
   const [saving, setSaving] = useState(false);
+  const [confirmSupprId, setConfirmSupprId] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -72,10 +73,10 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
   };
 
   const handleSupprimer = async (id: string) => {
-    if (!confirm('Supprimer ce réservoir ?')) return;
     try {
       await reservoirService.supprimer(id);
       setReservoirs(prev => prev.filter(x => x.id !== id));
+      setConfirmSupprId(null);
     } catch (e) { console.error(e); }
   };
 
@@ -168,24 +169,32 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
                     </div>
                     <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 8, fontWeight: 700, background: `${etatColor}18`, color: etatColor }}>{etatLabel}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {r.etat !== 'disponible' && (
-                      <button onClick={() => handleChangerEtat(r, 'disponible')}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#22c55e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                        Disponible
+                  {confirmSupprId === r.id ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                      <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, flex: 1 }}>Confirmer la suppression ?</span>
+                      <button onClick={() => handleSupprimer(r.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Supprimer</button>
+                      <button onClick={() => setConfirmSupprId(null)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>Annuler</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {r.etat !== 'disponible' && (
+                        <button onClick={() => handleChangerEtat(r, 'disponible')}
+                          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#22c55e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                          Disponible
+                        </button>
+                      )}
+                      {r.etat !== 'en-peinture' && (
+                        <button onClick={() => handleChangerEtat(r, 'en-peinture')}
+                          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#f59e0b', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                          En peinture
+                        </button>
+                      )}
+                      <button onClick={() => setConfirmSupprId(r.id)}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
+                        🗑
                       </button>
-                    )}
-                    {r.etat !== 'en-peinture' && (
-                      <button onClick={() => handleChangerEtat(r, 'en-peinture')}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#f59e0b', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                        En peinture
-                      </button>
-                    )}
-                    <button onClick={() => handleSupprimer(r.id)}
-                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
-                      🗑
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -500,18 +509,20 @@ function EcranPin({ onSuccess }: { onSuccess: () => void }) {
 // ─── Création camion ────────────────────────────────────────────────────────
 
 function ModalCreation({ onClose, onCree }: { onClose: () => void; onCree: (v: VehiculeInventaire) => void }) {
-  const [type, setType]         = useState<'eau' | 'detail'>('eau');
-  const [variante, setVariante] = useState<'Neuf' | 'Usagé' | ''>('');
-  const [numero, setNumero]     = useState('');
-  const [marque, setMarque]     = useState('');
-  const [modele, setModele]     = useState('');
-  const [annee, setAnnee]       = useState('');
-  const [saving, setSaving]     = useState(false);
+  const [type, setType]           = useState<'eau' | 'detail'>('eau');
+  const [variante, setVariante]   = useState<'Neuf' | 'Usagé' | ''>('');
+  const [numero, setNumero]       = useState('');
+  const [marque, setMarque]       = useState('');
+  const [modele, setModele]       = useState('');
+  const [annee, setAnnee]         = useState('');
+  const [prixAchat, setPrixAchat] = useState('');
+  const [saving, setSaving]       = useState(false);
 
   const handleCreer = async () => {
     if (!numero.trim()) return;
     setSaving(true);
     try {
+      const prixNum = parseFloat(prixAchat.replace(/\s/g, '').replace(',', '.'));
       const nouveau: VehiculeInventaire = {
         id: `veh-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
         statut: 'disponible',
@@ -522,6 +533,7 @@ function ModalCreation({ onClose, onCree }: { onClose: () => void; onCree: (v: V
         marque: marque || undefined,
         modele: modele || undefined,
         annee: annee ? Number(annee) : undefined,
+        prixAchat: !isNaN(prixNum) && prixNum > 0 ? prixNum : undefined,
       };
       await inventaireService.ajouter(nouveau);
       onCree(nouveau);
@@ -585,6 +597,18 @@ function ModalCreation({ onClose, onCree }: { onClose: () => void; onCree: (v: V
             <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Année</div>
             <input style={inp} type="text" inputMode="numeric" value={annee} onChange={e => setAnnee(e.target.value)} placeholder="2024" />
           </div>
+        </div>
+
+        {/* Prix d'achat */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>💰 Prix d'achat (optionnel)</div>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#92400e', fontWeight: 700, fontSize: 15 }}>$</span>
+            <input style={{ ...inp, paddingLeft: 28, background: '#fefce8', borderColor: '#fde68a', color: '#92400e', fontWeight: 700 }}
+              type="number" inputMode="numeric" min={0} step={100}
+              value={prixAchat} onChange={e => setPrixAchat(e.target.value)} placeholder="0" />
+          </div>
+          <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>Coût d'achat réel — sera enregistré dans la base de données</div>
         </div>
 
         <button onClick={handleCreer} disabled={!numero.trim() || saving}
@@ -863,13 +887,19 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <select value={reservoirChoisi} onChange={e => setReservoirChoisi(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 15, outline: 'none', background: 'white' }}>
-                  <option value="">Aucun réservoir numéroté</option>
-                  {reservoirsDispos.map(r => (
-                    <option key={r.id} value={r.id}>#{r.numero} — {r.type}</option>
-                  ))}
-                </select>
+                {reservoirsDispos.length === 0 ? (
+                  <div style={{ padding: '10px 12px', borderRadius: 8, background: '#fef9c3', border: '1px solid #fde68a', fontSize: 12, color: '#92400e' }}>
+                    ⚠️ Aucun réservoir disponible dans le pool. Appuie sur 🛢 dans la barre d'en-tête pour en ajouter un, puis reviens ici.
+                  </div>
+                ) : (
+                  <select value={reservoirChoisi} onChange={e => setReservoirChoisi(e.target.value)}
+                    style={{ width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 15, outline: 'none', background: 'white' }}>
+                    <option value="">Aucun réservoir numéroté</option>
+                    {reservoirsDispos.map(r => (
+                      <option key={r.id} value={r.id}>#{r.numero} — {r.type}</option>
+                    ))}
+                  </select>
+                )}
                 <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>Laissez vide = réservoir installé sans numéro</div>
                 <button onClick={async () => {
                   setSaving(true);
@@ -1169,6 +1199,294 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   );
 }
 
+// ─── Mode Tournée de vérification ────────────────────────────────────────────
+
+type ChangementTournee = {
+  verifie: boolean;
+  typeChange?: 'eau' | 'detail';
+  reservoirChange?: boolean;
+  note?: string;
+};
+
+function PanneauTournee({
+  camions,
+  onClose,
+  onMisAJour,
+}: {
+  camions: VehiculeInventaire[];
+  onClose: () => void;
+  onMisAJour: (updated: VehiculeInventaire) => void;
+}) {
+  const [verifs,       setVerifs]       = useState<Map<string, ChangementTournee>>(new Map());
+  const [filtre,       setFiltre]       = useState<'eau' | 'tous'>('eau');
+  const [ficheId,      setFicheId]      = useState<string | null>(null);
+  const [enEnvoi,      setEnEnvoi]      = useState(false);
+  const [envoye,       setEnvoye]       = useState(false);
+  const [ficheType,    setFicheType]    = useState<'eau' | 'detail' | ''>('');
+  const [ficheRes,     setFicheRes]     = useState<boolean | null>(null);
+  const [ficheNote,    setFicheNote]    = useState('');
+
+  const camionsFiltres = camions.filter(c => {
+    if (c.statut === 'archive') return false;
+    if (c.etatCommercial === 'vendu' || c.etatCommercial === 'reserve') return false;
+    if (filtre === 'eau') return c.type === 'eau';
+    return c.type === 'eau' || c.type === 'detail';
+  });
+
+  const nbVerifies = [...verifs.values()].filter(v => v.verifie).length;
+  const nbTotal    = camionsFiltres.length;
+  const nbModifs   = [...verifs.values()].filter(v => v.typeChange || v.reservoirChange !== undefined || v.note).length;
+
+  const ouvrirFiche = (id: string) => {
+    const exist = verifs.get(id);
+    setFicheType(exist?.typeChange ?? '');
+    setFicheRes(exist?.reservoirChange ?? null);
+    setFicheNote(exist?.note ?? '');
+    setFicheId(id);
+  };
+
+  const confirmerVerif = () => {
+    if (!ficheId) return;
+    const ch: ChangementTournee = { verifie: true };
+    if (ficheType) ch.typeChange = ficheType;
+    if (ficheRes !== null) ch.reservoirChange = ficheRes;
+    if (ficheNote.trim()) ch.note = ficheNote.trim();
+    setVerifs(prev => new Map(prev).set(ficheId, ch));
+    setFicheId(null);
+  };
+
+  const annulerVerif = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setVerifs(prev => { const n = new Map(prev); n.delete(id); return n; });
+  };
+
+  const envoyerChangements = async () => {
+    setEnEnvoi(true);
+    try {
+      const promises: Promise<any>[] = [];
+      for (const [id, ch] of verifs) {
+        if (!ch.verifie) continue;
+        const updates: Record<string, any> = {};
+        if (ch.typeChange)              updates.type            = ch.typeChange;
+        if (ch.reservoirChange != null) updates.a_un_reservoir  = ch.reservoirChange;
+        if (ch.note)                    updates.notes           = ch.note;
+        if (Object.keys(updates).length === 0) continue;
+        promises.push(supabase.from('prod_inventaire').update(updates).eq('id', id));
+        const camion = camions.find(c => c.id === id);
+        if (camion) {
+          onMisAJour({
+            ...camion,
+            ...(ch.typeChange              ? { type:         ch.typeChange }        : {}),
+            ...(ch.reservoirChange != null ? { aUnReservoir: ch.reservoirChange }   : {}),
+            ...(ch.note                    ? { notes:        ch.note }              : {}),
+          });
+        }
+      }
+      await Promise.all(promises);
+      setEnvoye(true);
+    } finally { setEnEnvoi(false); }
+  };
+
+  const camionEnFiche = ficheId ? camions.find(c => c.id === ficheId) ?? null : null;
+
+  // ── Écran succès ──
+  if (envoye) return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
+      <div style={{ fontSize: 64 }}>✅</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>Tournée enregistrée !</div>
+      <div style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>
+        {nbVerifies} camion{nbVerifies !== 1 ? 's' : ''} vérifiés
+        {nbModifs > 0 ? ` · ${nbModifs} modification${nbModifs !== 1 ? 's' : ''} sauvegardée${nbModifs !== 1 ? 's' : ''}` : ''}
+      </div>
+      <button onClick={onClose} style={{ marginTop: 20, padding: '14px 36px', borderRadius: 12, border: 'none', background: '#f97316', color: 'white', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
+        Fermer
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '16px 16px 12px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>🗺️ Tournée de vérification</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{nbVerifies} / {nbTotal} vérifiés</div>
+          </div>
+          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#6b7280', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        </div>
+        {/* Barre de progression */}
+        <div style={{ height: 6, borderRadius: 3, background: '#e5e7eb', marginBottom: 12, overflow: 'hidden' }}>
+          <div style={{ height: '100%', borderRadius: 3, background: '#22c55e', width: nbTotal > 0 ? `${(nbVerifies / nbTotal) * 100}%` : '0%', transition: 'width 0.3s ease' }} />
+        </div>
+        {/* Filtres */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {([['eau', '💧 Eau seulement'], ['tous', '🚛 Tous les camions']] as [string, string][]).map(([id, label]) => (
+            <button key={id} onClick={() => setFiltre(id as 'eau' | 'tous')} style={{
+              padding: '7px 16px', borderRadius: 20, border: 'none', fontSize: 13,
+              fontWeight: filtre === id ? 700 : 500,
+              background: filtre === id ? '#f97316' : '#f1f5f9',
+              color: filtre === id ? 'white' : '#6b7280', cursor: 'pointer',
+            }}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Liste des camions */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 120px' }}>
+        {camionsFiltres.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#9ca3af', marginTop: 60, fontSize: 14 }}>Aucun camion</div>
+        ) : camionsFiltres.map(c => {
+          const v = verifs.get(c.id);
+          const verifie         = v?.verifie ?? false;
+          const typeAffiche     = v?.typeChange ?? c.type;
+          const reservoirAffiche = v?.reservoirChange ?? c.aUnReservoir;
+          return (
+            <div key={c.id} onClick={() => ouvrirFiche(c.id)} style={{
+              background: verifie ? '#f0fdf4' : 'white',
+              border: `1px solid ${verifie ? '#86efac' : '#e5e7eb'}`,
+              borderRadius: 12, padding: '12px 14px', marginBottom: 8,
+              display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}>
+              {/* Cercle statut */}
+              <div style={{
+                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                background: verifie ? '#22c55e' : '#f1f5f9',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: verifie ? 'white' : '#9ca3af', fontSize: verifie ? 20 : 16, fontWeight: 700,
+              }}>
+                {verifie ? '✓' : '○'}
+              </div>
+              {/* Infos */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>#{c.numero}</span>
+                  <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, fontWeight: 700,
+                    background: typeAffiche === 'eau' ? '#dbeafe' : '#dcfce7',
+                    color: typeAffiche === 'eau' ? '#1d4ed8' : '#166534' }}>
+                    {typeAffiche === 'eau' ? '💧 Eau' : '🏷️ Détail'}
+                  </span>
+                  {reservoirAffiche && <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>🛢 Tank</span>}
+                  {v?.typeChange     && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>↗ type modifié</span>}
+                  {v?.note           && <span style={{ fontSize: 12, color: '#9ca3af' }}>📝</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {[c.annee, c.marque, c.modele].filter(Boolean).join(' ') || 'Sans détails'}
+                </div>
+              </div>
+              {/* Actions */}
+              {verifie ? (
+                <button onClick={e => annulerVerif(c.id, e)}
+                  style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', color: '#9ca3af', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
+                  Annuler
+                </button>
+              ) : (
+                <button onClick={e => { e.stopPropagation(); ouvrirFiche(c.id); }}
+                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: '#f97316', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                  Vérifier
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer sticky — envoyer */}
+      {nbVerifies > 0 && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px 24px', background: 'white', borderTop: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginBottom: 8 }}>
+            <strong>{nbVerifies}</strong> / {nbTotal} vérifiés
+            {nbModifs > 0 && <span style={{ color: '#f59e0b', marginLeft: 8 }}>· {nbModifs} modification{nbModifs !== 1 ? 's' : ''} à sauvegarder</span>}
+          </div>
+          <button onClick={envoyerChangements} disabled={enEnvoi} style={{
+            width: '100%', padding: '15px', borderRadius: 12, border: 'none',
+            background: enEnvoi ? '#e5e7eb' : '#22c55e',
+            color: enEnvoi ? '#9ca3af' : 'white',
+            fontWeight: 700, fontSize: 16, cursor: enEnvoi ? 'wait' : 'pointer',
+          }}>
+            {enEnvoi ? 'Envoi en cours...' : '💾 Enregistrer la tournée'}
+          </button>
+        </div>
+      )}
+
+      {/* Fiche de vérification rapide (bottom sheet) */}
+      {ficheId && camionEnFiche && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}
+          onClick={() => setFicheId(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', padding: '16px 20px 40px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb', margin: '0 auto 16px' }} />
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 2 }}>#{camionEnFiche.numero}</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 18 }}>
+              {[camionEnFiche.annee, camionEnFiche.marque, camionEnFiche.modele].filter(Boolean).join(' ') || 'Sans détails'}
+            </div>
+
+            {/* Type */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type du camion</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([['eau', '💧 Eau'], ['detail', '🏷️ Détail']] as ['eau'|'detail', string][]).map(([t, lbl]) => {
+                  const estActuel = camionEnFiche.type === t;
+                  const estChoisi = ficheType === t;
+                  return (
+                    <button key={t} onClick={() => setFicheType(ficheType === t ? '' : t)} style={{
+                      flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                      border: estChoisi ? `2px solid ${t === 'eau' ? '#3b82f6' : '#22c55e'}` : `1px solid ${estActuel ? '#d1d5db' : '#e5e7eb'}`,
+                      background: estChoisi ? (t === 'eau' ? '#dbeafe' : '#dcfce7') : estActuel ? '#f9fafb' : 'white',
+                      color: estChoisi ? (t === 'eau' ? '#1d4ed8' : '#166534') : estActuel ? '#374151' : '#9ca3af',
+                    }}>
+                      {lbl}{estActuel && !ficheType ? ' ✓' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+              {ficheType && ficheType !== camionEnFiche.type && (
+                <div style={{ marginTop: 6, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                  ↗ Sera changé de {camionEnFiche.type} → {ficheType}
+                </div>
+              )}
+            </div>
+
+            {/* Réservoir */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Réservoir / Tank</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setFicheRes(ficheRes === true ? null : true)} style={{
+                  flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                  border: ficheRes === true ? '2px solid #0ea5e9' : camionEnFiche.aUnReservoir ? '1px solid #d1d5db' : '1px solid #e5e7eb',
+                  background: ficheRes === true ? '#e0f2fe' : camionEnFiche.aUnReservoir ? '#f9fafb' : 'white',
+                  color: ficheRes === true ? '#0369a1' : camionEnFiche.aUnReservoir ? '#374151' : '#9ca3af',
+                }}>✅ Installé{camionEnFiche.aUnReservoir && ficheRes !== false ? ' ✓' : ''}</button>
+                <button onClick={() => setFicheRes(ficheRes === false ? null : false)} style={{
+                  flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                  border: ficheRes === false ? '2px solid #ef4444' : !camionEnFiche.aUnReservoir ? '1px solid #d1d5db' : '1px solid #e5e7eb',
+                  background: ficheRes === false ? '#fee2e2' : !camionEnFiche.aUnReservoir ? '#f9fafb' : 'white',
+                  color: ficheRes === false ? '#dc2626' : !camionEnFiche.aUnReservoir ? '#374151' : '#9ca3af',
+                }}>❌ Pas de tank{!camionEnFiche.aUnReservoir && ficheRes !== true ? ' ✓' : ''}</button>
+              </div>
+            </div>
+
+            {/* Note rapide */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📝 Note rapide (optionnel)</div>
+              <textarea value={ficheNote} onChange={e => setFicheNote(e.target.value)}
+                placeholder="Observation lors de la tournée..."
+                rows={2}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            <button onClick={confirmerVerif} style={{
+              width: '100%', padding: '15px', borderRadius: 12, border: 'none',
+              background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 16, cursor: 'pointer',
+            }}>✓ Marquer comme vérifié</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Vue principale ──────────────────────────────────────────────────────────
 
 function VueTerrainMain() {
@@ -1180,6 +1498,7 @@ function VueTerrainMain() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [showCreation, setShowCreation] = useState(false);
   const [showReservoirs, setShowReservoirs] = useState(false);
+  const [showTournee, setShowTournee] = useState(false);
   // Module actif persisté pour survivre au refresh (par défaut suivi-vente)
   const initialModule = (() => {
     try {
@@ -1279,6 +1598,10 @@ function VueTerrainMain() {
             <button onClick={() => setShowReservoirs(true)}
               style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#0ea5e9', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
               🛢
+            </button>
+            <button onClick={() => setShowTournee(true)} title="Tournée de vérification"
+              style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#22c55e', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              🗺️
             </button>
             <button onClick={() => setShowCreation(true)}
               style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: '#f97316', color: 'white', fontSize: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
@@ -1406,6 +1729,13 @@ function VueTerrainMain() {
       )}
       {showReservoirs && (
         <PanneauReservoirs onClose={() => setShowReservoirs(false)} />
+      )}
+      {showTournee && (
+        <PanneauTournee
+          camions={camions}
+          onClose={() => setShowTournee(false)}
+          onMisAJour={handleMisAJour}
+        />
       )}
       {showLivraisons && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#f8fafc' }}>
