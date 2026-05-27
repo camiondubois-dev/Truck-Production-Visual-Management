@@ -341,12 +341,153 @@ function ModalAjoutReservoir({
   );
 }
 
+// ─── Modal modification réservoir ────────────────────────────────────────────
+
+function ModalModifierReservoir({
+  reservoir,
+  onModifier,
+  onClose,
+}: {
+  reservoir: Reservoir;
+  onModifier: (id: string, updates: { numero: string; type: TypeReservoir; notes: string | null }) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [numero, setNumero]   = useState(reservoir.numero);
+  const [type, setType]       = useState<TypeReservoir>(reservoir.type);
+  const [notes, setNotes]     = useState(reservoir.notes ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [erreur, setErreur]   = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!numero.trim()) return;
+    setSubmitting(true);
+    setErreur(null);
+    try {
+      await onModifier(reservoir.id, {
+        numero: numero.trim(),
+        type,
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (e: any) {
+      setErreur(e?.message ?? 'Erreur lors de la modification');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 2000,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 16, width: 440,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.3)', overflow: 'hidden',
+        }}
+      >
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 17, color: '#111827' }}>Modifier le réservoir</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>#{reservoir.numero} — {reservoir.etat === 'installe' ? '🔧 Installé' : '✅ Disponible'}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+        </div>
+
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {erreur && (
+            <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 13, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span>⚠️ {erreur}</span>
+              <button onClick={() => setErreur(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontSize: 16, flexShrink: 0 }}>✕</button>
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Numéro *</label>
+            <input
+              type="text"
+              value={numero}
+              onChange={e => setNumero(e.target.value)}
+              autoFocus
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Grosseur *</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {TYPES_RESERVOIR.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  style={{
+                    flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer',
+                    border: type === t ? `2px solid ${TYPE_COLORS[t]}` : '1px solid #e5e7eb',
+                    background: type === t ? `${TYPE_COLORS[t]}15` : 'white',
+                    color: type === t ? TYPE_COLORS[t] : '#9ca3af',
+                    fontWeight: type === t ? 700 : 400,
+                    fontSize: 13, transition: 'all 0.15s',
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Notes</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Notes optionnelles..."
+              rows={2}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: '14px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', gap: 10, background: '#fafafa' }}>
+          <button
+            onClick={onClose}
+            style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: 13, color: '#374151', fontWeight: 600 }}
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!numero.trim() || submitting}
+            style={{
+              flex: 2, padding: '9px', borderRadius: 8, border: 'none',
+              background: numero.trim() && !submitting ? '#f97316' : '#e5e7eb',
+              color: numero.trim() && !submitting ? 'white' : '#9ca3af',
+              fontWeight: 700, fontSize: 13,
+              cursor: numero.trim() && !submitting ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {submitting ? 'Enregistrement...' : '💾 Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Vue principale ───────────────────────────────────────────────────────────
+
 export function VueReservoirs() {
   const [reservoirs, setReservoirs] = useState<Reservoir[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtreType, setFiltreType] = useState<TypeReservoir | 'tous'>('tous');
   const [filtreEtat, setFiltreEtat] = useState<EtatReservoir | 'tous'>('tous');
   const [installerReservoir, setInstallerReservoir] = useState<Reservoir | null>(null);
+  const [modifierReservoir, setModifierReservoir] = useState<Reservoir | null>(null);
   const [showModalAjout, setShowModalAjout] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -387,6 +528,13 @@ export function VueReservoirs() {
     } catch (e: any) {
       setErreur(e.message ?? 'Erreur lors de l\'installation');
     }
+  };
+
+  const handleModifier = async (id: string, updates: { numero: string; type: TypeReservoir; notes: string | null }) => {
+    await reservoirService.modifier(id, updates);
+    setReservoirs(prev => prev.map(r =>
+      r.id === id ? { ...r, numero: updates.numero, type: updates.type, notes: updates.notes ?? undefined } : r
+    ));
   };
 
   const handleSupprimer = async (r: Reservoir) => {
@@ -549,6 +697,16 @@ export function VueReservoirs() {
                         </button>
                       )}
                       <button
+                        onClick={() => setModifierReservoir(r)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 6,
+                          border: '1px solid #d1d5db', background: 'white',
+                          color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        ✏️ Modifier
+                      </button>
+                      <button
                         onClick={() => handleSupprimer(r)}
                         style={{
                           padding: '6px 12px', borderRadius: 6,
@@ -579,6 +737,14 @@ export function VueReservoirs() {
         <ModalAjoutReservoir
           onAjouter={handleAjouter}
           onClose={() => setShowModalAjout(false)}
+        />
+      )}
+
+      {modifierReservoir && (
+        <ModalModifierReservoir
+          reservoir={modifierReservoir}
+          onModifier={handleModifier}
+          onClose={() => setModifierReservoir(null)}
         />
       )}
     </div>

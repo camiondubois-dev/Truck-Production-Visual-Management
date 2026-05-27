@@ -33,6 +33,9 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
   const [newType, setNewType] = useState<TypeReservoir>('2500g');
   const [saving, setSaving] = useState(false);
   const [confirmSupprId, setConfirmSupprId] = useState<string | null>(null);
+  const [editTypeId,    setEditTypeId]    = useState<string | null>(null);
+  const [editTypeVal,   setEditTypeVal]   = useState<TypeReservoir>('4000g');
+  const [savingEdit,    setSavingEdit]    = useState(false);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -78,6 +81,22 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
       setReservoirs(prev => prev.filter(x => x.id !== id));
       setConfirmSupprId(null);
     } catch (e) { console.error(e); }
+  };
+
+  const ouvrirEditType = (r: Reservoir) => {
+    setEditTypeId(r.id);
+    setEditTypeVal(r.type);
+    setConfirmSupprId(null);
+  };
+
+  const handleSauvegarderType = async (id: string) => {
+    setSavingEdit(true);
+    try {
+      await reservoirService.modifier(id, { type: editTypeVal });
+      setReservoirs(prev => prev.map(x => x.id === id ? { ...x, type: editTypeVal } : x));
+      setEditTypeId(null);
+    } catch (e) { console.error(e); }
+    finally { setSavingEdit(false); }
   };
 
   const filtres = filtre === 'tous' ? reservoirs : reservoirs.filter(r => r.etat === filtre);
@@ -169,7 +188,32 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
                     </div>
                     <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 8, fontWeight: 700, background: `${etatColor}18`, color: etatColor }}>{etatLabel}</span>
                   </div>
-                  {confirmSupprId === r.id ? (
+                  {editTypeId === r.id ? (
+                    /* ── Mode édition grosseur ── */
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Changer la grosseur</div>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        {(['2500g', '3750g', '4000g', '5000g'] as TypeReservoir[]).map(t => (
+                          <button key={t} onClick={() => setEditTypeVal(t)} style={{
+                            flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: editTypeVal === t ? 700 : 400,
+                            border: editTypeVal === t ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                            background: editTypeVal === t ? '#e0f2fe' : 'white',
+                            color: editTypeVal === t ? '#0369a1' : '#6b7280',
+                          }}>{t}</button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => handleSauvegarderType(r.id)} disabled={savingEdit} style={{
+                          flex: 1, padding: '8px', borderRadius: 8, border: 'none',
+                          background: savingEdit ? '#e5e7eb' : '#22c55e', color: savingEdit ? '#9ca3af' : 'white',
+                          fontWeight: 700, fontSize: 13, cursor: savingEdit ? 'wait' : 'pointer',
+                        }}>{savingEdit ? '...' : '✓ Sauvegarder'}</button>
+                        <button onClick={() => setEditTypeId(null)} style={{
+                          padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: 13, cursor: 'pointer',
+                        }}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : confirmSupprId === r.id ? (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                       <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, flex: 1 }}>Confirmer la suppression ?</span>
                       <button onClick={() => handleSupprimer(r.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Supprimer</button>
@@ -189,6 +233,10 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
                           En peinture
                         </button>
                       )}
+                      <button onClick={() => ouvrirEditType(r)}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                        ✏️ Grosseur
+                      </button>
                       <button onClick={() => setConfirmSupprId(r.id)}
                         style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
                         🗑

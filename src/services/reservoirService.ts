@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Reservoir } from '../types/reservoirTypes';
+import type { Reservoir, TypeReservoir } from '../types/reservoirTypes';
 
 function fromDB(row: any): Reservoir {
   return {
@@ -126,6 +126,14 @@ export const reservoirService = {
       .update({ a_un_reservoir: false, reservoir_id: null })
       .eq('id', inventaireId);
     if (iErr) throw iErr;
+  },
+
+  async modifier(id: string, updates: { numero?: string; type?: TypeReservoir; notes?: string | null }): Promise<void> {
+    const { error } = await supabase
+      .from('prod_reservoirs')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
   },
 
   async supprimer(id: string): Promise<void> {
