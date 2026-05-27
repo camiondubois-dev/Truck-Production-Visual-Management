@@ -1203,13 +1203,10 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
 
 type ChangementTournee = {
   verifie: boolean;
-  typeChange?: 'eau' | 'detail';
-  reservoirChange?: boolean;
-  note?: string;
 };
 
 function PanneauTournee({
-  camions,
+  camions: camionsInit,
   onClose,
   onMisAJour,
 }: {
@@ -1217,14 +1214,12 @@ function PanneauTournee({
   onClose: () => void;
   onMisAJour: (updated: VehiculeInventaire) => void;
 }) {
-  const [verifs,       setVerifs]       = useState<Map<string, ChangementTournee>>(new Map());
-  const [filtre,       setFiltre]       = useState<'eau' | 'tous'>('eau');
-  const [ficheId,      setFicheId]      = useState<string | null>(null);
-  const [enEnvoi,      setEnEnvoi]      = useState(false);
-  const [envoye,       setEnvoye]       = useState(false);
-  const [ficheType,    setFicheType]    = useState<'eau' | 'detail' | ''>('');
-  const [ficheRes,     setFicheRes]     = useState<boolean | null>(null);
-  const [ficheNote,    setFicheNote]    = useState('');
+  // Copie locale des camions pour refléter les modifs faites depuis FicheCamion
+  const [camions, setCamions] = useState<VehiculeInventaire[]>(camionsInit);
+  const [verifs,  setVerifs]  = useState<Map<string, ChangementTournee>>(new Map());
+  const [filtre,  setFiltre]  = useState<'eau' | 'tous'>('eau');
+  const [ficheId, setFicheId] = useState<string | null>(null);
+  const [termine, setTermine] = useState(false);
 
   const camionsFiltres = camions.filter(c => {
     if (c.statut === 'archive') return false;
@@ -1235,24 +1230,22 @@ function PanneauTournee({
 
   const nbVerifies = [...verifs.values()].filter(v => v.verifie).length;
   const nbTotal    = camionsFiltres.length;
-  const nbModifs   = [...verifs.values()].filter(v => v.typeChange || v.reservoirChange !== undefined || v.note).length;
 
-  const ouvrirFiche = (id: string) => {
-    const exist = verifs.get(id);
-    setFicheType(exist?.typeChange ?? '');
-    setFicheRes(exist?.reservoirChange ?? null);
-    setFicheNote(exist?.note ?? '');
-    setFicheId(id);
+  // Ouvrir la FicheCamion complète pour ce camion
+  const ouvrirFiche = (id: string) => setFicheId(id);
+
+  // Quand la FicheCamion se ferme → marquer automatiquement comme vérifié
+  const handleFicheClose = () => {
+    if (ficheId) {
+      setVerifs(prev => new Map(prev).set(ficheId, { verifie: true }));
+    }
+    setFicheId(null);
   };
 
-  const confirmerVerif = () => {
-    if (!ficheId) return;
-    const ch: ChangementTournee = { verifie: true };
-    if (ficheType) ch.typeChange = ficheType;
-    if (ficheRes !== null) ch.reservoirChange = ficheRes;
-    if (ficheNote.trim()) ch.note = ficheNote.trim();
-    setVerifs(prev => new Map(prev).set(ficheId, ch));
-    setFicheId(null);
+  // Mise à jour locale depuis FicheCamion (étapes, type, notes, etc.)
+  const handleFicheMisAJour = (updated: VehiculeInventaire) => {
+    setCamions(prev => prev.map(c => c.id === updated.id ? updated : c));
+    onMisAJour(updated);
   };
 
   const annulerVerif = (id: string, e: React.MouseEvent) => {
@@ -1260,43 +1253,15 @@ function PanneauTournee({
     setVerifs(prev => { const n = new Map(prev); n.delete(id); return n; });
   };
 
-  const envoyerChangements = async () => {
-    setEnEnvoi(true);
-    try {
-      const promises: Promise<any>[] = [];
-      for (const [id, ch] of verifs) {
-        if (!ch.verifie) continue;
-        const updates: Record<string, any> = {};
-        if (ch.typeChange)              updates.type            = ch.typeChange;
-        if (ch.reservoirChange != null) updates.a_un_reservoir  = ch.reservoirChange;
-        if (ch.note)                    updates.notes           = ch.note;
-        if (Object.keys(updates).length === 0) continue;
-        promises.push(supabase.from('prod_inventaire').update(updates).eq('id', id));
-        const camion = camions.find(c => c.id === id);
-        if (camion) {
-          onMisAJour({
-            ...camion,
-            ...(ch.typeChange              ? { type:         ch.typeChange }        : {}),
-            ...(ch.reservoirChange != null ? { aUnReservoir: ch.reservoirChange }   : {}),
-            ...(ch.note                    ? { notes:        ch.note }              : {}),
-          });
-        }
-      }
-      await Promise.all(promises);
-      setEnvoye(true);
-    } finally { setEnEnvoi(false); }
-  };
-
   const camionEnFiche = ficheId ? camions.find(c => c.id === ficheId) ?? null : null;
 
   // ── Écran succès ──
-  if (envoye) return (
+  if (termine) return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
       <div style={{ fontSize: 64 }}>✅</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>Tournée enregistrée !</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>Tournée terminée !</div>
       <div style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>
-        {nbVerifies} camion{nbVerifies !== 1 ? 's' : ''} vérifiés
-        {nbModifs > 0 ? ` · ${nbModifs} modification${nbModifs !== 1 ? 's' : ''} sauvegardée${nbModifs !== 1 ? 's' : ''}` : ''}
+        {nbVerifies} camion{nbVerifies !== 1 ? 's' : ''} inspecté{nbVerifies !== 1 ? 's' : ''} sur {nbTotal}
       </div>
       <button onClick={onClose} style={{ marginTop: 20, padding: '14px 36px', borderRadius: 12, border: 'none', background: '#f97316', color: 'white', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
         Fermer
@@ -1311,7 +1276,7 @@ function PanneauTournee({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>🗺️ Tournée de vérification</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{nbVerifies} / {nbTotal} vérifiés</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{nbVerifies} / {nbTotal} vérifiés · Appuie sur un camion pour l'ouvrir</div>
           </div>
           <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#6b7280', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
@@ -1337,10 +1302,8 @@ function PanneauTournee({
         {camionsFiltres.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#9ca3af', marginTop: 60, fontSize: 14 }}>Aucun camion</div>
         ) : camionsFiltres.map(c => {
-          const v = verifs.get(c.id);
-          const verifie         = v?.verifie ?? false;
-          const typeAffiche     = v?.typeChange ?? c.type;
-          const reservoirAffiche = v?.reservoirChange ?? c.aUnReservoir;
+          const v        = verifs.get(c.id);
+          const verifie  = v?.verifie ?? false;
           return (
             <div key={c.id} onClick={() => ouvrirFiche(c.id)} style={{
               background: verifie ? '#f0fdf4' : 'white',
@@ -1363,13 +1326,12 @@ function PanneauTournee({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>#{c.numero}</span>
                   <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, fontWeight: 700,
-                    background: typeAffiche === 'eau' ? '#dbeafe' : '#dcfce7',
-                    color: typeAffiche === 'eau' ? '#1d4ed8' : '#166534' }}>
-                    {typeAffiche === 'eau' ? '💧 Eau' : '🏷️ Détail'}
+                    background: c.type === 'eau' ? '#dbeafe' : '#dcfce7',
+                    color: c.type === 'eau' ? '#1d4ed8' : '#166534' }}>
+                    {c.type === 'eau' ? '💧 Eau' : '🏷️ Détail'}
                   </span>
-                  {reservoirAffiche && <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>🛢 Tank</span>}
-                  {v?.typeChange     && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>↗ type modifié</span>}
-                  {v?.note           && <span style={{ fontSize: 12, color: '#9ca3af' }}>📝</span>}
+                  {c.aUnReservoir && <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>🛢 Tank</span>}
+                  {verifie && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ inspecté</span>}
                 </div>
                 <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {[c.annee, c.marque, c.modele].filter(Boolean).join(' ') || 'Sans détails'}
@@ -1382,105 +1344,51 @@ function PanneauTournee({
                   Annuler
                 </button>
               ) : (
-                <button onClick={e => { e.stopPropagation(); ouvrirFiche(c.id); }}
-                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: '#f97316', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                  Vérifier
-                </button>
+                <div style={{ color: '#9ca3af', fontSize: 20, flexShrink: 0 }}>›</div>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Footer sticky — envoyer */}
-      {nbVerifies > 0 && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px 24px', background: 'white', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginBottom: 8 }}>
-            <strong>{nbVerifies}</strong> / {nbTotal} vérifiés
-            {nbModifs > 0 && <span style={{ color: '#f59e0b', marginLeft: 8 }}>· {nbModifs} modification{nbModifs !== 1 ? 's' : ''} à sauvegarder</span>}
-          </div>
-          <button onClick={envoyerChangements} disabled={enEnvoi} style={{
-            width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-            background: enEnvoi ? '#e5e7eb' : '#22c55e',
-            color: enEnvoi ? '#9ca3af' : 'white',
-            fontWeight: 700, fontSize: 16, cursor: enEnvoi ? 'wait' : 'pointer',
-          }}>
-            {enEnvoi ? 'Envoi en cours...' : '💾 Enregistrer la tournée'}
-          </button>
+      {/* Footer sticky — terminer */}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px 24px', background: 'white', borderTop: '1px solid #e5e7eb' }}>
+        <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginBottom: 8 }}>
+          <strong>{nbVerifies}</strong> / {nbTotal} camions inspectés
         </div>
-      )}
+        <button onClick={() => setTermine(true)} style={{
+          width: '100%', padding: '15px', borderRadius: 12, border: 'none',
+          background: nbVerifies > 0 ? '#22c55e' : '#e5e7eb',
+          color: nbVerifies > 0 ? 'white' : '#9ca3af',
+          fontWeight: 700, fontSize: 16, cursor: nbVerifies > 0 ? 'pointer' : 'default',
+        }}>
+          {nbVerifies === 0 ? 'Aucun camion inspecté' : `✅ Terminer la tournée (${nbVerifies})`}
+        </button>
+      </div>
 
-      {/* Fiche de vérification rapide (bottom sheet) */}
+      {/* FicheCamion complète — s'ouvre par-dessus la tournée */}
       {ficheId && camionEnFiche && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}
-          onClick={() => setFicheId(null)}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ width: '100%', background: 'white', borderRadius: '20px 20px 0 0', padding: '16px 20px 40px', maxHeight: '85vh', overflowY: 'auto' }}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: '#e5e7eb', margin: '0 auto 16px' }} />
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 2 }}>#{camionEnFiche.numero}</div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 18 }}>
-              {[camionEnFiche.annee, camionEnFiche.marque, camionEnFiche.modele].filter(Boolean).join(' ') || 'Sans détails'}
-            </div>
-
-            {/* Type */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type du camion</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {([['eau', '💧 Eau'], ['detail', '🏷️ Détail']] as ['eau'|'detail', string][]).map(([t, lbl]) => {
-                  const estActuel = camionEnFiche.type === t;
-                  const estChoisi = ficheType === t;
-                  return (
-                    <button key={t} onClick={() => setFicheType(ficheType === t ? '' : t)} style={{
-                      flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                      border: estChoisi ? `2px solid ${t === 'eau' ? '#3b82f6' : '#22c55e'}` : `1px solid ${estActuel ? '#d1d5db' : '#e5e7eb'}`,
-                      background: estChoisi ? (t === 'eau' ? '#dbeafe' : '#dcfce7') : estActuel ? '#f9fafb' : 'white',
-                      color: estChoisi ? (t === 'eau' ? '#1d4ed8' : '#166534') : estActuel ? '#374151' : '#9ca3af',
-                    }}>
-                      {lbl}{estActuel && !ficheType ? ' ✓' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-              {ficheType && ficheType !== camionEnFiche.type && (
-                <div style={{ marginTop: 6, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
-                  ↗ Sera changé de {camionEnFiche.type} → {ficheType}
-                </div>
-              )}
-            </div>
-
-            {/* Réservoir */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Réservoir / Tank</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setFicheRes(ficheRes === true ? null : true)} style={{
-                  flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                  border: ficheRes === true ? '2px solid #0ea5e9' : camionEnFiche.aUnReservoir ? '1px solid #d1d5db' : '1px solid #e5e7eb',
-                  background: ficheRes === true ? '#e0f2fe' : camionEnFiche.aUnReservoir ? '#f9fafb' : 'white',
-                  color: ficheRes === true ? '#0369a1' : camionEnFiche.aUnReservoir ? '#374151' : '#9ca3af',
-                }}>✅ Installé{camionEnFiche.aUnReservoir && ficheRes !== false ? ' ✓' : ''}</button>
-                <button onClick={() => setFicheRes(ficheRes === false ? null : false)} style={{
-                  flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                  border: ficheRes === false ? '2px solid #ef4444' : !camionEnFiche.aUnReservoir ? '1px solid #d1d5db' : '1px solid #e5e7eb',
-                  background: ficheRes === false ? '#fee2e2' : !camionEnFiche.aUnReservoir ? '#f9fafb' : 'white',
-                  color: ficheRes === false ? '#dc2626' : !camionEnFiche.aUnReservoir ? '#374151' : '#9ca3af',
-                }}>❌ Pas de tank{!camionEnFiche.aUnReservoir && ficheRes !== true ? ' ✓' : ''}</button>
-              </div>
-            </div>
-
-            {/* Note rapide */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📝 Note rapide (optionnel)</div>
-              <textarea value={ficheNote} onChange={e => setFicheNote(e.target.value)}
-                placeholder="Observation lors de la tournée..."
-                rows={2}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-            </div>
-
-            <button onClick={confirmerVerif} style={{
-              width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-              background: '#22c55e', color: 'white', fontWeight: 700, fontSize: 16, cursor: 'pointer',
-            }}>✓ Marquer comme vérifié</button>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
+          {/* Bandeau "retour à la tournée" */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, zIndex: 410,
+            background: '#22c55e', color: 'white',
+            padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 13, fontWeight: 700,
+          }}>
+            <button onClick={handleFicheClose} style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+              color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+              padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4,
+            }}>← Tournée</button>
+            <span style={{ flex: 1 }}>#{camionEnFiche.numero} — {[camionEnFiche.annee, camionEnFiche.marque].filter(Boolean).join(' ')}</span>
+            <span style={{ fontSize: 11, opacity: 0.85 }}>Sera marqué ✓ à la fermeture</span>
           </div>
+          <FicheCamion
+            vehicule={camionEnFiche}
+            onClose={handleFicheClose}
+            onMisAJour={handleFicheMisAJour}
+          />
         </div>
       )}
     </div>
