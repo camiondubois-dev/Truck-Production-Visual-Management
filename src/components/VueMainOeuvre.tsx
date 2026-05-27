@@ -718,16 +718,25 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
 
   // ─── KPIs semaine courante ──
   const kpis = useMemo(() => {
-    const hQuartTotal     = analyse.reduce((s, e) => s + e.hQuart, 0);
-    const hCongePayeTotal = analyse.reduce((s, e) => s + e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre, 0);
-    const hAbsentTotal    = analyse.reduce((s, e) => s + e.hAbsentTotal, 0);
-    const hPayeTotal      = analyse.reduce((s, e) => s + e.hTotalPaye, 0);
-    const coutTotal       = analyse.reduce((s, e) => s + e.coutPrevu, 0);
-    const nbSansLien      = analyse.filter(e => !e.employeId).length;
-    const nbSansTaux      = analyse.filter(e => e.employeId && !e.salaireHebdo && !(e.tauxHoraire ?? 0)).length;
+    const agendrixOnly    = analyse.filter(e => !e.estSalarieSansPointage);
+    const salariesFixe    = analyse.filter(e => !!e.estSalarieSansPointage);
+    const hQuartTotal     = agendrixOnly.reduce((s, e) => s + e.hQuart, 0);
+    const hCongePayeTotal = agendrixOnly.reduce((s, e) => s + e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre, 0);
+    const hAbsentTotal    = agendrixOnly.reduce((s, e) => s + e.hAbsentTotal, 0);
+    const hPayeTotal      = agendrixOnly.reduce((s, e) => s + e.hTotalPaye, 0);
+    const coutAgendrix    = agendrixOnly.reduce((s, e) => s + e.coutPrevu, 0);
+    const coutSalariesFixe= salariesFixe.reduce((s, e) => s + e.coutPrevu, 0);
+    const coutTotal       = coutAgendrix + coutSalariesFixe;
+    const nbSansLien      = agendrixOnly.filter(e => !e.employeId).length;
+    const nbSansTaux      = agendrixOnly.filter(e => e.employeId && !e.salaireHebdo && !(e.tauxHoraire ?? 0)).length;
     const hAttendues      = hQuartTotal + hCongePayeTotal + hAbsentTotal;
     const pctAbsent       = hAttendues > 0 ? (hAbsentTotal / hAttendues) * 100 : 0;
-    return { hQuartTotal, hCongePayeTotal, hAbsentTotal, hPayeTotal, coutTotal, nbSansLien, nbSansTaux, pctAbsent };
+    return {
+      hQuartTotal, hCongePayeTotal, hAbsentTotal, hPayeTotal,
+      coutTotal, coutAgendrix, coutSalariesFixe,
+      nbSansLien, nbSansTaux, pctAbsent,
+      nbSalariesFixe: salariesFixe.length,
+    };
   }, [analyse]);
 
   // ─── Données agrégées par semaine pour les graphiques ──
@@ -839,10 +848,15 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
             {/* KPIs */}
             <Section titre="📊 Vue d'ensemble — semaine">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-                <Kpi label="Heures travaillées"  value={`${kpis.hQuartTotal.toFixed(1)} h`}     color={C.blue}   sub={`${analyse.length} employés`} />
+                <Kpi label="Heures travaillées"  value={`${kpis.hQuartTotal.toFixed(1)} h`}     color={C.blue}   sub={`${analyse.filter(e => !e.estSalarieSansPointage).length} employés Agendrix`} />
                 <Kpi label="Congés payés"         value={`${kpis.hCongePayeTotal.toFixed(1)} h`} color={C.purple} sub="Férié · Vacances · Maladie" />
                 <Kpi label="Absences (non payé)"  value={`${kpis.hAbsentTotal.toFixed(1)} h`}    color={C.red}    sub={`${kpis.pctAbsent.toFixed(1)} % absentéisme`} />
-                <Kpi label="Coût prévu"           value={fmt$(kpis.coutTotal)}                   color={C.amber}  sub="Agendrix × taux | salarié fixe" />
+                <Kpi label="Coût total prévu"     value={fmt$(kpis.coutTotal)}                   color={C.amber}
+                  sub={`Agendrix ${fmt$(kpis.coutAgendrix)} + Sal. fixe ${fmt$(kpis.coutSalariesFixe)}`} />
+                {kpis.nbSalariesFixe > 0 && (
+                  <Kpi label="💼 Salariés fixes" value={String(kpis.nbSalariesFixe)}
+                    color={C.amber} sub={`Non pointés · ${fmt$(kpis.coutSalariesFixe)}/sem`} />
+                )}
                 {kpis.nbSansLien > 0 && <Kpi label="Non liés Acomba" value={String(kpis.nbSansLien)} color={C.red} sub="Pas dans la table de référence" />}
                 {kpis.nbSansTaux > 0 && peutVoirDetail && <Kpi label="Sans taux" value={String(kpis.nbSansTaux)} color={C.amber} sub="Coût prévu = 0" />}
               </div>
@@ -880,18 +894,30 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
                   </thead>
                   <tbody>
                     {analyse.map((e, i) => {
-                      const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
-                      const hasAbsent  = e.hAbsentTotal > 0;
-                      const nonLie     = !e.employeId;
+                      const nomAffiche   = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+                      const hasAbsent    = e.hAbsentTotal > 0;
+                      const nonLie       = !e.employeId;
+                      const salarieFixe  = !!e.estSalarieSansPointage;
+                      const rowBg        = salarieFixe
+                        ? 'rgba(245,158,11,0.05)'
+                        : hasAbsent ? 'rgba(239,68,68,0.04)' : 'transparent';
                       return (
-                        <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: hasAbsent ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+                        <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: rowBg }}>
                           <td style={{ padding: '8px 12px', fontWeight: 700 }}>
-                            <div style={{ color: nonLie ? C.muted : C.text }}>{nomAffiche || '—'}</div>
-                            {nonLie && <div style={{ fontSize: 10, color: C.red }}>⚠️ non lié Acomba</div>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: nonLie ? C.muted : C.text }}>{nomAffiche || '—'}</span>
+                              {salarieFixe && (
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: `${C.amber}25`, color: C.amber, whiteSpace: 'nowrap' }}>
+                                  💼 Salarié fixe
+                                </span>
+                              )}
+                            </div>
+                            {nonLie && !salarieFixe && <div style={{ fontSize: 10, color: C.red }}>⚠️ non lié Acomba</div>}
+                            {salarieFixe && <div style={{ fontSize: 10, color: C.amber, marginTop: 2 }}>Non pointé dans Agendrix</div>}
                           </td>
                           <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted }}>{e.succursale ?? '—'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.blue }}>
-                            {e.hQuart > 0 ? `${e.hQuart.toFixed(1)} h` : '—'}
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: salarieFixe ? C.faded : C.blue }}>
+                            {salarieFixe ? <span style={{ fontSize: 10, color: C.amber }}>salaire fixe</span> : e.hQuart > 0 ? `${e.hQuart.toFixed(1)} h` : '—'}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', color: C.purple }}>
                             {e.hFerie > 0 ? `${e.hFerie.toFixed(1)} h` : '—'}
@@ -905,8 +931,8 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: e.hAbsentTotal > 0 ? 800 : 500, color: e.hAbsentTotal > 0 ? C.red : C.faded }}>
                             {e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.text }}>
-                            {`${e.hTotalPaye.toFixed(1)} h`}
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: salarieFixe ? C.faded : C.text }}>
+                            {salarieFixe ? '—' : `${e.hTotalPaye.toFixed(1)} h`}
                           </td>
                           {peutVoirDetail && (
                             <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>

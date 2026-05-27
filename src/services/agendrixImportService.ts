@@ -59,7 +59,7 @@ export interface AgendrixAnalyseEmploye {
   prenom: string | null;
   nomAgendrix: string | null;
   employeId: string | null;
-  nomComplet: string | null;     // depuis prod_employes
+  nomComplet: string | null;        // depuis prod_employes
   tauxHoraire: number | null;
   salaireHebdo: number | null;
   succursale: string | null;
@@ -68,10 +68,11 @@ export interface AgendrixAnalyseEmploye {
   hVacancesPaye: number;
   hMaladiePaye: number;
   hCongePayeAutre: number;
-  hAbsentTotal: number;          // congés NON payés (absentéisme)
+  hAbsentTotal: number;             // congés NON payés (absentéisme)
   hBanque: number;
-  hTotalPaye: number;            // quart + tous congés payés
-  coutPrevu: number;             // hTotalPaye × taux | salaire_hebdo si salarié
+  hTotalPaye: number;               // quart + tous congés payés
+  coutPrevu: number;                // hTotalPaye × taux | salaire_hebdo si salarié
+  estSalarieSansPointage?: boolean; // vrai si salarié fixe absent de l'export Agendrix
 }
 
 // ─── Helpers de normalisation ─────────────────────────────────────
@@ -367,10 +368,10 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
     .select('*')
     .eq('semaine_debut', semaine);
 
-  // Employés pour les taux
+  // Employés pour les taux (actif requis pour les injectés fantômes)
   const { data: emps } = await supabase
     .from('prod_employes')
-    .select('id, nom_complet, nom, no_employe_acomba, taux_horaire, salaire_hebdomadaire');
+    .select('id, nom_complet, nom, no_employe_acomba, taux_horaire, salaire_hebdomadaire, actif');
 
   const empById: Record<string, { nomComplet: string | null; taux: number | null; hebdo: number | null }> = {};
   // Index par no_employe_acomba
@@ -498,8 +499,43 @@ export async function getAgendrixAnalyse(semaine: string): Promise<AgendrixAnaly
     });
   }
 
-  // Tri : les employés avec le plus d'heures en premier
-  return result.sort((a, b) => (b.hQuart + b.hFerie) - (a.hQuart + a.hFerie));
+  // ── Injection des salariés fixes absents de l'export Agendrix ──
+  // Ces employés ont un salaire_hebdomadaire > 0 mais ne pointent pas leurs heures.
+  // Leur coût est réel chaque semaine → on les affiche avec 0 h mais coutPrevu = salaire_hebdo.
+  const empIdsPresents = new Set(result.map(r => r.employeId).filter(Boolean));
+  for (const e of (emps ?? []) as any[]) {
+    if (!e.actif) continue;                          // inactif → ignoré
+    if (empIdsPresents.has(e.id)) continue;          // déjà dans l'export Agendrix
+    const hebdo: number | null = e.salaire_hebdomadaire ?? null;
+    if (!hebdo || hebdo <= 0) continue;              // pas salarié fixe → ignoré (horaire = 0 h = 0 $)
+    result.push({
+      noEmployeAcomba:        e.no_employe_acomba ?? '',
+      prenom:                 null,
+      nomAgendrix:            null,
+      employeId:              e.id,
+      nomComplet:             e.nom_complet ?? e.nom ?? null,
+      tauxHoraire:            e.taux_horaire ?? null,
+      salaireHebdo:           hebdo,
+      succursale:             null,
+      hQuart:                 0,
+      hFerie:                 0,
+      hVacancesPaye:          0,
+      hMaladiePaye:           0,
+      hCongePayeAutre:        0,
+      hAbsentTotal:           0,
+      hBanque:                0,
+      hTotalPaye:             0,
+      coutPrevu:              hebdo,
+      estSalarieSansPointage: true,
+    });
+  }
+
+  // Tri : employés Agendrix (heures > 0) en premier, salariés fixes ensuite
+  return result.sort((a, b) => {
+    if (a.estSalarieSansPointage !== b.estSalarieSansPointage)
+      return a.estSalarieSansPointage ? 1 : -1;
+    return (b.hQuart + b.hFerie) - (a.hQuart + a.hFerie);
+  });
 }
 
 /**
