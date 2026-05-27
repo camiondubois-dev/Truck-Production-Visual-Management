@@ -142,6 +142,62 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+// ── Assigner type de réservoir manquant ───────────────────────
+const TYPES_RES_OPTS = ['2500g', '3750g', '4000g', '5000g'] as const;
+type TypeResOpt = typeof TYPES_RES_OPTS[number];
+
+function AssignerTypeReservoir({ camions }: { camions: VehiculeInventaire[] }) {
+  const [saving, setSaving] = useState<string | null>(null); // vehicule id en cours
+
+  const handleAssigner = async (vehiculeId: string, type: TypeResOpt) => {
+    setSaving(vehiculeId);
+    try {
+      await supabase
+        .from('prod_inventaire')
+        .update({ type_reservoir_requis: type, updated_at: new Date().toISOString() })
+        .eq('id', vehiculeId);
+      // Force reload de la page pour que le calcul écart se mette à jour
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#f59e0b18', border: '1px solid #f59e0b40' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', marginBottom: 8 }}>
+        ⚠ {camions.length} camion{camions.length > 1 ? 's' : ''} sans type de réservoir spécifié — assigner le type :
+      </div>
+      {camions.map(c => (
+        <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: 'rgba(255,255,255,0.85)', minWidth: 60 }}>
+            #{c.numero}
+          </span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginRight: 4 }}>
+            {[c.marque, c.modele, c.annee].filter(Boolean).join(' ') || '—'}
+          </span>
+          {TYPES_RES_OPTS.map(t => (
+            <button
+              key={t}
+              onClick={() => handleAssigner(c.id, t)}
+              disabled={saving === c.id}
+              style={{
+                padding: '4px 10px', borderRadius: 6, border: 'none', cursor: saving === c.id ? 'wait' : 'pointer',
+                background: saving === c.id ? '#e5e7eb' : '#f97316',
+                color: saving === c.id ? '#9ca3af' : 'white',
+                fontSize: 11, fontWeight: 700,
+              }}
+            >
+              {saving === c.id ? '...' : t}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── KPI Card ──────────────────────────────────────────────────
 function KpiCard({ label, value, sub, color, icon, active, onClick }: {
   label: string; value: string | number; sub?: string; color: string; icon: string;
@@ -1014,9 +1070,7 @@ export function VueAnalyse() {
                     })}
                   </div>
                   {camionsSansTypeSpecifie.length > 0 && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: '#f59e0b', fontStyle: 'italic' }}>
-                      ⚠ {camionsSansTypeSpecifie.length} camion{camionsSansTypeSpecifie.length > 1 ? 's' : ''} sans type de réservoir spécifié
-                    </div>
+                    <AssignerTypeReservoir camions={camionsSansTypeSpecifie} />
                   )}
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>Cliquer pour filtrer les camions sans réservoir</div>
                 </div>
