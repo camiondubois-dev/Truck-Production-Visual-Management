@@ -9,7 +9,8 @@
 //   4. Par camion (cumul heures + coût M.O. réel)
 // ════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart, Line, Cell } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { canSeeEmployesDetails } from '../lib/permissions';
 import {
@@ -663,11 +664,14 @@ export function VueMainOeuvre() {
 // ════════════════════════════════════════════════════════════════
 
 function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
-  const [semaines,        setSemaines]        = useState<string[]>([]);
-  const [semaine,         setSemaine]         = useState<string | null>(null);
-  const [analyse,         setAnalyse]         = useState<AgendrixAnalyseEmploye[]>([]);
-  const [loading,         setLoading]         = useState(false);
-  const [loadingSemaines, setLoadingSemaines] = useState(true);
+  const [semaines,         setSemaines]         = useState<string[]>([]);
+  const [semaine,          setSemaine]          = useState<string | null>(null);
+  const [analyse,          setAnalyse]          = useState<AgendrixAnalyseEmploye[]>([]);
+  const [loading,          setLoading]          = useState(false);
+  const [loadingSemaines,  setLoadingSemaines]  = useState(true);
+  const [modeVue,          setModeVue]          = useState<'semaine' | 'tendances'>('semaine');
+  const [toutesLesDonnees, setToutesLesDonnees] = useState<Map<string, AgendrixAnalyseEmploye[]>>(new Map());
+  const [loadingTendances, setLoadingTendances] = useState(false);
 
   // Charger la liste des semaines disponibles
   useEffect(() => {
@@ -678,7 +682,7 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
     });
   }, []);
 
-  // Charger l'analyse quand la semaine change
+  // Charger l'analyse quand la semaine change (mode Par semaine)
   useEffect(() => {
     if (!semaine) return;
     setLoading(true);
@@ -688,25 +692,91 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
     });
   }, [semaine]);
 
+  // Charger toutes les semaines (jusqu'à 16) pour le mode Tendances
+  const chargerTendances = useCallback(async () => {
+    if (semaines.length === 0) return;
+    setLoadingTendances(true);
+    const semA = semaines.slice(0, 16);
+    const resultats = await Promise.all(semA.map(s => getAgendrixAnalyse(s)));
+    const map = new Map<string, AgendrixAnalyseEmploye[]>();
+    semA.forEach((s, i) => map.set(s, resultats[i]));
+    setToutesLesDonnees(map);
+    setLoadingTendances(false);
+  }, [semaines]);
+
+  useEffect(() => {
+    if (modeVue === 'tendances' && toutesLesDonnees.size === 0 && semaines.length > 0) {
+      chargerTendances();
+    }
+  }, [modeVue, toutesLesDonnees.size, semaines.length, chargerTendances]);
+
   const fmtDate = (d: string) => {
     if (!d) return '—';
     const [y, m, j] = d.split('-');
     return `${j}/${m}/${y}`;
   };
 
-  // KPIs globaux de la semaine
+  // ─── KPIs semaine courante ──
   const kpis = useMemo(() => {
-    const hQuartTotal   = analyse.reduce((s, e) => s + e.hQuart, 0);
+    const hQuartTotal     = analyse.reduce((s, e) => s + e.hQuart, 0);
     const hCongePayeTotal = analyse.reduce((s, e) => s + e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre, 0);
-    const hAbsentTotal  = analyse.reduce((s, e) => s + e.hAbsentTotal, 0);
-    const hPayeTotal    = analyse.reduce((s, e) => s + e.hTotalPaye, 0);
-    const coutTotal     = analyse.reduce((s, e) => s + e.coutPrevu, 0);
-    const nbSansLien    = analyse.filter(e => !e.employeId).length;
-    const nbSansTaux    = analyse.filter(e => e.employeId && !e.salaireHebdo && !(e.tauxHoraire ?? 0)).length;
-    const hAttendues    = hQuartTotal + hCongePayeTotal + hAbsentTotal; // toutes heures enregistrées
-    const pctAbsent     = hAttendues > 0 ? (hAbsentTotal / hAttendues) * 100 : 0;
+    const hAbsentTotal    = analyse.reduce((s, e) => s + e.hAbsentTotal, 0);
+    const hPayeTotal      = analyse.reduce((s, e) => s + e.hTotalPaye, 0);
+    const coutTotal       = analyse.reduce((s, e) => s + e.coutPrevu, 0);
+    const nbSansLien      = analyse.filter(e => !e.employeId).length;
+    const nbSansTaux      = analyse.filter(e => e.employeId && !e.salaireHebdo && !(e.tauxHoraire ?? 0)).length;
+    const hAttendues      = hQuartTotal + hCongePayeTotal + hAbsentTotal;
+    const pctAbsent       = hAttendues > 0 ? (hAbsentTotal / hAttendues) * 100 : 0;
     return { hQuartTotal, hCongePayeTotal, hAbsentTotal, hPayeTotal, coutTotal, nbSansLien, nbSansTaux, pctAbsent };
   }, [analyse]);
+
+  // ─── Données agrégées par semaine pour les graphiques ──
+  const tendanceHebdo = useMemo(() => {
+    const semA = semaines.slice(0, 16).filter(s => toutesLesDonnees.has(s));
+    return semA.map(s => {
+      const data       = toutesLesDonnees.get(s) ?? [];
+      const hQuart     = data.reduce((a, e) => a + e.hQuart, 0);
+      const hCongePaye = data.reduce((a, e) => a + e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre, 0);
+      const hAbsent    = data.reduce((a, e) => a + e.hAbsentTotal, 0);
+      const hAttendues = hQuart + hCongePaye + hAbsent;
+      return {
+        semaine:    fmtDate(s),
+        hQuart:     +hQuart.toFixed(1),
+        hCongePaye: +hCongePaye.toFixed(1),
+        hAbsent:    +hAbsent.toFixed(1),
+        pctAbsent:  hAttendues > 0 ? +(hAbsent / hAttendues * 100).toFixed(1) : 0,
+      };
+    }).reverse(); // ancienne → récente (gauche → droite)
+  }, [toutesLesDonnees, semaines]);
+
+  // ─── Données agrégées par employé pour les graphiques ──
+  const statsParEmploye = useMemo(() => {
+    const map = new Map<string, { nom: string; hQuart: number; hCongePaye: number; hAbsent: number; nb: number }>();
+    for (const [, data] of toutesLesDonnees) {
+      for (const e of data) {
+        const nom = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+        if (!nom) continue;
+        const cur = map.get(nom) ?? { nom, hQuart: 0, hCongePaye: 0, hAbsent: 0, nb: 0 };
+        cur.hQuart     += e.hQuart;
+        cur.hCongePaye += e.hFerie + e.hVacancesPaye + e.hMaladiePaye + e.hCongePayeAutre;
+        cur.hAbsent    += e.hAbsentTotal;
+        cur.nb         += 1;
+        map.set(nom, cur);
+      }
+    }
+    return Array.from(map.values()).map(e => {
+      const hAttendues = e.hQuart + e.hCongePaye + e.hAbsent;
+      return {
+        nom:          e.nom,
+        hQuartTotal:  +e.hQuart.toFixed(1),
+        hCongePaye:   +e.hCongePaye.toFixed(1),
+        hAbsent:      +e.hAbsent.toFixed(1),
+        pctAbsent:    hAttendues > 0 ? +(e.hAbsent / hAttendues * 100).toFixed(1) : 0,
+        hQuartMoy:    +(e.hQuart / Math.max(e.nb, 1)).toFixed(1),
+        nb:           e.nb,
+      };
+    });
+  }, [toutesLesDonnees]);
 
   if (loadingSemaines) {
     return <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Chargement…</div>;
@@ -726,146 +796,363 @@ function SectionAgendrix({ peutVoirDetail }: { peutVoirDetail: boolean }) {
 
   return (
     <div>
-      {/* Sélecteur de semaine */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 11, color: C.muted, letterSpacing: '0.05em' }}>SEMAINE :</div>
-        {semaines.slice(0, 8).map(s => (
-          <button key={s} onClick={() => setSemaine(s)} style={{
-            padding: '6px 14px', borderRadius: 18, border: 'none',
-            background: semaine === s ? '#f97316' : C.card,
-            color:      semaine === s ? C.bg      : C.muted,
-            fontWeight: semaine === s ? 800 : 600, fontSize: 12, cursor: 'pointer',
-          }}>{fmtDate(s)}</button>
+      {/* ── Toggle mode vue ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        {([
+          { id: 'semaine'   as const, label: '📅 Par semaine'       },
+          { id: 'tendances' as const, label: '📈 Tendances & Cumul' },
+        ]).map(m => (
+          <button key={m.id} onClick={() => setModeVue(m.id)} style={{
+            padding: '7px 18px', borderRadius: 20, border: 'none',
+            background: modeVue === m.id ? '#f97316' : C.card,
+            color:      modeVue === m.id ? C.bg      : C.muted,
+            fontWeight: modeVue === m.id ? 800 : 600, fontSize: 13, cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}>{m.label}</button>
         ))}
+        {modeVue === 'tendances' && toutesLesDonnees.size > 0 && (
+          <span style={{ fontSize: 11, color: C.faded, marginLeft: 4 }}>
+            {toutesLesDonnees.size} semaine{toutesLesDonnees.size > 1 ? 's' : ''} chargée{toutesLesDonnees.size > 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Chargement…</div>
-      ) : (
-        <>
-          {/* KPIs */}
-          <Section titre="📊 Vue d'ensemble — semaine">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-              <Kpi label="Heures travaillées" value={`${kpis.hQuartTotal.toFixed(1)} h`} color={C.blue} sub={`${analyse.length} employés`} />
-              <Kpi label="Congés payés" value={`${kpis.hCongePayeTotal.toFixed(1)} h`} color={C.purple} sub="Férié · Vacances · Maladie" />
-              <Kpi label="Absences (non payé)" value={`${kpis.hAbsentTotal.toFixed(1)} h`} color={C.red} sub={`${kpis.pctAbsent.toFixed(1)} % absentéisme`} />
-              <Kpi label="Coût prévu" value={fmt$(kpis.coutTotal)} color={C.amber} sub="Agendrix × taux | salarié fixe" />
-              {kpis.nbSansLien > 0 && <Kpi label="Non liés Acomba" value={String(kpis.nbSansLien)} color={C.red} sub="Pas dans la table de référence" />}
-              {kpis.nbSansTaux > 0 && peutVoirDetail && <Kpi label="Sans taux" value={String(kpis.nbSansTaux)} color={C.amber} sub="Coût prévu = 0" />}
-            </div>
-          </Section>
+      {/* ════════════ MODE PAR SEMAINE ════════════ */}
+      {modeVue === 'semaine' && <>
+        {/* Sélecteur de semaine */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, color: C.muted, letterSpacing: '0.05em' }}>SEMAINE :</div>
+          {semaines.slice(0, 8).map(s => (
+            <button key={s} onClick={() => setSemaine(s)} style={{
+              padding: '6px 14px', borderRadius: 18, border: 'none',
+              background: semaine === s ? '#f97316' : C.card,
+              color:      semaine === s ? C.bg      : C.muted,
+              fontWeight: semaine === s ? 800 : 600, fontSize: 12, cursor: 'pointer',
+            }}>{fmtDate(s)}</button>
+          ))}
+        </div>
 
-          {/* Légende des types d'absence */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', fontSize: 11 }}>
-            {[
-              { label: '🔵 Quart',          color: C.blue   },
-              { label: '🟣 Férié payé',     color: C.purple },
-              { label: '🟢 Vacances payées',color: C.green  },
-              { label: '🟡 Maladie payée',  color: C.amber  },
-              { label: '🔴 Absence non payée', color: C.red },
-            ].map(l => (
-              <span key={l.label} style={{ background: `${l.color}20`, color: l.color, padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>{l.label}</span>
-            ))}
-          </div>
-
-          {/* Tableau par employé */}
-          <Section titre="👤 Détail par employé">
-            <div style={{ overflowX: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: C.card }}>
-                    <th style={TH}>Employé</th>
-                    <th style={TH}>Succursale</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>🔵 Quart</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>🟣 Férié</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>🟢 Vac.</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>🟡 Mal.</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>🔴 Absent</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>Total payé</th>
-                    {peutVoirDetail && <th style={{ ...TH, textAlign: 'right' }}>Coût prévu</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {analyse.map((e, i) => {
-                    const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
-                    const hasAbsent  = e.hAbsentTotal > 0;
-                    const nonLie     = !e.employeId;
-                    return (
-                      <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: hasAbsent ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>
-                          <div style={{ color: nonLie ? C.muted : C.text }}>{nomAffiche || '—'}</div>
-                          {nonLie && <div style={{ fontSize: 10, color: C.red }}>⚠️ non lié Acomba</div>}
-                        </td>
-                        <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted }}>{e.succursale ?? '—'}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.blue }}>
-                          {e.hQuart > 0 ? `${e.hQuart.toFixed(1)} h` : '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.purple }}>
-                          {e.hFerie > 0 ? `${e.hFerie.toFixed(1)} h` : '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.green }}>
-                          {e.hVacancesPaye > 0 ? `${e.hVacancesPaye.toFixed(1)} h` : '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
-                          {e.hMaladiePaye > 0 ? `${e.hMaladiePaye.toFixed(1)} h` : '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: e.hAbsentTotal > 0 ? 800 : 500, color: e.hAbsentTotal > 0 ? C.red : C.faded }}>
-                          {e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.text }}>
-                          {`${e.hTotalPaye.toFixed(1)} h`}
-                        </td>
-                        {peutVoirDetail && (
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
-                            {e.coutPrevu > 0 ? fmt$(e.coutPrevu) : <span style={{ color: C.faded }}>—</span>}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                {/* Total */}
-                <tfoot>
-                  <tr style={{ borderTop: `2px solid ${C.border}`, background: C.card }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 800, color: C.text }} colSpan={2}>TOTAL</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.blue }}>{kpis.hQuartTotal.toFixed(1)} h</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.purple }}>{analyse.reduce((s,e)=>s+e.hFerie,0).toFixed(1)} h</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.green }}>{analyse.reduce((s,e)=>s+e.hVacancesPaye,0).toFixed(1)} h</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.amber }}>{analyse.reduce((s,e)=>s+e.hMaladiePaye,0).toFixed(1)} h</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.red }}>{kpis.hAbsentTotal.toFixed(1)} h</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.text }}>{kpis.hPayeTotal.toFixed(1)} h</td>
-                    {peutVoirDetail && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.amber }}>{fmt$(kpis.coutTotal)}</td>}
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </Section>
-
-          {/* Absentéisme détaillé */}
-          {kpis.hAbsentTotal > 0 && (
-            <Section titre={`🔴 Absentéisme — ${kpis.pctAbsent.toFixed(1)} % cette semaine`}>
-              <Table headers={['Employé', 'Succursale', 'Vacances N.P.', 'Maladie N.P.', 'Abs. solde', 'CNESST', 'Total absent']}>
-                {analyse.filter(e => e.hAbsentTotal > 0).map((e, i) => {
-                  const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
-                  return (
-                    <Row key={i}>
-                      <Td bold>{nomAffiche || '—'}</Td>
-                      <Td>{e.succursale ?? '—'}</Td>
-                      <Td right color={C.red}>{e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}</Td>
-                      <Td right color={C.red}>—</Td>
-                      <Td right color={C.red}>—</Td>
-                      <Td right color={C.red}>—</Td>
-                      <Td right bold color={C.red}>{e.hAbsentTotal.toFixed(1)} h</Td>
-                    </Row>
-                  );
-                })}
-              </Table>
-              <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
-                💡 % absentéisme = heures absentes non payées / (heures quart + congés payés + absences non payées)
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>Chargement…</div>
+        ) : (
+          <>
+            {/* KPIs */}
+            <Section titre="📊 Vue d'ensemble — semaine">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+                <Kpi label="Heures travaillées"  value={`${kpis.hQuartTotal.toFixed(1)} h`}     color={C.blue}   sub={`${analyse.length} employés`} />
+                <Kpi label="Congés payés"         value={`${kpis.hCongePayeTotal.toFixed(1)} h`} color={C.purple} sub="Férié · Vacances · Maladie" />
+                <Kpi label="Absences (non payé)"  value={`${kpis.hAbsentTotal.toFixed(1)} h`}    color={C.red}    sub={`${kpis.pctAbsent.toFixed(1)} % absentéisme`} />
+                <Kpi label="Coût prévu"           value={fmt$(kpis.coutTotal)}                   color={C.amber}  sub="Agendrix × taux | salarié fixe" />
+                {kpis.nbSansLien > 0 && <Kpi label="Non liés Acomba" value={String(kpis.nbSansLien)} color={C.red} sub="Pas dans la table de référence" />}
+                {kpis.nbSansTaux > 0 && peutVoirDetail && <Kpi label="Sans taux" value={String(kpis.nbSansTaux)} color={C.amber} sub="Coût prévu = 0" />}
               </div>
             </Section>
-          )}
-        </>
+
+            {/* Légende */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', fontSize: 11 }}>
+              {[
+                { label: '🔵 Quart',             color: C.blue   },
+                { label: '🟣 Férié payé',        color: C.purple },
+                { label: '🟢 Vacances payées',   color: C.green  },
+                { label: '🟡 Maladie payée',     color: C.amber  },
+                { label: '🔴 Absence non payée', color: C.red    },
+              ].map(l => (
+                <span key={l.label} style={{ background: `${l.color}20`, color: l.color, padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>{l.label}</span>
+              ))}
+            </div>
+
+            {/* Tableau par employé */}
+            <Section titre="👤 Détail par employé">
+              <div style={{ overflowX: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: C.card }}>
+                      <th style={TH}>Employé</th>
+                      <th style={TH}>Succursale</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>🔵 Quart</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>🟣 Férié</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>🟢 Vac.</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>🟡 Mal.</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>🔴 Absent</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>Total payé</th>
+                      {peutVoirDetail && <th style={{ ...TH, textAlign: 'right' }}>Coût prévu</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analyse.map((e, i) => {
+                      const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+                      const hasAbsent  = e.hAbsentTotal > 0;
+                      const nonLie     = !e.employeId;
+                      return (
+                        <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: hasAbsent ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 700 }}>
+                            <div style={{ color: nonLie ? C.muted : C.text }}>{nomAffiche || '—'}</div>
+                            {nonLie && <div style={{ fontSize: 10, color: C.red }}>⚠️ non lié Acomba</div>}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted }}>{e.succursale ?? '—'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.blue }}>
+                            {e.hQuart > 0 ? `${e.hQuart.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.purple }}>
+                            {e.hFerie > 0 ? `${e.hFerie.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.green }}>
+                            {e.hVacancesPaye > 0 ? `${e.hVacancesPaye.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
+                            {e.hMaladiePaye > 0 ? `${e.hMaladiePaye.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: e.hAbsentTotal > 0 ? 800 : 500, color: e.hAbsentTotal > 0 ? C.red : C.faded }}>
+                            {e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.text }}>
+                            {`${e.hTotalPaye.toFixed(1)} h`}
+                          </td>
+                          {peutVoirDetail && (
+                            <td style={{ padding: '8px 12px', textAlign: 'right', color: C.amber }}>
+                              {e.coutPrevu > 0 ? fmt$(e.coutPrevu) : <span style={{ color: C.faded }}>—</span>}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: `2px solid ${C.border}`, background: C.card }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 800, color: C.text }} colSpan={2}>TOTAL</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.blue }}>{kpis.hQuartTotal.toFixed(1)} h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.purple }}>{analyse.reduce((s,e)=>s+e.hFerie,0).toFixed(1)} h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.green }}>{analyse.reduce((s,e)=>s+e.hVacancesPaye,0).toFixed(1)} h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: C.amber }}>{analyse.reduce((s,e)=>s+e.hMaladiePaye,0).toFixed(1)} h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.red }}>{kpis.hAbsentTotal.toFixed(1)} h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.text }}>{kpis.hPayeTotal.toFixed(1)} h</td>
+                      {peutVoirDetail && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: C.amber }}>{fmt$(kpis.coutTotal)}</td>}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </Section>
+
+            {/* Absentéisme détaillé */}
+            {kpis.hAbsentTotal > 0 && (
+              <Section titre={`🔴 Absentéisme — ${kpis.pctAbsent.toFixed(1)} % cette semaine`}>
+                <Table headers={['Employé', 'Succursale', 'Vacances N.P.', 'Maladie N.P.', 'Abs. solde', 'CNESST', 'Total absent']}>
+                  {analyse.filter(e => e.hAbsentTotal > 0).map((e, i) => {
+                    const nomAffiche = e.nomComplet ?? `${e.prenom ?? ''} ${e.nomAgendrix ?? ''}`.trim();
+                    return (
+                      <Row key={i}>
+                        <Td bold>{nomAffiche || '—'}</Td>
+                        <Td>{e.succursale ?? '—'}</Td>
+                        <Td right color={C.red}>{e.hAbsentTotal > 0 ? `${e.hAbsentTotal.toFixed(1)} h` : '—'}</Td>
+                        <Td right color={C.red}>—</Td>
+                        <Td right color={C.red}>—</Td>
+                        <Td right color={C.red}>—</Td>
+                        <Td right bold color={C.red}>{e.hAbsentTotal.toFixed(1)} h</Td>
+                      </Row>
+                    );
+                  })}
+                </Table>
+                <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
+                  💡 % absentéisme = heures absentes non payées / (heures quart + congés payés + absences non payées)
+                </div>
+              </Section>
+            )}
+          </>
+        )}
+      </>}
+
+      {/* ════════════ MODE TENDANCES & CUMUL ════════════ */}
+      {modeVue === 'tendances' && (
+        loadingTendances ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>
+            Chargement de {Math.min(semaines.length, 16)} semaines…
+          </div>
+        ) : tendanceHebdo.length < 2 ? (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Pas assez de données</div>
+            <div style={{ fontSize: 13, color: C.muted, marginTop: 6 }}>
+              Au moins 2 semaines Agendrix sont requises pour afficher les tendances.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ── Graphique 1 : Heures par semaine (stacked bar) ── */}
+            <Section titre="📊 Heures par semaine">
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 8px 8px' }}>
+                <ResponsiveContainer width="100%" height={270}>
+                  <BarChart data={tendanceHebdo} margin={{ top: 4, right: 16, left: 0, bottom: 28 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                    <XAxis dataKey="semaine" tick={{ fill: C.muted, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fill: C.muted, fontSize: 10 }} unit=" h" width={50} />
+                    <Tooltip
+                      contentStyle={{ background: '#1a1917', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: C.text, fontWeight: 700 }}
+                      formatter={(val: number, name: string) => [`${val} h`, name]}
+                    />
+                    <Bar dataKey="hQuart"     name="Quart travaillé" stackId="a" fill={C.blue}   radius={[0,0,0,0]} />
+                    <Bar dataKey="hCongePaye" name="Congés payés"    stackId="a" fill={C.purple} radius={[0,0,0,0]} />
+                    <Bar dataKey="hAbsent"    name="Absences (N.P.)" stackId="a" fill={C.red}    radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 4, fontSize: 11 }}>
+                  {([['Quart travaillé', C.blue], ['Congés payés', C.purple], ['Absences (N.P.)', C.red]] as [string,string][]).map(([lbl, col]) => (
+                    <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 2, background: col, display: 'inline-block' }} />
+                      <span style={{ color: C.muted }}>{lbl}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </Section>
+
+            {/* ── Graphique 2 : % Absentéisme par semaine ── */}
+            <Section titre="🔴 % Absentéisme par semaine">
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 8px 8px' }}>
+                <ResponsiveContainer width="100%" height={250}>
+                  <ComposedChart data={tendanceHebdo} margin={{ top: 4, right: 48, left: 0, bottom: 28 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                    <XAxis dataKey="semaine" tick={{ fill: C.muted, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                    <YAxis yAxisId="h"   tick={{ fill: C.muted, fontSize: 10 }} unit=" h" width={50} />
+                    <YAxis yAxisId="pct" orientation="right" tick={{ fill: C.red, fontSize: 10 }} unit=" %" width={44} domain={[0, 'auto']} />
+                    <Tooltip
+                      contentStyle={{ background: '#1a1917', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: C.text, fontWeight: 700 }}
+                      formatter={(val: number, name: string) => [name.includes('%') ? `${val} %` : `${val} h`, name]}
+                    />
+                    <Bar  yAxisId="h"   dataKey="hAbsent"   name="Heures absentes" fill={`${C.red}55`} radius={[4,4,0,0]} />
+                    <Line yAxisId="pct" dataKey="pctAbsent" name="% Absentéisme"   stroke={C.red} strokeWidth={2.5} dot={{ fill: C.red, r: 4 }} type="monotone" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <div style={{ fontSize: 11, color: C.faded, textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>
+                  Barres = heures absences non payées (axe gauche) · Ligne = % absentéisme (axe droit)
+                </div>
+              </div>
+            </Section>
+
+            {/* ── Graphique 3 : Cumul absences par employé (horizontal) ── */}
+            {(() => {
+              const sorted = [...statsParEmploye].sort((a, b) => b.hAbsent - a.hAbsent).filter(e => e.hAbsent > 0).slice(0, 20);
+              if (sorted.length === 0) return null;
+              return (
+                <Section titre="👤 Cumul absences (non payées) par employé">
+                  <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 8px 8px' }}>
+                    <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 36 + 40)}>
+                      <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 60, left: 110, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                        <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} unit=" h" />
+                        <YAxis type="category" dataKey="nom" tick={{ fill: C.text, fontSize: 11 }} width={105} />
+                        <Tooltip
+                          contentStyle={{ background: '#1a1917', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }}
+                          labelStyle={{ color: C.text, fontWeight: 700 }}
+                          formatter={(val: number) => [`${val} h`, 'Absences totales']}
+                        />
+                        <Bar dataKey="hAbsent" name="Absences (N.P.)" radius={[0,4,4,0]}>
+                          {sorted.map((entry, idx) => (
+                            <Cell key={idx} fill={entry.pctAbsent > 10 ? '#dc2626' : entry.pctAbsent > 5 ? C.red : '#fca5a5'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div style={{ fontSize: 11, color: C.faded, textAlign: 'center', marginTop: 6, fontStyle: 'italic' }}>
+                      🔴 Rouge foncé = &gt; 10 % absentéisme · rouge = &gt; 5 % · rose = ≤ 5 %
+                    </div>
+                  </div>
+                </Section>
+              );
+            })()}
+
+            {/* ── Graphique 4 : Moyenne heures de quart / semaine par employé ── */}
+            {(() => {
+              const sorted = [...statsParEmploye].sort((a, b) => b.hQuartMoy - a.hQuartMoy).slice(0, 20);
+              if (sorted.length === 0) return null;
+              return (
+                <Section titre="⏱️ Moyenne heures de quart / semaine par employé">
+                  <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 8px 8px' }}>
+                    <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 36 + 40)}>
+                      <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 60, left: 110, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                        <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} unit=" h" domain={[0, 'auto']} />
+                        <YAxis type="category" dataKey="nom" tick={{ fill: C.text, fontSize: 11 }} width={105} />
+                        <Tooltip
+                          contentStyle={{ background: '#1a1917', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }}
+                          labelStyle={{ color: C.text, fontWeight: 700 }}
+                          formatter={(val: number) => [`${val} h/sem`, 'Moy. heures quart']}
+                        />
+                        <ReferenceLine x={40} stroke={C.amber} strokeDasharray="4 4"
+                          label={{ value: '40 h', fill: C.amber, fontSize: 10, position: 'insideTopRight' }} />
+                        <Bar dataKey="hQuartMoy" name="Moy. h quart/sem" radius={[0,4,4,0]}>
+                          {sorted.map((entry, idx) => (
+                            <Cell key={idx} fill={entry.hQuartMoy >= 40 ? C.blue : entry.hQuartMoy >= 32 ? '#93c5fd' : '#bfdbfe'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8, fontSize: 11 }}>
+                      {([['≥ 40 h', C.blue], ['32–39 h', '#93c5fd'], ['< 32 h', '#bfdbfe']] as [string,string][]).map(([lbl, col]) => (
+                        <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 12, height: 12, borderRadius: 2, background: col, display: 'inline-block' }} />
+                          <span style={{ color: C.muted }}>{lbl}</span>
+                        </span>
+                      ))}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 20, height: 0, borderTop: `2px dashed ${C.amber}`, display: 'inline-block' }} />
+                        <span style={{ color: C.amber }}>Norme 40 h</span>
+                      </span>
+                    </div>
+                  </div>
+                </Section>
+              );
+            })()}
+
+            {/* ── Tableau récap cumulatif par employé ── */}
+            {statsParEmploye.length > 0 && (
+              <Section titre="📋 Récap. cumulatif par employé">
+                <div style={{ overflowX: 'auto', borderRadius: 8, border: `1px solid ${C.border}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: C.card }}>
+                        <th style={TH}>Employé</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>H. quart (total)</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>Moy. h/sem</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>H. absent (total)</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>% Absentéisme</th>
+                        <th style={{ ...TH, textAlign: 'right' }}>Congés payés (total)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...statsParEmploye].sort((a, b) => b.hAbsent - a.hAbsent).map((e, i) => (
+                        <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: e.pctAbsent > 10 ? 'rgba(239,68,68,0.06)' : 'transparent' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 700, color: C.text }}>{e.nom}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: C.blue }}>
+                            {e.hQuartTotal > 0 ? `${e.hQuartTotal.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: e.hQuartMoy < 32 ? C.amber : C.text }}>
+                            {e.hQuartMoy.toFixed(1)} h/sem
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: e.hAbsent > 0 ? 800 : 500, color: e.hAbsent > 0 ? C.red : C.faded }}>
+                            {e.hAbsent > 0 ? `${e.hAbsent.toFixed(1)} h` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700,
+                            color: e.pctAbsent > 10 ? C.red : e.pctAbsent > 5 ? C.amber : e.pctAbsent > 0 ? C.green : C.faded }}>
+                            {e.pctAbsent > 0 ? `${e.pctAbsent.toFixed(1)} %` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: C.purple }}>
+                            {e.hCongePaye > 0 ? `${e.hCongePaye.toFixed(1)} h` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontSize: 11, color: C.faded, marginTop: 8, fontStyle: 'italic' }}>
+                  💡 Cumul sur {toutesLesDonnees.size} semaine{toutesLesDonnees.size > 1 ? 's' : ''} importée{toutesLesDonnees.size > 1 ? 's' : ''} ·
+                  Rouge = &gt; 10 % absentéisme · Ambre = &lt; 32 h/sem
+                </div>
+              </Section>
+            )}
+          </>
+        )
       )}
     </div>
   );
