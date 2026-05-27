@@ -24,6 +24,8 @@ function toDB(r: Reservoir): any {
     camion_id: r.camionId ?? null,
     notes: r.notes ?? null,
     slot_id: r.slotId ?? null,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
   };
 }
 

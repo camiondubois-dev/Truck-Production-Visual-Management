@@ -211,26 +211,34 @@ function ModalAjoutReservoir({
   onAjouter: (r: Reservoir) => Promise<void>;
   onClose: () => void;
 }) {
-  const [numero, setNumero] = useState('');
-  const [type, setType] = useState<TypeReservoir>('4000g');
-  const [notes, setNotes] = useState('');
+  const [numero, setNumero]   = useState('');
+  const [type, setType]       = useState<TypeReservoir>('4000g');
+  const [notes, setNotes]     = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [erreur, setErreur]   = useState<string | null>(null);
 
   const handleSave = async () => {
     if (!numero.trim()) return;
     setSubmitting(true);
-    const r: Reservoir = {
-      id: genId(),
-      numero: numero.trim(),
-      type,
-      etat: 'disponible',
-      notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await onAjouter(r);
-    setSubmitting(false);
-    onClose();
+    setErreur(null);
+    try {
+      const now = new Date().toISOString();
+      const r: Reservoir = {
+        id: genId(),
+        numero: numero.trim(),
+        type,
+        etat: 'disponible',
+        notes: notes.trim() || undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await onAjouter(r);
+      onClose();
+    } catch (e: any) {
+      setErreur(e?.message ?? 'Erreur lors de l\'ajout du réservoir');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -255,6 +263,12 @@ function ModalAjoutReservoir({
         </div>
 
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {erreur && (
+            <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 13, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span>⚠️ {erreur}</span>
+              <button onClick={() => setErreur(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontSize: 16, flexShrink: 0 }}>✕</button>
+            </div>
+          )}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Numéro *</label>
             <input
