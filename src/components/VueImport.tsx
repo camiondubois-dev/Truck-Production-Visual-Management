@@ -17,6 +17,14 @@ import {
   parseAgendrixXLSX, executeAgendrixImport,
   type AgendrixParse, type AgendrixImportResult,
 } from '../services/agendrixImportService';
+import {
+  GuideAgendrix,
+  GuideCoutsHitrac,
+  GuideVentesEauDetail,
+  GuideVentesExportation,
+  GuideVentesEncan,
+  GuideVentesPieces,
+} from './GuideImport';
 
 type TabId = 'couts' | 'ventes_eau_detail' | 'ventes_exportation' | 'ventes_encan' | 'ventes_pieces' | 'labor_log' | 'agendrix';
 
@@ -161,6 +169,7 @@ function CoutsImporter() {
       <PageHeader icon="📥" title="Import HITRAC — Coûts inventaire actif"
         description={<>Met à jour <strong>prix_achat_reel</strong> et <strong>cout_mo</strong> sur les camions <strong>eau</strong> et <strong>détail</strong> en statut <strong>inventaire</strong> à partir du rapport <code>vehiclecostdetail.csv</code>.</>} />
 
+      {step === 'upload' && <GuideCoutsHitrac />}
       {step === 'upload' && <UploadZone loading={loading} fileRef={fileRef} onFile={handleFile} accept=".csv" hintFile="vehiclecostdetail.csv" />}
       {step === 'upload' && error && <ErrorBox msg={error} />}
       {step === 'upload' && (
@@ -260,6 +269,9 @@ function VentesImporter({ wizard }: { wizard: VenteWizardKind }) {
     <div>
       <PageHeader icon={wizardCfg.icon} title={`Import HITRAC — ${wizardCfg.title}`} description={wizardCfg.desc} />
 
+      {step === 'upload' && wizard === 'eau_detail'   && <GuideVentesEauDetail />}
+      {step === 'upload' && wizard === 'exportation'  && <GuideVentesExportation />}
+      {step === 'upload' && wizard === 'encan'        && <GuideVentesEncan />}
       {step === 'upload' && <UploadZone loading={loading} fileRef={fileRef} onFile={handleFile} accept=".csv" hintFile={wizardCfg.expectedFile} color={wizardCfg.color} />}
       {step === 'upload' && error && <ErrorBox msg={error} />}
       {step === 'upload' && <RulesBox title="Règles appliquées :" items={wizardCfg.rules} />}
@@ -761,7 +773,8 @@ function PiecesImporter() {
 
   // ── Étape 1 : Upload ──────────────────────────────────────────────
   if (step === 'upload') return (
-    <div style={{ maxWidth: 600 }}>
+    <div style={{ maxWidth: 700 }}>
+      <GuideVentesPieces />
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: 32 }}>
         <h2 style={{ margin: '0 0 4px', color: '#0f172a', fontSize: 20, fontWeight: 700 }}>🔧 Import Ventes Pièces</h2>
         <p style={{ margin: '0 0 6px', color: '#64748b', fontSize: 14 }}>Export Hightrack · Sales Orders (CSV)</p>
@@ -1032,6 +1045,8 @@ function AgendrixImporter() {
         title="Import Agendrix — Entrées de temps"
         description={<>Importe le rapport <strong>hebdomadaire</strong> des heures pointées (feuille Sommaire). Le numéro d'employé Agendrix est automatiquement lié au code Acomba dans la table de référence. Les données de la semaine sont <strong>remplacées</strong> à chaque import.</>}
       />
+
+      <GuideAgendrix />
 
       <div style={{
         background: 'white', borderRadius: 14, padding: 32,
