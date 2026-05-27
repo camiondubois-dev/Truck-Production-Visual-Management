@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 // ════════════════════════════════════════════════════════════════════
 // ─── Composant Guide d'importation pas-à-pas ────────────────────────
@@ -19,6 +19,133 @@ interface EtapeGuide {
   note?: React.ReactNode;
 }
 
+// ─── Lightbox plein écran ─────────────────────────────────────────────
+
+interface ImageLightbox { src: string; titre: string; numero: number }
+
+function Lightbox({ images, index, onClose, onNav }: {
+  images: ImageLightbox[];
+  index: number;
+  onClose: () => void;
+  onNav: (i: number) => void;
+}) {
+  const img = images[index];
+
+  const handleKey = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'ArrowRight' && index < images.length - 1) onNav(index + 1);
+    if (e.key === 'ArrowLeft'  && index > 0)                  onNav(index - 1);
+  }, [index, images.length, onClose, onNav]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [handleKey]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {/* Bouton fermer */}
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 18, right: 22,
+        background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white',
+        fontSize: 24, width: 42, height: 42, borderRadius: '50%',
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        lineHeight: 1,
+      }}>✕</button>
+
+      {/* Légende */}
+      <div style={{
+        position: 'absolute', top: 22, left: 0, right: 0,
+        textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 13,
+        pointerEvents: 'none',
+      }}>
+        Étape {img.numero} — {img.titre}
+        <span style={{ marginLeft: 12, opacity: 0.5 }}>
+          {index + 1} / {images.length}
+        </span>
+      </div>
+
+      {/* Flèche gauche */}
+      {index > 0 && (
+        <button onClick={e => { e.stopPropagation(); onNav(index - 1); }} style={{
+          position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white',
+          fontSize: 28, width: 52, height: 52, borderRadius: '50%',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.15s',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.28)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+        >‹</button>
+      )}
+
+      {/* Image */}
+      <img
+        src={img.src}
+        alt={img.titre}
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: '90vw', maxHeight: '85vh',
+          borderRadius: 10,
+          boxShadow: '0 8px 48px rgba(0,0,0,0.6)',
+          objectFit: 'contain',
+        }}
+      />
+
+      {/* Flèche droite */}
+      {index < images.length - 1 && (
+        <button onClick={e => { e.stopPropagation(); onNav(index + 1); }} style={{
+          position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white',
+          fontSize: 28, width: 52, height: 52, borderRadius: '50%',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.15s',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.28)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+        >›</button>
+      )}
+
+      {/* Points de navigation en bas */}
+      {images.length > 1 && (
+        <div style={{
+          position: 'absolute', bottom: 20, left: 0, right: 0,
+          display: 'flex', justifyContent: 'center', gap: 8,
+        }}>
+          {images.map((_, i) => (
+            <button key={i} onClick={e => { e.stopPropagation(); onNav(i); }} style={{
+              width: i === index ? 22 : 8, height: 8, borderRadius: 4,
+              background: i === index ? 'white' : 'rgba(255,255,255,0.35)',
+              border: 'none', cursor: 'pointer', padding: 0,
+              transition: 'all 0.2s',
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* Hint clavier */}
+      <div style={{
+        position: 'absolute', bottom: 44, left: 0, right: 0,
+        textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 11,
+        pointerEvents: 'none',
+      }}>
+        ← → pour naviguer · Échap pour fermer
+      </div>
+    </div>
+  );
+}
+
 // ─── Composant générique ─────────────────────────────────────────────
 
 function GuideSection({
@@ -31,158 +158,176 @@ function GuideSection({
   defaultOuvert?: boolean;
 }) {
   const [ouvert, setOuvert] = useState(defaultOuvert);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+
+  // Liste ordonnée des images avec leur contexte (pour la navigation lightbox)
+  const images: ImageLightbox[] = etapes
+    .filter(e => !!e.image)
+    .map(e => ({ src: e.image!, titre: e.titre, numero: e.numero }));
+
+  // Index dans le tableau `images` pour une étape donnée
+  const imageIdx = (etape: EtapeGuide) =>
+    images.findIndex(img => img.src === etape.image && img.numero === etape.numero);
 
   return (
-    <div style={{
-      background: 'white',
-      borderRadius: 14,
-      border: `1px solid ${couleur}40`,
-      marginBottom: 24,
-      overflow: 'hidden',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    }}>
-      {/* ─── En-tête cliquable ──────────────────────────────────────── */}
-      <button
-        onClick={() => setOuvert(v => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '14px 20px',
-          background: `${couleur}12`,
-          border: 'none',
-          borderBottom: ouvert ? `1px solid ${couleur}25` : 'none',
-          cursor: 'pointer',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 20 }}>📖</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
-            Guide d'importation — pas-à-pas
+    <>
+      <div style={{
+        background: 'white',
+        borderRadius: 14,
+        border: `1px solid ${couleur}40`,
+        marginBottom: 24,
+        overflow: 'hidden',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      }}>
+        {/* ─── En-tête cliquable ────────────────────────────────────── */}
+        <button
+          onClick={() => setOuvert(v => !v)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 20px',
+            background: `${couleur}12`,
+            border: 'none',
+            borderBottom: ouvert ? `1px solid ${couleur}25` : 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>📖</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
+              Guide d'importation — pas-à-pas
+            </span>
+            <span style={{
+              background: couleur, color: 'white',
+              fontSize: 11, fontWeight: 700,
+              padding: '2px 9px', borderRadius: 10,
+            }}>
+              {etapes.length} étapes
+            </span>
+          </div>
+          <span style={{ fontSize: 16, color: couleur, fontWeight: 700 }}>
+            {ouvert ? '▲ Masquer' : '▼ Afficher'}
           </span>
-          <span style={{
-            background: couleur,
-            color: 'white',
-            fontSize: 11,
-            fontWeight: 700,
-            padding: '2px 9px',
-            borderRadius: 10,
-          }}>
-            {etapes.length} étapes
-          </span>
-        </div>
-        <span style={{ fontSize: 16, color: couleur, fontWeight: 700 }}>
-          {ouvert ? '▲ Masquer' : '▼ Afficher'}
-        </span>
-      </button>
+        </button>
 
-      {/* ─── Contenu du guide ───────────────────────────────────────── */}
-      {ouvert && (
-        <div style={{ padding: '24px 28px' }}>
-          {etapes.map((etape, idx) => (
-            <div
-              key={etape.numero}
-              style={{
-                display: 'flex',
-                gap: 20,
-                marginBottom: idx < etapes.length - 1 ? 32 : 0,
-                paddingBottom: idx < etapes.length - 1 ? 32 : 0,
-                borderBottom: idx < etapes.length - 1 ? '1px solid #f1f5f9' : 'none',
-              }}
-            >
-              {/* Numéro rond */}
-              <div style={{
-                flexShrink: 0,
-                width: 38,
-                height: 38,
-                borderRadius: '50%',
-                background: couleur,
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 17,
-                fontWeight: 800,
-                boxShadow: `0 2px 8px ${couleur}50`,
-              }}>
-                {etape.numero}
-              </div>
-
-              {/* Texte + image */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
-                  {etape.titre}
-                </div>
-                <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.7 }}>
-                  {etape.description}
+        {/* ─── Contenu ──────────────────────────────────────────────── */}
+        {ouvert && (
+          <div style={{ padding: '24px 28px' }}>
+            {etapes.map((etape, idx) => (
+              <div
+                key={etape.numero}
+                style={{
+                  display: 'flex', gap: 20,
+                  marginBottom: idx < etapes.length - 1 ? 32 : 0,
+                  paddingBottom: idx < etapes.length - 1 ? 32 : 0,
+                  borderBottom: idx < etapes.length - 1 ? '1px solid #f1f5f9' : 'none',
+                }}
+              >
+                {/* Numéro rond */}
+                <div style={{
+                  flexShrink: 0, width: 38, height: 38, borderRadius: '50%',
+                  background: couleur, color: 'white',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 17, fontWeight: 800,
+                  boxShadow: `0 2px 8px ${couleur}50`,
+                }}>
+                  {etape.numero}
                 </div>
 
-                {etape.note && (
-                  <div style={{
-                    marginTop: 10,
-                    padding: '9px 13px',
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: '#92400e',
-                    lineHeight: 1.5,
-                  }}>
-                    💡 {etape.note}
+                {/* Texte + image */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
+                    {etape.titre}
                   </div>
-                )}
+                  <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.7 }}>
+                    {etape.description}
+                  </div>
 
-                {etape.image && (
-                  <img
-                    src={etape.image}
-                    alt={etape.titre}
-                    style={{
-                      marginTop: 14,
-                      width: '100%',
-                      maxWidth: 720,
-                      borderRadius: 10,
-                      border: '2px solid #e5e7eb',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                      display: 'block',
-                    }}
-                    onError={e => {
-                      // Si l'image n'est pas encore en place, afficher un placeholder
-                      const img = e.currentTarget;
-                      img.style.display = 'none';
-                      const placeholder = img.nextSibling as HTMLElement | null;
-                      if (placeholder) placeholder.style.display = 'flex';
-                    }}
-                  />
-                )}
-                {/* Placeholder si image manquante */}
-                {etape.image && (
-                  <div style={{
-                    display: 'none',
-                    marginTop: 14,
-                    width: '100%',
-                    maxWidth: 720,
-                    height: 120,
-                    borderRadius: 10,
-                    border: '2px dashed #d1d5db',
-                    background: '#f9fafb',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: 6,
-                    color: '#9ca3af',
-                    fontSize: 12,
-                  }}>
-                    <span style={{ fontSize: 28 }}>🖼️</span>
-                    <span>Image à venir</span>
-                  </div>
-                )}
+                  {etape.note && (
+                    <div style={{
+                      marginTop: 10, padding: '9px 13px',
+                      background: '#fffbeb', border: '1px solid #fde68a',
+                      borderRadius: 8, fontSize: 12, color: '#92400e', lineHeight: 1.5,
+                    }}>
+                      💡 {etape.note}
+                    </div>
+                  )}
+
+                  {/* Image cliquable */}
+                  {etape.image && (
+                    <div style={{ marginTop: 14, position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                      <img
+                        src={etape.image}
+                        alt={etape.titre}
+                        onClick={() => setLightboxIdx(imageIdx(etape))}
+                        style={{
+                          width: '100%', maxWidth: 820,
+                          borderRadius: 10,
+                          border: `2px solid ${couleur}40`,
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                          display: 'block',
+                          cursor: 'zoom-in',
+                          transition: 'box-shadow 0.15s, transform 0.15s',
+                        }}
+                        onMouseEnter={e => {
+                          (e.currentTarget as HTMLImageElement).style.boxShadow = '0 8px 28px rgba(0,0,0,0.18)';
+                          (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.005)';
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLImageElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)';
+                          (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)';
+                        }}
+                        onError={e => {
+                          const img = e.currentTarget;
+                          img.style.display = 'none';
+                          const ph = img.parentElement?.nextElementSibling as HTMLElement | null;
+                          if (ph) ph.style.display = 'flex';
+                        }}
+                      />
+                      {/* Hint zoom */}
+                      <div style={{
+                        position: 'absolute', bottom: 8, right: 10,
+                        background: 'rgba(0,0,0,0.55)', color: 'white',
+                        fontSize: 11, fontWeight: 600,
+                        padding: '3px 8px', borderRadius: 6,
+                        pointerEvents: 'none',
+                      }}>
+                        🔍 Cliquer pour agrandir
+                      </div>
+                    </div>
+                  )}
+                  {/* Placeholder si image manquante */}
+                  {etape.image && (
+                    <div style={{
+                      display: 'none', marginTop: 14,
+                      width: '100%', maxWidth: 820, height: 120, borderRadius: 10,
+                      border: '2px dashed #d1d5db', background: '#f9fafb',
+                      alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column', gap: 6, color: '#9ca3af', fontSize: 12,
+                    }}>
+                      <span style={{ fontSize: 28 }}>🖼️</span>
+                      <span>Image à venir</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─── Lightbox ─────────────────────────────────────────────────── */}
+      {lightboxIdx !== null && (
+        <Lightbox
+          images={images}
+          index={lightboxIdx}
+          onClose={() => setLightboxIdx(null)}
+          onNav={setLightboxIdx}
+        />
       )}
-    </div>
+    </>
   );
 }
 
