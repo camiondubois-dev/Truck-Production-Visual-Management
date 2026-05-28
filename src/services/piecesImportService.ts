@@ -12,10 +12,14 @@ export const VENDEURS: Record<string, string> = {
 };
 
 // Alias iTrack → code canonique (variantes de noms dans le rapport Counterperson)
+// NOTE : 'dgemme' SANS suffixe = Dominic Gemme qui vend des camions (pas des pièces).
+//        Il ne doit PAS être mappé ici — il sera exclu automatiquement en mode
+//        Counterperson car il n'est pas dans VENDEURS_CONNUS.
+//        Seul 'dgemme-pieces' / 'dgemme - pieces' renvoie aux pièces de Xavier Gemme.
 const VENDEUR_ALIAS: Record<string, string> = {
   'dgemme - pieces': 'xgemme',
   'dgemme-pieces':   'xgemme',
-  'dgemme':          'xgemme',
+  // 'dgemme' intentionnellement absent → exclus du rapport pièces (ventes de camions)
 };
 
 export function nomVendeur(code: string): string {
