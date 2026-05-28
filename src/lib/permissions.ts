@@ -72,9 +72,22 @@ export function canEditVentes(p?: ProfileLike | null): boolean {
   return isGestionOrAdmin(p) || role(p) === 'vendeur';
 }
 
-/** Peut voir/modifier le suivi des paiements (qui a payé combien). */
+/** Peut voir/modifier le suivi des paiements (qui a payé combien).
+ *  Vendeur = oui (doit pouvoir enregistrer dépôts et paiements complets). */
 export function canSeePaiements(p?: ProfileLike | null): boolean {
-  return isGestionOrAdmin(p);
+  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+}
+
+/** Peut archiver / désarchiver un véhicule.
+ *  Vendeur = oui (livraison finale = archivage). Supprimer reste gestion. */
+export function canArchiverVehicule(p?: ProfileLike | null): boolean {
+  return isGestionOrAdmin(p) || role(p) === 'vendeur';
+}
+
+/** Peut gérer les contrats de location (créer, modifier, terminer).
+ *  Vendeur = oui (saisit les contrats à la signature). */
+export function canGererLocations(p?: ProfileLike | null): boolean {
+  return isGestionOrAdmin(p) || role(p) === 'vendeur';
 }
 
 /** Peut accéder aux outils d'admin : Analyse, Activité, TV admin. */

@@ -13,6 +13,8 @@ import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
 import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
 import { PaiementsManager } from './PaiementsManager';
+import { LocationsManager } from './LocationsManager';
+import { canSeePaiements, canGererLocations } from '../lib/permissions';
 
 /** useGarage qui ne crash pas si pas de provider. */
 function useGarageOptional(): { items: Item[] } {
@@ -55,7 +57,8 @@ function VueSuiviVenteDesktop() {
   const [tvMode, setTvMode] = useState(false);
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
   const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
-  const [showPaiements, setShowPaiements] = useState(false);
+  const [showPaiements,  setShowPaiements]  = useState(false);
+  const [showLocManager, setShowLocManager] = useState(false);
 
   // Horloge live
   useEffect(() => {
@@ -204,9 +207,23 @@ function VueSuiviVenteDesktop() {
           </div>
         </button>
 
-        {/* Bouton Paiements (gestion seulement) + Horloge + bouton TV */}
+        {/* Bouton Locations + Paiements (vendeur+) + Horloge + bouton TV */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {isGestion && (
+          {canGererLocations(profile) && (
+            <button onClick={() => setShowLocManager(true)}
+              title="Contrats de location"
+              style={{
+                background: '#8b5cf622',
+                border: '1px solid #8b5cf666',
+                color: '#c4b5fd', padding: 'clamp(7px, 0.9vw, 11px) clamp(10px, 1.2vw, 14px)',
+                borderRadius: 8, cursor: 'pointer',
+                fontSize: 'clamp(11px, 1vw, 13px)', fontWeight: 700,
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              🔁 Locations
+            </button>
+          )}
+          {canSeePaiements(profile) && (
             <button onClick={() => setShowPaiements(true)}
               title="Suivi des paiements"
               style={{
@@ -321,6 +338,11 @@ function VueSuiviVenteDesktop() {
 
       {/* Modal PDF */}
       {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
+
+      {/* Modal contrats de location */}
+      {showLocManager && (
+        <LocationsManager onClose={() => setShowLocManager(false)} />
+      )}
 
       {/* Modal Suivi des paiements */}
       {showPaiements && <PaiementsManager onClose={() => setShowPaiements(false)} />}

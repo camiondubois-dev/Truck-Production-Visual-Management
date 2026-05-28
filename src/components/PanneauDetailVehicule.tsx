@@ -3,6 +3,7 @@ import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useFinancialData } from '../hooks/useFinancialData';
+import { canArchiverVehicule } from '../lib/permissions';
 import { FinanceSection } from './FinancialBandeau';
 import { photoService } from '../services/photoService';
 import { reservoirService } from '../services/reservoirService';
@@ -185,6 +186,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
 
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const isGestion = session?.role === 'gestion' || session?.role === 'admin';
+  const canArchiver = canArchiverVehicule(session);
   const montrerCommercial = v.type === 'eau' || v.type === 'detail';
   const etatCommercial = v.etatCommercial ?? 'non-vendu';
   const clientLie = v.clientId ? clients.find(c => c.id === v.clientId) : null;
@@ -947,7 +949,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
           )}
 
           {/* ── Archiver ─────────────────────────── */}
-          {v.statut !== 'archive' && isGestion && (
+          {v.statut !== 'archive' && canArchiver && (
             <div style={{ marginBottom: 14 }}>
               <button onClick={() => { archiverVehicule(v.id); onClose(); }}
                 style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
@@ -957,7 +959,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
           )}
 
           {/* ── Désarchiver (réintroduire dans le pipeline) ─────── */}
-          {v.statut === 'archive' && isGestion && (
+          {v.statut === 'archive' && canArchiver && (
             <div style={{ marginBottom: 14, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8, fontWeight: 600 }}>
                 📦 Ce véhicule est archivé
