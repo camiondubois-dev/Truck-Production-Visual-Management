@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule } from '../types/inventaireTypes';
+import { photoService } from '../services/photoService';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { supabase } from '../lib/supabase';
 import { SLOT_TO_GARAGE } from '../data/garageData';
@@ -22,6 +23,8 @@ interface InventaireContextType {
   archiverVehicule: (id: string) => Promise<void>;
   desarchiverVehicule: (id: string) => Promise<void>;
   supprimerVehicule: (id: string) => Promise<void>;
+  ajouterDocumentVehicule: (vehiculeId: string, fichier: File) => Promise<void>;
+  supprimerDocumentVehicule: (vehiculeId: string, docId: string) => Promise<void>;
 }
 
 const InventaireContext = createContext<InventaireContextType | null>(null);
@@ -359,6 +362,37 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     setVehicules(prev => prev.filter(v => v.id !== id));
   };
 
+  // ── Documents PDF ────────────────────────────────────────────────
+  const ajouterDocumentVehicule = async (vehiculeId: string, fichier: File) => {
+    const { url, storagePath } = await photoService.uploaderDocument(fichier);
+    const tailleKB = Math.round(fichier.size / 1024);
+    const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
+    const doc: DocumentVehicule = {
+      id: crypto.randomUUID(),
+      nom: fichier.name,
+      taille,
+      dateUpload: new Date().toISOString(),
+      url,
+      storagePath,
+    };
+    await inventaireService.ajouterDocument(vehiculeId, doc);
+    setVehicules(prev => prev.map(v =>
+      v.id === vehiculeId
+        ? { ...v, documents: [...(v.documents ?? []), doc] }
+        : v
+    ));
+  };
+
+  const supprimerDocumentVehicule = async (vehiculeId: string, docId: string) => {
+    const { storagePath } = await inventaireService.supprimerDocument(vehiculeId, docId);
+    await photoService.supprimerDocumentStorage(storagePath);
+    setVehicules(prev => prev.map(v =>
+      v.id === vehiculeId
+        ? { ...v, documents: (v.documents ?? []).filter(d => d.id !== docId) }
+        : v
+    ));
+  };
+
   return (
     <InventaireContext.Provider value={{
       vehicules, loading,
@@ -367,6 +401,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       mettreAJourPhotoInventaire, mettreAJourType,
       mettreAJourEtapes, mettreAJourRoadMap, mettreAJourPriorites, mettreAJourReservoir,
       marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
+      ajouterDocumentVehicule, supprimerDocumentVehicule,
     }}>
       {children}
     </InventaireContext.Provider>

@@ -1,5 +1,15 @@
 export type StatutInventaire = 'disponible' | 'en-production' | 'archive';
 
+/** Document PDF attaché à un véhicule — stocké dans Supabase Storage (URL, pas base64). */
+export interface DocumentVehicule {
+  id:          string;   // uuid
+  nom:         string;   // nom original du fichier
+  taille:      string;   // ex: "1.2 MB"
+  dateUpload:  string;   // ISO
+  url:         string;   // URL publique Supabase Storage
+  storagePath: string;   // chemin dans le bucket (pour supprimer)
+}
+
 export interface EtapeFaite {
   stationId: string;
   fait: boolean;
@@ -61,6 +71,7 @@ export interface VehiculeInventaire {
   modePaiementDepot?: string;   // 'virement' | 'cheque' | 'carte' | 'comptant' | 'po'
   roadMap?: RoadMapEtape[];
   prixAchat?: number;           // prix d'achat réel du camion → prod_ventes.prix_achat_reel
+  documents?: DocumentVehicule[]; // PDFs attachés au véhicule (stockés dans Supabase Storage)
 }
 
 /**

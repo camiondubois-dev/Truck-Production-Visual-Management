@@ -14,7 +14,7 @@ import { useClients } from '../contexts/ClientContext';
 import { supabase } from '../lib/supabase';
 import { STATIONS } from '../data/stations';
 import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
-import type { Item, EtatCommercial, Document } from '../types/item.types';
+import type { Item, EtatCommercial } from '../types/item.types';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
 
 // ── Types exportés ──────────────────────────────────────────────
@@ -155,15 +155,17 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
     mettreAJourRoadMap, mettreAJourPhotoInventaire,
     marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir, mettreAJourType,
+    ajouterDocumentVehicule, supprimerDocumentVehicule,
   } = useInventaire();
-  const { supprimerItem, ajouterDocument, supprimerDocument, assignerSlot, slotMap, rechargerItems } = useGarage();
+  const { supprimerItem, assignerSlot, slotMap, rechargerItems } = useGarage();
   const { profile: session } = useAuth();
   const { clients } = useClients();
 
   const [confirmerSuppr, setConfirmerSuppr] = useState(false);
   const [confirmerRetour, setConfirmerRetour] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docErreur, setDocErreur]       = useState<string | null>(null);
   const [popupStation, setPopupStation] = useState<string | null>(null);
 
   // Réservoir state
@@ -794,57 +796,64 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             </div>
           )}
 
-          {/* ── Documents (si prod_item lié) ─────── */}
-          {item && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>📎 Documents</span>
-                <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{item.documents?.length ?? 0}/3</span>
-              </div>
-              {(item.documents ?? []).map(doc => (
-                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid #e5e7eb', background: '#f8fafc' }}>
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>📄</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
-                  </div>
-                  <button onClick={() => setPdfOuvert({ nom: doc.nom, base64: doc.base64 })}
-                    style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                    👁 Voir
-                  </button>
-                  <button onClick={() => supprimerDocument(item.id, doc.id)}
-                    style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                    🗑
-                  </button>
-                </div>
-              ))}
-              {(item.documents?.length ?? 0) < 3 && (
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1.5px dashed #d1d5db', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#3b82f6'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; }}
-                >
-                  <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      if (file.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        const base64 = reader.result as string;
-                        const tailleKB = Math.round(file.size / 1024);
-                        const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
-                        const doc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
-                        ajouterDocument(item.id, doc);
-                      };
-                      reader.readAsDataURL(file);
-                      e.target.value = '';
-                    }}
-                  />
-                  + Ajouter un document PDF
-                </label>
-              )}
+          {/* ── Documents PDF ─────────────────────────────────── */}
+          {/* Disponible pour TOUS les camions (attaché à prod_inventaire, pas prod_items) */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>📎 Documents</span>
+              <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{v.documents?.length ?? 0}/3</span>
             </div>
-          )}
+
+            {(v.documents ?? []).map(doc => (
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid #e5e7eb', background: '#f8fafc' }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>📄</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
+                </div>
+                <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0, textDecoration: 'none' }}>
+                  👁 Voir
+                </a>
+                <button onClick={() => supprimerDocumentVehicule(v.id, doc.id)}
+                  style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  🗑
+                </button>
+              </div>
+            ))}
+
+            {docErreur && (
+              <div style={{ fontSize: 12, color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 10px', marginBottom: 8 }}>
+                ⚠️ {docErreur}
+              </div>
+            )}
+
+            {(v.documents?.length ?? 0) < 3 && (
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1.5px dashed #d1d5db', background: uploadingDoc ? '#f0f9ff' : 'white', color: '#6b7280', fontSize: 12, cursor: uploadingDoc ? 'wait' : 'pointer', opacity: uploadingDoc ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!uploadingDoc) (e.currentTarget as HTMLLabelElement).style.borderColor = '#3b82f6'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#d1d5db'; }}
+              >
+                <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} disabled={uploadingDoc}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    if (file.size > 20 * 1024 * 1024) { setDocErreur('Fichier trop volumineux (max 20 MB).'); return; }
+                    setDocErreur(null);
+                    setUploadingDoc(true);
+                    try {
+                      await ajouterDocumentVehicule(v.id, file);
+                    } catch (err: any) {
+                      setDocErreur(err?.message ?? 'Erreur lors de l\'upload.');
+                    } finally {
+                      setUploadingDoc(false);
+                    }
+                  }}
+                />
+                {uploadingDoc ? '⏳ Envoi en cours…' : '+ Ajouter un document PDF'}
+              </label>
+            )}
+          </div>
 
           {/* ── Actions slot (si dans un slot) ─────── */}
           {item?.slotId && (() => {
@@ -1012,7 +1021,6 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
         )}
       </div>
 
-      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
     </>
   );
 }

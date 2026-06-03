@@ -33,4 +33,35 @@ export const photoService = {
 
     if (error) console.error('Erreur suppression photo:', error);
   },
+
+  /** Upload un PDF dans le bucket camions-photos/documents/ — retourne { url, storagePath } */
+  async uploaderDocument(fichier: File): Promise<{ url: string; storagePath: string }> {
+    const ext = fichier.name.split('.').pop()?.toLowerCase() ?? 'pdf';
+    const storagePath = `documents/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('camions-photos')
+      .upload(storagePath, fichier, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: fichier.type || 'application/pdf',
+      });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from('camions-photos')
+      .getPublicUrl(storagePath);
+
+    return { url: data.publicUrl, storagePath };
+  },
+
+  /** Supprime un document PDF du Storage via son storagePath */
+  async supprimerDocumentStorage(storagePath: string): Promise<void> {
+    if (!storagePath) return;
+    const { error } = await supabase.storage
+      .from('camions-photos')
+      .remove([storagePath]);
+    if (error) console.error('Erreur suppression document Storage:', error);
+  },
 };

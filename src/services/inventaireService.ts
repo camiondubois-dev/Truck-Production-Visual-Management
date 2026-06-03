@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { VehiculeInventaire, EtapeFaite, RoadMapEtape } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule } from '../types/inventaireTypes';
 import type { Item, StationProgress } from '../types/item.types';
 
 const generateUUID = () =>
@@ -59,6 +59,7 @@ export function fromDB(row: any): VehiculeInventaire {
     montantDepot: row.montant_depot ?? undefined,
     dateDepot: row.date_depot ?? undefined,
     modePaiementDepot: row.mode_paiement_depot ?? undefined,
+    documents: row.documents ?? [],
   };
 }
 
@@ -99,6 +100,7 @@ function toDB(v: VehiculeInventaire): any {
     paiement_depot: v.paiementDepot ?? false,
     paiement_complet: v.paiementComplet ?? false,
     paiement_po: v.paiementPo ?? false,
+    documents: v.documents ?? [],
   };
 }
 
@@ -437,5 +439,45 @@ export const inventaireService = {
       .eq('id', v.id);
 
     return jobId;
+  },
+
+  // ── Documents PDF ─────────────────────────────────────────────
+  // Stockés dans prod_inventaire.documents (JSONB) avec URLs Supabase Storage.
+  // Max 3 documents par véhicule.
+
+  async ajouterDocument(vehiculeId: string, doc: DocumentVehicule): Promise<void> {
+    // Lire les docs actuels
+    const { data, error: fetchErr } = await supabase
+      .from('prod_inventaire')
+      .select('documents')
+      .eq('id', vehiculeId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const existants: DocumentVehicule[] = data?.documents ?? [];
+    if (existants.length >= 3) throw new Error('Maximum 3 documents par véhicule.');
+    const nouveaux = [...existants, doc];
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ documents: nouveaux, updated_at: new Date().toISOString() })
+      .eq('id', vehiculeId);
+    if (error) throw error;
+  },
+
+  async supprimerDocument(vehiculeId: string, docId: string): Promise<{ storagePath: string }> {
+    const { data, error: fetchErr } = await supabase
+      .from('prod_inventaire')
+      .select('documents')
+      .eq('id', vehiculeId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const existants: DocumentVehicule[] = data?.documents ?? [];
+    const aSupprimer = existants.find(d => d.id === docId);
+    const nouveaux = existants.filter(d => d.id !== docId);
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ documents: nouveaux, updated_at: new Date().toISOString() })
+      .eq('id', vehiculeId);
+    if (error) throw error;
+    return { storagePath: aSupprimer?.storagePath ?? '' };
   },
 };
