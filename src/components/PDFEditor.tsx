@@ -30,13 +30,17 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
   const [pageNum, setPageNum]     = useState(1);      // 1-based
   const [outil, setOutil]         = useState<Outil>('select');
   const [containerW, setContainerW] = useState(800);
+  const [zoom, setZoom]           = useState(1);        // 1 = ajusté à la largeur
   const [mode, setMode]           = useState<Mode>('detecting');
   const [saving, setSaving]       = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showSign, setShowSign]   = useState(false);
   const [dirty, setDirty]         = useState(false);
+  const [showClosePrompt, setShowClosePrompt] = useState(false);
   const [erreur, setErreur]       = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
+
+  const displayW = Math.round(containerW * zoom);
 
   const wrapRef    = useRef<HTMLDivElement>(null);  // mesure largeur dispo
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -204,7 +208,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
   };
 
   // Sauvegarde mode annotation : couche JSON (PDF reste « vivant »)
-  const sauverAnnotations = async () => {
+  const sauverAnnotations = async (): Promise<boolean> => {
     flushPage();
     setSaving(true); setErreur(null);
     try {
@@ -214,8 +218,10 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
       }
       await onSave({ version: 1, pages, updatedAt: new Date().toISOString() });
       setDirty(false);
+      return true;
     } catch (e: any) {
       setErreur(e?.message ?? 'Erreur lors de la sauvegarde.');
+      return false;
     } finally { setSaving(false); }
   };
 
@@ -227,20 +233,22 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
     return new Blob([bytes], { type: 'application/pdf' });
   };
 
-  const sauverFormulaire = async () => {
-    if (!pdfProxy.current || !onRemplacerFichier) return;
+  const sauverFormulaire = async (): Promise<boolean> => {
+    if (!pdfProxy.current || !onRemplacerFichier) return false;
     setSaving(true); setErreur(null);
     try {
       const blob = await genererPdfRempli();
       await onRemplacerFichier(blob);
       setDirty(false);
+      return true;
     } catch (e: any) {
       setErreur(e?.message ?? 'Erreur lors de la sauvegarde.');
+      return false;
     } finally { setSaving(false); }
   };
 
   // ── Sauvegarde / Export selon le mode ──
-  const sauvegarder = () => (mode === 'form' ? sauverFormulaire() : sauverAnnotations());
+  const sauvegarder = (): Promise<boolean> => (mode === 'form' ? sauverFormulaire() : sauverAnnotations());
 
   const exporter = async () => {
     setExporting(true); setErreur(null);
@@ -281,9 +289,14 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
     } finally { setExporting(false); }
   };
 
+  // Fermeture : si des modifications non sauvegardées → demander d'enregistrer.
   const fermer = () => {
-    if (dirty && !confirm('Des modifications ne sont pas sauvegardées. Fermer quand même ?')) return;
+    if (dirty) { setShowClosePrompt(true); return; }
     onClose();
+  };
+  const enregistrerEtFermer = async () => {
+    const ok = await sauvegarder();
+    if (ok) { setShowClosePrompt(false); onClose(); }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -303,6 +316,18 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
             {saving ? '⏳…' : dirty ? '💾 Sauvegarder' : '✓ Sauvegardé'}
           </button>
         </div>
+      </div>
+
+      {/* Barre de zoom — fiable sur mobile (boutons + / −) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '6px 14px', background: '#111827', borderBottom: '1px solid #374151' }}>
+        <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))} disabled={zoom <= 0.5}
+          style={{ width: 42, height: 38, borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>−</button>
+        <button onClick={() => setZoom(1)}
+          style={{ minWidth: 64, height: 38, borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          {Math.round(zoom * 100)}%
+        </button>
+        <button onClick={() => setZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))} disabled={zoom >= 3}
+          style={{ width: 42, height: 38, borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
       </div>
 
       {/* Barre d'outils — selon le mode */}
@@ -339,6 +364,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
       <div
         ref={wrapRef}
         onInput={() => { if (mode === 'form') setDirty(true); }}
+        onChangeCapture={() => { if (mode === 'form') setDirty(true); }}
         style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}
       >
         {!fileSource ? (
@@ -351,7 +377,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
             </div>
           </div>
         ) : (
-          <div style={{ position: 'relative', width: containerW, height: 'fit-content' }}>
+          <div style={{ position: 'relative', width: displayW, height: 'fit-content' }}>
             <Document
               file={fileSource}
               onLoadSuccess={onDocLoad}
@@ -362,7 +388,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
                 <Page
                   key={pageNum}
                   pageNumber={pageNum}
-                  width={containerW}
+                  width={displayW}
                   renderTextLayer={false}
                   renderAnnotationLayer={mode === 'form'}
                   renderForms={mode === 'form'}
@@ -398,6 +424,32 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
 
       {chargement && !erreur && fileSource && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', pointerEvents: 'none' }}>⏳ Chargement…</div>
+      )}
+
+      {/* Dialogue : enregistrer avant de fermer ? */}
+      {showClosePrompt && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 22, width: 'min(420px, 96vw)', boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', marginBottom: 6 }}>💾 Enregistrer les modifications ?</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 18, lineHeight: 1.5 }}>
+              Tu as des modifications non sauvegardées sur ce document.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button onClick={enregistrerEtFermer} disabled={saving}
+                style={{ padding: '13px', borderRadius: 10, border: 'none', background: '#22c55e', color: 'white', fontSize: 15, fontWeight: 800, cursor: saving ? 'wait' : 'pointer' }}>
+                {saving ? '⏳ Enregistrement…' : '✓ Enregistrer et fermer'}
+              </button>
+              <button onClick={() => { setShowClosePrompt(false); onClose(); }} disabled={saving}
+                style={{ padding: '13px', borderRadius: 10, border: '1px solid #fca5a5', background: 'white', color: '#dc2626', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                Fermer sans enregistrer
+              </button>
+              <button onClick={() => setShowClosePrompt(false)} disabled={saving}
+                style={{ padding: '12px', borderRadius: 10, border: '1px solid #e5e7eb', background: 'white', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
