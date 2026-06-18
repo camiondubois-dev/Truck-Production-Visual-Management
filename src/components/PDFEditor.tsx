@@ -75,6 +75,14 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
     return () => window.removeEventListener('resize', maj);
   }, []);
 
+  // Verrou de défilement de l'arrière-plan pendant l'édition (évite le rebond
+  // iOS qui peut donner l'impression que l'éditeur se ferme).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // ── Détection du type de PDF au chargement (a-t-il de vrais champs ?) ──
   const onDocLoad = async (pdf: any) => {
     pdfProxy.current = pdf;
@@ -301,11 +309,11 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
 
   // ─────────────────────────────────────────────────────────────
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#1f2937', display: 'flex', flexDirection: 'column' }}>
-      {/* Barre supérieure */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#111827', borderBottom: '1px solid #374151', gap: 10, flexWrap: 'wrap' }}>
+    <div style={{ position: 'fixed', inset: 0, height: '100dvh', zIndex: 2500, background: '#1f2937', display: 'flex', flexDirection: 'column', overscrollBehavior: 'contain' }}>
+      {/* Barre supérieure — paddingTop = sous l'encoche/barre d'état iPhone (safe-area) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', background: '#111827', borderBottom: '1px solid #374151', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <button onClick={fermer} style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>✕ Fermer</button>
+          <button onClick={fermer} style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>✕ Fermer</button>
           <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -365,7 +373,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
         ref={wrapRef}
         onInput={() => { if (mode === 'form') setDirty(true); }}
         onChangeCapture={() => { if (mode === 'form') setDirty(true); }}
-        style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}
+        style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16, overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
       >
         {!fileSource ? (
           <div style={{ color: '#fecaca', maxWidth: 460, textAlign: 'center', padding: 40, alignSelf: 'center' }}>
@@ -408,7 +416,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
 
       {/* Navigation pages */}
       {numPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '10px', background: '#111827', borderTop: '1px solid #374151' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '10px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', background: '#111827', borderTop: '1px solid #374151' }}>
           <button onClick={() => changerPage(-1)} disabled={pageNum <= 1} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: pageNum <= 1 ? '#374151' : '#3b82f6', color: 'white', fontSize: 14, fontWeight: 600, cursor: pageNum <= 1 ? 'default' : 'pointer' }}>← Préc.</button>
           <span style={{ color: 'white', fontSize: 14, fontWeight: 600 }}>Page {pageNum} / {numPages}</span>
           <button onClick={() => changerPage(1)} disabled={pageNum >= numPages} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: pageNum >= numPages ? '#374151' : '#3b82f6', color: 'white', fontSize: 14, fontWeight: 600, cursor: pageNum >= numPages ? 'default' : 'pointer' }}>Suiv. →</button>
