@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,13 +9,15 @@ import { photoService } from '../services/photoService';
 import { reservoirService } from '../services/reservoirService';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { RoadMapEditor } from './RoadMapEditor';
+// Lazy : fabric + pdf-lib + react-pdf ne se chargent que si on ouvre l'éditeur
+const PDFEditor = lazy(() => import('./PDFEditor').then(m => ({ default: m.PDFEditor })));
 import { PopupAssignationSlot } from './PopupAssignationSlot';
 import { useClients } from '../contexts/ClientContext';
 import { supabase } from '../lib/supabase';
 import { STATIONS } from '../data/stations';
 import { SLOT_TO_GARAGE, STATION_TO_GARAGE } from '../data/garageData';
 import type { Item, EtatCommercial } from '../types/item.types';
-import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
+import { estVehiculePret, type VehiculeInventaire, type DocumentVehicule } from '../types/inventaireTypes';
 
 // ── Types exportés ──────────────────────────────────────────────
 export type Section = 'a-planifier' | 'en-attente' | 'dans-le-garage' | 'pret' | 'archive';
@@ -155,7 +157,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
     mettreAJourRoadMap, mettreAJourPhotoInventaire,
     marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir, mettreAJourType,
-    ajouterDocumentVehicule, supprimerDocumentVehicule,
+    ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument,
   } = useInventaire();
   const { supprimerItem, assignerSlot, slotMap, rechargerItems } = useGarage();
   const { profile: session } = useAuth();
@@ -166,6 +168,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docErreur, setDocErreur]       = useState<string | null>(null);
+  const [docAEditer, setDocAEditer]     = useState<DocumentVehicule | null>(null);
   const [popupStation, setPopupStation] = useState<string | null>(null);
 
   // Réservoir state
@@ -873,6 +876,13 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
                   <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
                 </div>
+                {doc.annotations?.pages && Object.keys(doc.annotations.pages).length > 0 && (
+                  <span title="Contient des annotations" style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✍️</span>
+                )}
+                <button onClick={() => setDocAEditer(doc)}
+                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #16a34a', background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  ✏️ Remplir
+                </button>
                 <a href={doc.url} target="_blank" rel="noopener noreferrer"
                   style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0, textDecoration: 'none' }}>
                   👁 Voir
@@ -1082,6 +1092,19 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
           />
         )}
       </div>
+
+      {docAEditer && (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15 }}>⏳ Chargement de l'éditeur…</div>}>
+          <PDFEditor
+            doc={docAEditer}
+            onSave={async (annotations) => {
+              await sauverAnnotationsDocument(v.id, docAEditer.id, annotations);
+              setDocAEditer(prev => prev ? { ...prev, annotations } : prev);
+            }}
+            onClose={() => setDocAEditer(null)}
+          />
+        </Suspense>
+      )}
 
     </>
   );

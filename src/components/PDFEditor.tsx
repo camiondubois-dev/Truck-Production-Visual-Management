@@ -1,0 +1,354 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Document, Page } from 'react-pdf';
+import * as fabric from 'fabric';
+import { PDFDocument } from 'pdf-lib';
+import '../lib/pdfWorker';   // effet de bord : configure le worker pdf.js
+import { SignaturePad } from './SignaturePad';
+import type { DocumentVehicule, DocumentAnnotations } from '../types/inventaireTypes';
+
+type Outil = 'select' | 'text' | 'check' | 'date' | 'sign';
+
+// Forme stockée par page : dimensions d'affichage + objets Fabric.
+interface PageData { w: number; h: number; objects: any | null; }
+
+const OUTILS: { id: Outil; label: string; emoji: string }[] = [
+  { id: 'select', label: 'Sélection', emoji: '👆' },
+  { id: 'text',   label: 'Texte',     emoji: '🔤' },
+  { id: 'check',  label: 'Coche',     emoji: '✔️' },
+  { id: 'date',   label: 'Date',      emoji: '📅' },
+  { id: 'sign',   label: 'Signature', emoji: '🖊️' },
+];
+
+export function PDFEditor({ doc, onSave, onClose }: {
+  doc: DocumentVehicule;
+  onSave: (annotations: DocumentAnnotations) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [numPages, setNumPages]   = useState(0);
+  const [pageNum, setPageNum]     = useState(1);      // 1-based
+  const [outil, setOutil]         = useState<Outil>('select');
+  const [containerW, setContainerW] = useState(800);
+  const [saving, setSaving]       = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showSign, setShowSign]   = useState(false);
+  const [dirty, setDirty]         = useState(false);
+  const [erreur, setErreur]       = useState<string | null>(null);
+  const [chargement, setChargement] = useState(true);
+
+  const wrapRef    = useRef<HTMLDivElement>(null);  // mesure largeur dispo
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const fabricRef  = useRef<fabric.Canvas | null>(null);
+  const fabricPage = useRef<number | null>(null);  // index 0-based que le canvas détient réellement
+  const outilRef   = useRef<Outil>('select');
+  const pagesRef   = useRef<Record<number, PageData>>({});  // index 0-based
+  const renduDims  = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  outilRef.current = outil;
+  const pageIdx = pageNum - 1;
+
+  // ── Mesure de la largeur disponible (responsive tablette/mobile) ──
+  useEffect(() => {
+    const maj = () => {
+      const dispo = wrapRef.current?.clientWidth ?? 800;
+      setContainerW(Math.max(280, Math.min(dispo - 4, 1100)));
+    };
+    maj();
+    window.addEventListener('resize', maj);
+    return () => window.removeEventListener('resize', maj);
+  }, []);
+
+  // ── Sérialise l'état actuel du canvas dans pagesRef ──
+  // Utilise fabricPage (la page que le canvas détient vraiment) + ses propres
+  // dimensions, donc fiable même au resize ou au changement de page.
+  const flushPage = useCallback(() => {
+    const f = fabricRef.current;
+    if (!f || fabricPage.current == null) return;
+    pagesRef.current[fabricPage.current] = {
+      w: f.getWidth(),
+      h: f.getHeight(),
+      objects: f.toJSON(),
+    };
+  }, []);
+
+  // ── Ajout d'objets ──
+  const ajouterTextbox = (texte: string, x: number, y: number, couleur = '#111827', taille = 16) => {
+    const f = fabricRef.current;
+    if (!f) return;
+    const tb = new fabric.Textbox(texte, {
+      left: x, top: y, fontSize: taille, fill: couleur,
+      fontFamily: 'Helvetica, Arial, sans-serif', editable: true,
+      width: Math.min(220, renduDims.current.w * 0.6),
+    });
+    f.add(tb);
+    f.setActiveObject(tb);
+    if (texte === 'Texte') { tb.enterEditing(); tb.selectAll(); }
+    f.requestRenderAll();
+    setDirty(true);
+  };
+
+  const ajouterSignature = async (dataUrl: string) => {
+    const f = fabricRef.current;
+    if (!f) return;
+    const img = await fabric.Image.fromURL(dataUrl);
+    const cible = Math.min(200, renduDims.current.w * 0.4);
+    const scale = cible / (img.width ?? cible);
+    img.set({ left: renduDims.current.w * 0.3, top: renduDims.current.h * 0.4, scaleX: scale, scaleY: scale });
+    f.add(img);
+    f.setActiveObject(img);
+    f.requestRenderAll();
+    setDirty(true);
+    setOutil('select');
+  };
+
+  // ── Initialise / réinitialise Fabric après le rendu d'une page ──
+  const onPageRendu = useCallback(() => {
+    const holder = wrapRef.current?.querySelector('canvas.react-pdf__Page__canvas') as HTMLCanvasElement | null;
+    if (!holder || !overlayRef.current) return;
+    const w = holder.clientWidth;
+    const h = holder.clientHeight;
+    renduDims.current = { w, h };
+
+    // (Re)création du canvas Fabric — on sauvegarde d'abord l'état actuel
+    // dans la page que le canvas détient (préserve le travail au resize).
+    if (fabricRef.current) {
+      flushPage();
+      fabricRef.current.dispose();
+      fabricRef.current = null;
+    }
+    const f = new fabric.Canvas(overlayRef.current, {
+      width: w, height: h, backgroundColor: 'transparent',
+      selection: true, preserveObjectStacking: true,
+      allowTouchScrolling: true,   // défilement tactile possible sur tablette/téléphone
+    });
+    fabricRef.current = f;
+    fabricPage.current = pageIdx;
+
+    // Placement d'objets selon l'outil actif
+    f.on('mouse:down', (opt) => {
+      const t = outilRef.current;
+      if (t === 'select' || opt.target) return;
+      const p = f.getScenePoint(opt.e);
+      if (t === 'text')  ajouterTextbox('Texte', p.x, p.y);
+      if (t === 'check') ajouterTextbox('✔', p.x, p.y, '#16a34a', 26);
+      if (t === 'date')  ajouterTextbox(new Date().toLocaleDateString('fr-CA'), p.x, p.y);
+      if (t === 'text' || t === 'check' || t === 'date') setOutil('select');
+    });
+    f.on('object:modified', () => setDirty(true));
+
+    // Chargement des annotations existantes de cette page
+    const data = pagesRef.current[pageIdx];
+    if (data?.objects) {
+      f.loadFromJSON(data.objects).then(() => {
+        // Rééchelonne si l'affichage a changé (autre appareil / taille)
+        if (data.w && Math.abs(data.w - w) > 1) {
+          const fac = w / data.w;
+          f.getObjects().forEach((o: any) => {
+            o.left *= fac; o.top *= fac; o.scaleX *= fac; o.scaleY *= fac;
+            if (o.fontSize) o.fontSize *= fac;
+            if (o.type === 'textbox' && o.width) o.width *= fac;
+            o.setCoords();
+          });
+        }
+        f.requestRenderAll();
+      });
+    }
+  }, [pageIdx]);
+
+  // ── Suppression au clavier ──
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const f = fabricRef.current;
+      if (!f) return;
+      const actif = f.getActiveObject();
+      if ((e.key === 'Delete' || e.key === 'Backspace') && actif && !(actif as any).isEditing) {
+        f.remove(actif);
+        f.requestRenderAll();
+        setDirty(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => () => { fabricRef.current?.dispose(); }, []);
+
+  // ── Charge les annotations initiales en mémoire ──
+  useEffect(() => {
+    const pages = doc.annotations?.pages;
+    if (pages) {
+      const init: Record<number, PageData> = {};
+      for (const [k, v] of Object.entries(pages)) {
+        const pd = v as any;
+        // Compat : ancien format = JSON Fabric direct ; nouveau = { w,h,objects }
+        init[Number(k)] = pd?.objects !== undefined ? pd : { w: 0, h: 0, objects: pd };
+      }
+      pagesRef.current = init;
+    }
+  }, [doc.annotations]);
+
+  // ── Navigation ──
+  const changerPage = (delta: number) => {
+    flushPage();
+    setPageNum(p => Math.min(numPages, Math.max(1, p + delta)));
+  };
+
+  const supprimerActif = () => {
+    const f = fabricRef.current;
+    const actif = f?.getActiveObject();
+    if (f && actif) { f.remove(actif); f.requestRenderAll(); setDirty(true); }
+  };
+
+  // ── Sauvegarde (JSON, PDF reste « vivant ») ──
+  const sauvegarder = async () => {
+    flushPage();
+    setSaving(true);
+    setErreur(null);
+    try {
+      const pages: Record<number, unknown> = {};
+      for (const [k, v] of Object.entries(pagesRef.current)) {
+        if (v.objects && v.objects.objects && v.objects.objects.length > 0) pages[Number(k)] = v;
+      }
+      await onSave({ version: 1, pages, updatedAt: new Date().toISOString() });
+      setDirty(false);
+    } catch (e: any) {
+      setErreur(e?.message ?? 'Erreur lors de la sauvegarde.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Export PDF aplati (figé pour impression / envoi) ──
+  const exporterAplati = async () => {
+    flushPage();
+    setExporting(true);
+    setErreur(null);
+    try {
+      const bytes = await fetch(doc.url).then(r => r.arrayBuffer());
+      const pdfDoc = await PDFDocument.load(bytes);
+      const pages = pdfDoc.getPages();
+
+      for (const [k, v] of Object.entries(pagesRef.current)) {
+        const idx = Number(k);
+        if (!v.objects || !v.objects.objects || v.objects.objects.length === 0) continue;
+        if (idx >= pages.length) continue;
+
+        const off = new fabric.StaticCanvas(undefined, { width: v.w || 800, height: v.h || 1000 });
+        await off.loadFromJSON(v.objects);
+        off.renderAll();
+        const dataUrl = off.toDataURL({ format: 'png', multiplier: 2 });
+        off.dispose();
+
+        const png = await pdfDoc.embedPng(dataUrl);
+        const page = pages[idx];
+        page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+      }
+
+      const out = await pdfDoc.save();
+      const blob = new Blob([out], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.nom.replace(/\.pdf$/i, '') + '_rempli.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setErreur(e?.message ?? "Erreur lors de l'export.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const fermer = () => {
+    if (dirty && !confirm('Des modifications ne sont pas sauvegardées. Fermer quand même ?')) return;
+    onClose();
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#1f2937', display: 'flex', flexDirection: 'column' }}>
+      {/* Barre supérieure */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#111827', borderBottom: '1px solid #374151', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <button onClick={fermer} style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: '#374151', color: 'white', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>✕ Fermer</button>
+          <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button onClick={exporterAplati} disabled={exporting} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #4b5563', background: 'transparent', color: 'white', fontSize: 13, fontWeight: 600, cursor: exporting ? 'wait' : 'pointer' }}>
+            {exporting ? '⏳…' : '⬇️ Exporter PDF'}
+          </button>
+          <button onClick={sauvegarder} disabled={saving} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: dirty ? '#22c55e' : '#16a34a', color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+            {saving ? '⏳…' : dirty ? '💾 Sauvegarder' : '✓ Sauvegardé'}
+          </button>
+        </div>
+      </div>
+
+      {/* Barre d'outils */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#1f2937', borderBottom: '1px solid #374151', flexWrap: 'wrap' }}>
+        {OUTILS.map(o => (
+          <button key={o.id}
+            onClick={() => { if (o.id === 'sign') { setShowSign(true); } else { setOutil(o.id); } }}
+            style={{
+              padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              border: outil === o.id ? '2px solid #3b82f6' : '1px solid #4b5563',
+              background: outil === o.id ? '#1e3a8a' : '#374151', color: 'white',
+            }}>
+            {o.emoji} {o.label}
+          </button>
+        ))}
+        <div style={{ width: 1, height: 24, background: '#4b5563', margin: '0 4px' }} />
+        <button onClick={supprimerActif} style={{ padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid #7f1d1d', background: '#374151', color: '#fca5a5' }}>
+          🗑 Supprimer
+        </button>
+      </div>
+
+      {erreur && (
+        <div style={{ padding: '8px 14px', background: '#7f1d1d', color: '#fecaca', fontSize: 12 }}>⚠️ {erreur}</div>
+      )}
+
+      {/* Zone PDF + overlay */}
+      <div ref={wrapRef} style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}>
+        <div style={{ position: 'relative', width: containerW, height: 'fit-content' }}>
+          <Document
+            file={doc.url}
+            onLoadSuccess={({ numPages }) => { setNumPages(numPages); setChargement(false); }}
+            onLoadError={(e) => { setErreur('Impossible de charger le PDF : ' + e.message); setChargement(false); }}
+            loading={<div style={{ color: 'white', padding: 40 }}>⏳ Chargement du PDF…</div>}
+          >
+            <Page
+              key={pageNum}
+              pageNumber={pageNum}
+              width={containerW}
+              renderTextLayer={false}
+              renderAnnotationLayer={false}
+              onRenderSuccess={onPageRendu}
+            />
+          </Document>
+          {/* Canvas d'annotation par-dessus la page */}
+          <div style={{ position: 'absolute', top: 0, left: 0 }}>
+            <canvas ref={overlayRef} />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation pages */}
+      {numPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '10px', background: '#111827', borderTop: '1px solid #374151' }}>
+          <button onClick={() => changerPage(-1)} disabled={pageNum <= 1} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: pageNum <= 1 ? '#374151' : '#3b82f6', color: 'white', fontSize: 14, fontWeight: 600, cursor: pageNum <= 1 ? 'default' : 'pointer' }}>← Préc.</button>
+          <span style={{ color: 'white', fontSize: 14, fontWeight: 600 }}>Page {pageNum} / {numPages}</span>
+          <button onClick={() => changerPage(1)} disabled={pageNum >= numPages} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: pageNum >= numPages ? '#374151' : '#3b82f6', color: 'white', fontSize: 14, fontWeight: 600, cursor: pageNum >= numPages ? 'default' : 'pointer' }}>Suiv. →</button>
+        </div>
+      )}
+
+      {showSign && (
+        <SignaturePad
+          onConfirm={(d) => { setShowSign(false); ajouterSignature(d); }}
+          onCancel={() => setShowSign(false)}
+        />
+      )}
+
+      {chargement && !erreur && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', pointerEvents: 'none' }}>⏳ Chargement…</div>
+      )}
+    </div>
+  );
+}

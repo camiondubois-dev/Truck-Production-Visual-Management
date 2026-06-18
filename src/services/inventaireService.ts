@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule, DocumentAnnotations } from '../types/inventaireTypes';
 import type { Item, StationProgress } from '../types/item.types';
 
 const generateUUID = () =>
@@ -479,5 +479,28 @@ export const inventaireService = {
       .eq('id', vehiculeId);
     if (error) throw error;
     return { storagePath: aSupprimer?.storagePath ?? '' };
+  },
+
+  /** Met à jour la couche d'annotations d'un document (PDF « vivant » remodifiable). */
+  async mettreAJourAnnotations(
+    vehiculeId: string,
+    docId: string,
+    annotations: DocumentAnnotations,
+  ): Promise<void> {
+    const { data, error: fetchErr } = await supabase
+      .from('prod_inventaire')
+      .select('documents')
+      .eq('id', vehiculeId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const existants: DocumentVehicule[] = data?.documents ?? [];
+    const nouveaux = existants.map(d =>
+      d.id === docId ? { ...d, annotations } : d
+    );
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ documents: nouveaux, updated_at: new Date().toISOString() })
+      .eq('id', vehiculeId);
+    if (error) throw error;
   },
 };

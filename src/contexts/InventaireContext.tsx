@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule } from '../types/inventaireTypes';
+import type { VehiculeInventaire, EtapeFaite, RoadMapEtape, DocumentVehicule, DocumentAnnotations } from '../types/inventaireTypes';
 import { photoService } from '../services/photoService';
 import { inventaireService, fromDB } from '../services/inventaireService';
 import { supabase } from '../lib/supabase';
@@ -25,6 +25,7 @@ interface InventaireContextType {
   supprimerVehicule: (id: string) => Promise<void>;
   ajouterDocumentVehicule: (vehiculeId: string, fichier: File) => Promise<void>;
   supprimerDocumentVehicule: (vehiculeId: string, docId: string) => Promise<void>;
+  sauverAnnotationsDocument: (vehiculeId: string, docId: string, annotations: DocumentAnnotations) => Promise<void>;
 }
 
 const InventaireContext = createContext<InventaireContextType | null>(null);
@@ -393,6 +394,19 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  const sauverAnnotationsDocument = async (
+    vehiculeId: string,
+    docId: string,
+    annotations: DocumentAnnotations,
+  ) => {
+    await inventaireService.mettreAJourAnnotations(vehiculeId, docId, annotations);
+    setVehicules(prev => prev.map(v =>
+      v.id === vehiculeId
+        ? { ...v, documents: (v.documents ?? []).map(d => d.id === docId ? { ...d, annotations } : d) }
+        : v
+    ));
+  };
+
   return (
     <InventaireContext.Provider value={{
       vehicules, loading,
@@ -401,7 +415,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       mettreAJourPhotoInventaire, mettreAJourType,
       mettreAJourEtapes, mettreAJourRoadMap, mettreAJourPriorites, mettreAJourReservoir,
       marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
-      ajouterDocumentVehicule, supprimerDocumentVehicule,
+      ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument,
     }}>
       {children}
     </InventaireContext.Provider>

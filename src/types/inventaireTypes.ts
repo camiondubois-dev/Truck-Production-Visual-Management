@@ -1,13 +1,26 @@
 export type StatutInventaire = 'disponible' | 'en-production' | 'archive';
 
+/**
+ * Annotations d'un document PDF — « couche vivante » par-dessus le PDF.
+ * On stocke le JSON Fabric.js de chaque page séparément (clé = index de page 0-based).
+ * Le PDF original n'est jamais modifié : on superpose, donc c'est toujours remodifiable.
+ */
+export interface DocumentAnnotations {
+  version:    number;                  // schéma (1)
+  pages:      Record<number, unknown>; // index de page → JSON Fabric.js
+  updatedAt:  string;                  // ISO
+  updatedBy?: string;                  // nom de l'utilisateur (optionnel)
+}
+
 /** Document PDF attaché à un véhicule — stocké dans Supabase Storage (URL, pas base64). */
 export interface DocumentVehicule {
-  id:          string;   // uuid
-  nom:         string;   // nom original du fichier
-  taille:      string;   // ex: "1.2 MB"
-  dateUpload:  string;   // ISO
-  url:         string;   // URL publique Supabase Storage
-  storagePath: string;   // chemin dans le bucket (pour supprimer)
+  id:           string;   // uuid
+  nom:          string;   // nom original du fichier
+  taille:       string;   // ex: "1.2 MB"
+  dateUpload:   string;   // ISO
+  url:          string;   // URL publique Supabase Storage
+  storagePath:  string;   // chemin dans le bucket (pour supprimer)
+  annotations?: DocumentAnnotations; // couche d'annotations remodifiable
 }
 
 export interface EtapeFaite {
