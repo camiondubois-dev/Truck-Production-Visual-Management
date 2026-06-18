@@ -114,6 +114,24 @@ function toDBEtape(e: EtapeMoteur): any {
   };
 }
 
+/**
+ * Statut global d'un moteur déduit de l'état RÉEL de ses étapes.
+ * Source unique de vérité → évite les statuts « collés » (ex. resté
+ * « en cours » après avoir annulé l'étape active).
+ *   - aucune étape          → en-attente
+ *   - toutes finies/sautées → pret
+ *   - une étape en-cours    → en-cours
+ *   - au moins une terminée → en-cours (commencé, en pause)
+ *   - sinon (tout planifié) → en-attente
+ */
+function statutDepuisRoadMap(roadMap: EtapeMoteur[]): StatutMoteur {
+  if (roadMap.length === 0) return 'en-attente';
+  if (roadMap.every(e => e.statut === 'termine' || e.statut === 'saute')) return 'pret';
+  if (roadMap.some(e => e.statut === 'en-cours')) return 'en-cours';
+  if (roadMap.some(e => e.statut === 'termine')) return 'en-cours';
+  return 'en-attente';
+}
+
 // ── CRUD ─────────────────────────────────────────────────────────
 export const moteurService = {
   async getAll(): Promise<Moteur[]> {
@@ -177,7 +195,7 @@ export const moteurService = {
     // Si le moteur n'a pas encore de date d'entrée, on la met
     const updates: Partial<Moteur> = {
       roadMap: updatedRoadMap,
-      statut: 'en-cours',
+      statut: statutDepuisRoadMap(updatedRoadMap),
       employeCourant: employeId,
     };
     if (!moteur.dateEntree) updates.dateEntree = now;
@@ -203,19 +221,15 @@ export const moteurService = {
         : e
     );
 
-    // Vérifier si toutes les étapes sont finies
-    const toutesFinies = updatedRoadMap.every(e => e.statut === 'termine' || e.statut === 'saute');
-    const updates: Partial<Moteur> = { roadMap: updatedRoadMap };
-
-    if (toutesFinies) {
-      updates.statut = 'pret';
-      updates.dateSortie = now;
-      updates.employeCourant = undefined;
-    } else {
-      // Encore des étapes : libère l'employé courant si plus d'étapes en-cours
-      const encoreEnCours = updatedRoadMap.some(e => e.statut === 'en-cours');
-      if (!encoreEnCours) updates.employeCourant = undefined;
-    }
+    // Statut recalculé depuis l'état réel des étapes
+    const nouveauStatut = statutDepuisRoadMap(updatedRoadMap);
+    const updates: Partial<Moteur> = {
+      roadMap: updatedRoadMap,
+      statut: nouveauStatut,
+      dateSortie: nouveauStatut === 'pret' ? now : undefined,
+    };
+    // Libère l'employé courant s'il n'y a plus d'étape en-cours
+    if (!updatedRoadMap.some(e => e.statut === 'en-cours')) updates.employeCourant = undefined;
 
     await moteurService.mettreAJour(moteurId, updates);
   },
@@ -229,18 +243,18 @@ export const moteurService = {
       e.id === etapeUuid ? { ...e, statut: 'saute' as const } : e
     );
 
-    const toutesFinies = updatedRoadMap.every(e => e.statut === 'termine' || e.statut === 'saute');
-    const updates: Partial<Moteur> = { roadMap: updatedRoadMap };
-    if (toutesFinies) {
-      updates.statut = 'pret';
-      updates.dateSortie = new Date().toISOString();
-      updates.employeCourant = undefined;
-    }
+    const nouveauStatut = statutDepuisRoadMap(updatedRoadMap);
+    const updates: Partial<Moteur> = {
+      roadMap: updatedRoadMap,
+      statut: nouveauStatut,
+      dateSortie: nouveauStatut === 'pret' ? new Date().toISOString() : undefined,
+    };
+    if (!updatedRoadMap.some(e => e.statut === 'en-cours')) updates.employeCourant = undefined;
 
     await moteurService.mettreAJour(moteurId, updates);
   },
 
-  /** Re-planifie une étape (revert termine/sauté → planifié). */
+  /** Re-planifie une étape (revert termine/sauté/en-cours → planifié). */
   async replanifierEtape(moteurId: string, etapeUuid: string): Promise<void> {
     const moteur = await moteurService.getById(moteurId);
     if (!moteur) throw new Error('Moteur introuvable');
@@ -251,18 +265,16 @@ export const moteurService = {
         : e
     );
 
-    // Si le moteur était 'pret', repasse à 'en-cours' (ou 'en-attente' si rien d'actif)
-    let nouveauStatut: StatutMoteur = moteur.statut;
-    if (moteur.statut === 'pret') {
-      const actif = updatedRoadMap.some(e => e.statut === 'en-cours');
-      nouveauStatut = actif ? 'en-cours' : 'en-attente';
-    }
-
-    await moteurService.mettreAJour(moteurId, {
+    // Statut toujours recalculé depuis l'état réel (corrige les statuts collés)
+    const nouveauStatut = statutDepuisRoadMap(updatedRoadMap);
+    const updates: Partial<Moteur> = {
       roadMap: updatedRoadMap,
       statut: nouveauStatut,
       dateSortie: nouveauStatut === 'pret' ? moteur.dateSortie : undefined,
-    });
+    };
+    if (!updatedRoadMap.some(e => e.statut === 'en-cours')) updates.employeCourant = undefined;
+
+    await moteurService.mettreAJour(moteurId, updates);
   },
 
   /** Déplace un moteur vers un autre slot (poste). */
