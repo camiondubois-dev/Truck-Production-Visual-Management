@@ -42,7 +42,6 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
 
   // Préparation site Web (étape 7)
   const [millage, setMillage] = useState(moteur.millage ? String(moteur.millage) : '');
-  const [infoWeb, setInfoWeb] = useState(moteur.infoWeb ?? '');
   const [lienWeb, setLienWeb] = useState(moteur.lienWeb ?? '');
   const [savingWeb, setSavingWeb] = useState(false);
   const [webSauve, setWebSauve] = useState(false);
@@ -160,7 +159,6 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     setErreur(null);
     try {
       await mettreAJour(moteur.id, {
-        infoWeb: infoWeb.trim() || undefined,
         lienWeb: lienWeb.trim() || undefined,
       });
       setWebSauve(true);
@@ -549,15 +547,8 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
               </span>
             }>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 12, color: '#6b7280', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px' }}>
-                  Millage : <strong>{moteur.millage ? moteur.millage.toLocaleString('fr-CA') : '—'}</strong>
-                  <span style={{ color: '#9ca3af' }}> · modifiable dans Identification</span>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Description / notes web</div>
-                  <textarea value={infoWeb} onChange={e => setInfoWeb(e.target.value)}
-                    placeholder="Description de l'annonce, état, particularités à publier…"
-                    rows={4} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  Toutes les infos du moteur sont dans <strong>Identification</strong>. Ici, on garde seulement le lien de l'annonce une fois publiée.
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Lien de l'annonce</div>
@@ -572,7 +563,7 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
                 </div>
                 <button onClick={saveWeb} disabled={savingWeb}
                   style={{ padding: '10px', borderRadius: 8, border: 'none', background: '#ec4899', color: 'white', fontWeight: 700, fontSize: 13, cursor: savingWeb ? 'wait' : 'pointer' }}>
-                  {savingWeb ? '⏳ Sauvegarde…' : '💾 Sauvegarder les infos web'}
+                  {savingWeb ? '⏳ Sauvegarde…' : '💾 Sauvegarder le lien'}
                 </button>
               </div>
             </Section>
