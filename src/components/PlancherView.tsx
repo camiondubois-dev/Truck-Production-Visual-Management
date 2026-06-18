@@ -11,6 +11,7 @@ import { SlotAssignModal } from './SlotAssignModal';
 import { SlotOccupeModal } from './SlotOccupeModal';
 import { CreateWizardModal } from './CreateWizardModal';
 import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { DocumentsVehicule } from './DocumentsVehicule';
 import { logJobTemporaire } from '../services/timeLogService';
 import { inventaireService } from '../services/inventaireService';
 import { reservoirService } from '../services/reservoirService';
@@ -990,6 +991,10 @@ export function StationBlock({ station, slotMap, onSlotClick, allEnAttente, onWa
                     {etatCommercial === 'location' && (
                       <span style={{ fontSize: 'clamp(6px, 0.65vw, 8px)', fontWeight: 700, background: '#ede9fe', color: '#6d28d9', padding: '1px 2px', borderRadius: 2, flexShrink: 0 }}>LOC</span>
                     )}
+                    {/* Badge PDF — visible sur la vignette, ouvre l'éditeur modifiable */}
+                    <span style={{ flexShrink: 0, display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
+                      <DocumentsVehicule vehiculeId={vehicule.id} variant="badge" vide={null} />
+                    </span>
                   </div>
 
                   {/* Boutons ▲▼ — sur TOUS les items */}

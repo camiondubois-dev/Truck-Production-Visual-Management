@@ -8,7 +8,8 @@ import { CompactBandeau } from './FinancialBandeau';
 import type { Item } from '../types/item.types';
 import { ROAD_MAP_STATIONS } from '../data/etapes';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
-import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
+import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { DocumentsVehicule } from './DocumentsVehicule';
 import { EauIcon } from './EauIcon';
 
 /** useGarage qui ne crash pas si pas de provider (cas VueTerrain mobile). */
@@ -102,7 +103,6 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
   const [photoOuverte, setPhotoOuverte] = useState<{ url: string; numero: string } | null>(null);
 
   useEffect(() => {
@@ -300,7 +300,6 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
         couleur="#ea580c"
         vehicules={aLivrerOrdonnés}
         onClick={handleClick}
-        onOpenPdf={setPdfOuvert}
         onOpenPhoto={setPhotoOuverte}
         itemByInvId={itemByInvId}
         finDataMap={isGestion ? finDataMap : undefined}
@@ -315,7 +314,6 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           couleur="#22c55e"
           vehicules={prets}
           onClick={handleClick}
-          onOpenPdf={setPdfOuvert}
           onOpenPhoto={setPhotoOuverte}
           itemByInvId={itemByInvId}
           finDataMap={isGestion ? finDataMap : undefined}
@@ -348,9 +346,6 @@ function VueLivraisonsDashboard({ onSelectVehicule }: { onSelectVehicule?: (id: 
           item={selectedItem}
           onClose={() => setSelectedId(null)} />
       )}
-
-      {/* Modal PDF (ouvert directement depuis la carte) */}
-      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
 
       {/* Modal photo plein écran */}
       {photoOuverte && <ModalPhoto photo={photoOuverte} onClose={() => setPhotoOuverte(null)} />}
@@ -450,13 +445,12 @@ function KPIBlock({ value, label, color, pulse }: { value: number; label: string
 
 
 // ── Section grille (À LIVRER ou PRÊTS) ──────────────────────────
-function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, onOpenPhoto, itemByInvId, finDataMap, flexBasis, variantPret }: {
+function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPhoto, itemByInvId, finDataMap, flexBasis, variantPret }: {
   titre: string;
   icone: string;
   couleur: string;
   vehicules: VehiculeInventaire[];
   onClick: (id: string) => void;
-  onOpenPdf: (doc: { nom: string; base64: string }) => void;
   onOpenPhoto: (photo: { url: string; numero: string }) => void;
   itemByInvId: Record<string, Item>;
   finDataMap?: FinancialMap;
@@ -532,12 +526,10 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, o
             const item = itemByInvId[v.id];
             return (
               <CarteRiche key={v.id} v={v}
-                documents={item?.documents ?? []}
                 inGarage={!!item?.slotId}
                 slotId={item?.slotId}
                 finData={finDataMap?.[v.numero]}
                 onClick={() => onClick(v.id)}
-                onOpenPdf={onOpenPdf}
                 onOpenPhoto={onOpenPhoto}
                 delay={Math.min(idx * 25, 600)}
                 variantPret={variantPret} />
@@ -550,14 +542,12 @@ function SectionGrille({ titre, icone, couleur, vehicules, onClick, onOpenPdf, o
 }
 
 // ── Carte camion riche (info complète, lisible TV) ──────────────
-function CarteRiche({ v, documents, inGarage, slotId, finData, onClick, onOpenPdf, onOpenPhoto, delay, variantPret }: {
+function CarteRiche({ v, inGarage, slotId, finData, onClick, onOpenPhoto, delay, variantPret }: {
   v: VehiculeInventaire;
-  documents: { id: string; nom: string; base64: string }[];
   inGarage: boolean;
   slotId?: string;
   finData?: FinancialMap[string];
   onClick: () => void;
-  onOpenPdf: (doc: { nom: string; base64: string }) => void;
   onOpenPhoto: (photo: { url: string; numero: string }) => void;
   delay: number;
   variantPret?: boolean;
@@ -760,42 +750,10 @@ function CarteRiche({ v, documents, inGarage, slotId, finData, onClick, onOpenPd
         </div>
       )}
 
-      {/* Ligne PDFs (en bas, horizontale, auto-fit) */}
-      {documents.length > 0 && (
-        <div style={{
-          marginTop: finData ? 4 : 'auto',
-          display: 'flex', flexWrap: 'wrap', gap: 4,
-          paddingTop: 4,
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-        }}>
-          {documents.map((doc, i) => (
-            <button key={doc.id ?? i}
-              onClick={(e) => { e.stopPropagation(); onOpenPdf({ nom: doc.nom, base64: doc.base64 }); }}
-              title={`Ouvrir : ${doc.nom}`}
-              style={{
-                flex: '1 1 0',
-                minWidth: 0,
-                background: 'rgba(220,38,38,0.18)',
-                border: '1px solid rgba(220,38,38,0.5)',
-                color: '#fca5a5', fontWeight: 800,
-                borderRadius: 5,
-                padding: '4px 6px',
-                cursor: 'pointer',
-                fontSize: 'clamp(10px, 0.85vw, 12px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-                transition: 'all 0.15s', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.4)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.18)'; }}
-            >
-              <span style={{ flexShrink: 0 }}>📄</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {tronquerNomPdf(doc.nom)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Ligne PDF — composant unique, ouvre l'éditeur modifiable */}
+      <div style={{ marginTop: finData ? 4 : 'auto', paddingTop: 4 }} onClick={e => e.stopPropagation()}>
+        <DocumentsVehicule vehiculeId={v.id} variant="badge" vide={null} />
+      </div>
     </div>
   );
 }

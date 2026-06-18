@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SLOT_TO_GARAGE, GARAGE_TO_SLOTS } from '../data/garageData';
 import { EauIcon } from './EauIcon';
+import { DocumentsVehicule } from './DocumentsVehicule';
 import type { Item, Slot } from '../types/item.types';
 
 interface StationConfig {
@@ -34,45 +35,6 @@ function formatDateRelative(dateStr: string): string {
   if (diffDays > 0) return `${diffDays}j`;
   if (diffHours > 0) return `${diffHours}h`;
   return 'quelques minutes';
-}
-
-function ModalPDF({ doc, onClose }: { doc: { nom: string; base64: string }; onClose: () => void }) {
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(0,0,0,0.85)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', padding: 24,
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width: '90vw', height: '90vh', background: '#1a1814', borderRadius: 12,
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)',
-          background: '#111009', flexShrink: 0,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>📄</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{doc.nom}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => { const l = document.createElement('a'); l.href = doc.base64; l.download = doc.nom; document.body.appendChild(l); l.click(); document.body.removeChild(l); }}
-              style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              ⬇ Télécharger
-            </button>
-            <button onClick={onClose}
-              style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              ✕ Fermer
-            </button>
-          </div>
-        </div>
-        <iframe src={doc.base64} style={{ flex: 1, width: '100%', border: 'none', background: 'white' }} title={doc.nom} />
-      </div>
-    </div>
-  );
 }
 
 function ModalPhoto({ url, numero, onClose }: { url: string; numero: string; onClose: () => void }) {
@@ -112,7 +74,6 @@ export function SlotOccupeModal({
   item, slot, onRetirerAttente, onTerminerEtAvancer, onTerminer, onClose, position,
   stations, onUpdateStationStatus, onAssignerSlot, slotMap, departementId,
 }: SlotOccupeModalProps) {
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
   const [photoOuverte, setPhotoOuverte] = useState(false);
 
   const couleur = item.type === 'eau'    ? '#f97316'
@@ -333,37 +294,17 @@ export function SlotOccupeModal({
             </div>
           )}
 
-          {/* DOCUMENTS */}
-          {item.documents && item.documents.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                📎 Documents
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {item.documents.map(doc => (
-                  <button key={doc.id}
-                    onClick={(e) => { e.stopPropagation(); setPdfOuvert({ nom: doc.nom, base64: doc.base64 }); }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 6,
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'rgba(255,255,255,0.85)',
-                      cursor: 'pointer', fontSize: 12,
-                      fontWeight: 600, textAlign: 'left',
-                      width: '100%', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-                  >
-                    <span style={{ fontSize: 18, flexShrink: 0 }}>📄</span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</span>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>👁 {doc.taille}</span>
-                  </button>
-                ))}
-              </div>
+          {/* DOCUMENTS — composant unique, ouvre l'éditeur modifiable */}
+          <div style={{ marginBottom: 12 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+              📎 Documents
             </div>
-          )}
+            <DocumentsVehicule
+              vehiculeId={item.inventaireId ?? item.id}
+              variant="badge"
+              vide={<span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Aucun document</span>}
+            />
+          </div>
         </div>
 
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }} />
@@ -399,7 +340,6 @@ export function SlotOccupeModal({
           </button>
         </div>
       </div>
-      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
       {photoOuverte && item.photoUrl && <ModalPhoto url={item.photoUrl} numero={item.numero} onClose={() => setPhotoOuverte(false)} />}
     </>
   );

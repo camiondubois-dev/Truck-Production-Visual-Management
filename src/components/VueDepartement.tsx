@@ -5,10 +5,11 @@ import { EauIcon } from './EauIcon';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { SlotAssignModal } from './SlotAssignModal';
 import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { DocumentsVehicule } from './DocumentsVehicule';
 import { TOUTES_STATIONS_COMMUNES } from '../data/mockData';
 import { reservoirService } from '../services/reservoirService';
 import type { Reservoir, TypeReservoir } from '../types/reservoirTypes';
-import type { Item, Document } from '../types/item.types';
+import type { Item } from '../types/item.types';
 import type { VehiculeInventaire } from '../types/inventaireTypes';
 
 // ── Constantes réservoirs ──────────────────────────────────────
@@ -343,13 +344,12 @@ function BadgeCommercialSlot({ item }: { item: Item }) {
 
 export const VueDepartement = () => {
   const { profile, deconnexion } = useAuth();
-  const { items, slotMap, enAttente, assignerSlot, ajouterDocument } = useGarage();
-  const { vehicules } = useInventaire();
+  const { items, slotMap, enAttente, assignerSlot } = useGarage();
+  const { vehicules, ajouterDocumentVehicule } = useInventaire();
 
   const [modeTV, setModeTV] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [modalState, setModalState] = useState<ModalState>(null);
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
   const [panneauReservoirs, setPanneauReservoirs] = useState(false);
 
   const dept = DEPARTEMENTS_CONFIG[profile?.departement ?? ''];
@@ -447,10 +447,6 @@ export const VueDepartement = () => {
     }
   };
 
-  const ouvrirDoc = (e: React.MouseEvent, doc: { nom: string; base64: string }) => {
-    e.stopPropagation();
-    setPdfOuvert(doc);
-  };
 
   return (
     <div
@@ -676,44 +672,22 @@ export const VueDepartement = () => {
                       </span>
                     </div>
 
-                    {/* Documents existants */}
-                    {(item.documents ?? []).map(doc => (
-                      <button
-                        key={doc.id}
-                        onClick={(e) => ouvrirDoc(e, doc)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '10px 14px', borderRadius: 8,
-                          border: '1px solid rgba(59,130,246,0.3)',
-                          background: 'rgba(59,130,246,0.1)',
-                          color: 'white',
-                          cursor: 'pointer', fontSize: 14,
-                          fontWeight: 600, textAlign: 'left',
-                          width: '100%', transition: 'background 0.15s',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = 'rgba(59,130,246,0.2)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = 'rgba(59,130,246,0.1)';
-                        }}
-                      >
-                        <span style={{ fontSize: 22, flexShrink: 0 }}>📄</span>
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {doc.nom}
-                        </span>
-                        <span style={{
-                          fontSize: 12, color: '#3b82f6', fontWeight: 700,
-                          padding: '3px 8px', borderRadius: 4,
-                          background: 'rgba(59,130,246,0.15)', flexShrink: 0,
-                        }}>
-                          👁 Voir
-                        </span>
-                      </button>
-                    ))}
+                    {/* Documents — composant unique, ouvre l'éditeur modifiable */}
+                    <div onClick={e => e.stopPropagation()}>
+                      <DocumentsVehicule
+                        vehiculeId={item.inventaireId ?? item.id}
+                        variant="badge"
+                        vide={<span style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Aucun document</span>}
+                      />
+                    </div>
 
-                    {/* Bouton AJOUTER PDF — toujours visible si < 3 docs */}
-                    {(item.documents?.length ?? 0) < 3 && (
+                    {/* Bouton AJOUTER PDF — écrit dans prod_inventaire (source unique) */}
+                    {(() => {
+                      const vid = item.inventaireId ?? item.id;
+                      const veh = vehicules.find(x => x.id === vid);
+                      const nbDocs = veh?.documents?.length ?? 0;
+                      return veh && nbDocs < 3;
+                    })() && (
                       <label
                         onClick={(e) => e.stopPropagation()}
                         style={{
@@ -735,20 +709,16 @@ export const VueDepartement = () => {
                         }}
                       >
                         <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
-                          onChange={e => {
+                          onChange={async e => {
                             const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (file.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const base64 = reader.result as string;
-                              const tailleKB = Math.round(file.size / 1024);
-                              const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
-                              const doc: Document = { id: `doc-${Date.now()}`, nom: file.name, taille, dateUpload: new Date().toISOString(), base64 };
-                              ajouterDocument(item.id, doc);
-                            };
-                            reader.readAsDataURL(file);
                             e.target.value = '';
+                            if (!file) return;
+                            if (file.size > 20 * 1024 * 1024) { alert('Fichier trop volumineux (max 20 MB).'); return; }
+                            try {
+                              await ajouterDocumentVehicule(item.inventaireId ?? item.id, file);
+                            } catch (err: any) {
+                              alert('Erreur lors de l\'ajout : ' + (err?.message ?? err));
+                            }
                           }}
                         />
                         <span style={{ fontSize: 20 }}>📎</span>
@@ -917,80 +887,6 @@ export const VueDepartement = () => {
         </>
       )}
 
-      {pdfOuvert && (
-        <div
-          onClick={() => setPdfOuvert(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 500,
-            background: 'rgba(0,0,0,0.85)',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '90vw', height: '90vh',
-              background: '#1a1814', borderRadius: 12,
-              display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
-            }}
-          >
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 20px',
-              borderBottom: '1px solid rgba(255,255,255,0.1)',
-              background: '#111009', flexShrink: 0,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 20 }}>📄</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-                  {pdfOuvert.nom}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = pdfOuvert.base64;
-                    link.download = pdfOuvert.nom;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                  }}
-                  style={{
-                    padding: '6px 14px', borderRadius: 6,
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    background: 'transparent',
-                    color: 'rgba(255,255,255,0.6)',
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  ⬇ Télécharger
-                </button>
-                <button
-                  onClick={() => setPdfOuvert(null)}
-                  style={{
-                    padding: '6px 14px', borderRadius: 6,
-                    border: 'none', background: '#ef4444',
-                    color: 'white', fontSize: 12,
-                    fontWeight: 700, cursor: 'pointer',
-                  }}
-                >
-                  ✕ Fermer
-                </button>
-              </div>
-            </div>
-            <iframe
-              src={pdfOuvert.base64}
-              style={{ flex: 1, width: '100%', border: 'none', background: 'white' }}
-              title={pdfOuvert.nom}
-            />
-          </div>
-        </div>
-      )}
 
       {/* ── Bouton X flottant pour quitter le mode TV (toujours visible) ── */}
       {modeTV && (

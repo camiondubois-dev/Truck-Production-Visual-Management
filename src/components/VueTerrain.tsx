@@ -6,10 +6,11 @@ import { photoService } from '../services/photoService';
 import { ensureSharedAuth } from '../hooks/useAchatsAuth';
 import { isBiometricSupported, isBiometricRegistered, registerBiometric, authenticateWithBiometric, removeBiometric } from '../hooks/useBiometric';
 import { estVehiculePret, type VehiculeInventaire } from '../types/inventaireTypes';
-import type { Document } from '../types/item.types';
 import type { Reservoir, TypeReservoir, EtatReservoir } from '../types/reservoirTypes';
 import { ROAD_MAP_STATIONS, RETOUCHE_ID, CHECKLIST_STATIONS } from '../data/etapes';
 import { RoadMapEditor } from './RoadMapEditor';
+import { DocumentsVehicule } from './DocumentsVehicule';
+import { useInventaire } from '../contexts/InventaireContext';
 import { VueLivraisons } from './VueLivraisons';
 import { VueMoteurs } from './VueMoteurs';
 import { VueSuiviVente } from './VueSuiviVente';
@@ -246,85 +247,6 @@ function PanneauReservoirs({ onClose }: { onClose: () => void }) {
                 </div>
               );
             })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Viewer Document (plein écran, zoomable) ───────────────────────────────
-
-function ViewerDocument({ doc, onClose }: { doc: Document; onClose: () => void }) {
-  const [zoom, setZoom] = useState(0.45);
-  const isPdf = doc.base64.startsWith('data:application/pdf');
-
-  const zoomIn  = () => setZoom(z => Math.min(z + 0.1, 2));
-  const zoomOut = () => setZoom(z => Math.max(z - 0.1, 0.15));
-  const zoomFit = () => setZoom(0.45);
-
-  // L'astuce : on crée un iframe/img très grand (100/zoom = ex: 222% à 45%)
-  // puis on le scale visuellement avec transform:scale(zoom)
-  // Le conteneur scrollable fait la taille réelle affichée (100%)
-  const innerSize = 100 / zoom; // ex: zoom=0.45 → iframe = 222% de la zone
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#111', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-      {/* Barre du haut */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#1a1a2e', flexShrink: 0 }}>
-        <button onClick={onClose}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-          ← Retour
-        </button>
-        <div style={{ flex: 1, textAlign: 'center', color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 8px' }}>
-          {doc.nom}
-        </div>
-        <button onClick={onClose}
-          style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          ✕
-        </button>
-      </div>
-
-      {/* Contrôles zoom */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '8px 16px', background: '#1a1a2e', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <button onClick={zoomOut} style={{ width: 44, height: 40, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>−</button>
-        <button onClick={zoomFit} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}>
-          {Math.round(zoom * 100)}%
-        </button>
-        <button onClick={zoomIn} style={{ width: 44, height: 40, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
-      </div>
-
-      {/* Contenu zoomable avec transform:scale */}
-      <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
-        {isPdf ? (
-          <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
-            <div style={{
-              width: `${innerSize}%`,
-              height: `${innerSize}%`,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-            }}>
-              <iframe
-                src={doc.base64}
-                title={doc.nom}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
-            <img
-              src={doc.base64}
-              alt={doc.nom}
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top center',
-                maxWidth: 'none',
-                width: `${innerSize}%`,
-                objectFit: 'contain',
-                borderRadius: 8,
-              }}
-            />
           </div>
         )}
       </div>
@@ -693,10 +615,9 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
   const [slotChoisi, setSlotChoisi]             = useState('');
   const [slotConflict, setSlotConflict]         = useState<{item: any, slotId: string} | null>(null);
   const [assigningSlot, setAssigningSlot]       = useState(false);
-  const [documents, setDocuments]               = useState<Document[]>([]);
-  const [loadingDocs, setLoadingDocs]           = useState(false);
+  const { vehicules: invVehicules, ajouterDocumentVehicule } = useInventaire();
   const [uploadingPdf, setUploadingPdf]         = useState(false);
-  const [docOuvert, setDocOuvert]               = useState<Document | null>(null);
+  const docsVehicule = (invVehicules.find(x => x.id === v.id)?.documents) ?? [];
 
   useEffect(() => {
     if (v.type === 'eau' && !v.aUnReservoir) {
@@ -705,56 +626,18 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
     }
   }, [v.id, v.type, v.aUnReservoir]);
 
-  // Charger les documents PDF depuis prod_items
-  useEffect(() => {
-    setLoadingDocs(true);
-    supabase.from('prod_items').select('id, documents').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle()
-      .then(({ data }) => {
-        setDocuments((data?.documents ?? []) as Document[]);
-        setLoadingDocs(false);
-      });
-  }, [v.id]);
-
-  // Upload PDF
+  // Upload PDF → écrit dans prod_inventaire (source unique, via le contexte)
   const handleUploadPdf = async (fichier: File) => {
-    if (fichier.size > 10 * 1024 * 1024) { alert('Max 10 MB'); return; }
-    if (documents.length >= 3) { alert('Maximum 3 documents'); return; }
+    if (fichier.size > 20 * 1024 * 1024) { alert('Fichier trop volumineux (max 20 MB).'); return; }
+    if (docsVehicule.length >= 3) { alert('Maximum 3 documents'); return; }
     setUploadingPdf(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const tailleKB = Math.round(fichier.size / 1024);
-        const taille = tailleKB > 1024 ? `${(tailleKB / 1024).toFixed(1)} MB` : `${tailleKB} KB`;
-        const doc: Document = { id: `doc-${Date.now()}`, nom: fichier.name, taille, dateUpload: new Date().toISOString(), base64 };
-        const newDocs = [...documents, doc];
-        // Sauvegarder dans prod_items
-        const { data: prodItem } = await supabase.from('prod_items').select('id').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle();
-        if (prodItem) {
-          await supabase.from('prod_items').update({ documents: newDocs, updated_at: new Date().toISOString() }).eq('id', prodItem.id);
-          setDocuments(newDocs);
-        } else {
-          alert('Ce véhicule doit être en production pour ajouter des documents.');
-        }
-        setUploadingPdf(false);
-      };
-      reader.readAsDataURL(fichier);
-    } catch (e) { console.error(e); setUploadingPdf(false); }
-  };
-
-  // Supprimer un document
-  const handleSupprimerDoc = async (docId: string) => {
-    const newDocs = documents.filter(d => d.id !== docId);
-    const { data: prodItem } = await supabase.from('prod_items').select('id').eq('inventaire_id', v.id).neq('etat', 'termine').maybeSingle();
-    if (prodItem) {
-      await supabase.from('prod_items').update({ documents: newDocs, updated_at: new Date().toISOString() }).eq('id', prodItem.id);
-      setDocuments(newDocs);
+      await ajouterDocumentVehicule(v.id, fichier);
+    } catch (e: any) {
+      alert('Erreur lors de l\'ajout : ' + (e?.message ?? e));
+    } finally {
+      setUploadingPdf(false);
     }
-  };
-
-  // Ouvrir un PDF dans un viewer plein écran
-  const ouvrirPdf = (doc: Document) => {
-    setDocOuvert(doc);
   };
 
   // Photo
@@ -974,40 +857,15 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
           <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             📄 Documents
           </div>
-          {loadingDocs ? (
-            <div style={{ fontSize: 13, color: '#9ca3af' }}>Chargement...</div>
-          ) : (
-            <>
-              {documents.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>Aucun document attaché.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                  {documents.map(doc => (
-                    <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'white', border: '1px solid #e5e7eb' }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{doc.nom.endsWith('.pdf') ? '📄' : '🖼️'}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
-                        <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.taille}</div>
-                      </div>
-                      <button onClick={() => ouvrirPdf(doc)}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#eff6ff', color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>
-                        👁 Voir
-                      </button>
-                      <button onClick={() => handleSupprimerDoc(doc.id)}
-                        style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, flexShrink: 0 }}>
-                        🗑
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {documents.length < 3 && (
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 10, border: '2px dashed #d1d5db', background: 'white', cursor: 'pointer', color: '#6b7280', fontSize: 14, fontWeight: 600 }}>
-                  {uploadingPdf ? 'Chargement...' : '📎 Ajouter un PDF'}
-                  <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadPdf(f); e.target.value = ''; }} />
-                </label>
-              )}
-            </>
+          {/* Composant unique — affiche + ouvre l'éditeur modifiable */}
+          <div style={{ marginBottom: 10 }}>
+            <DocumentsVehicule vehiculeId={v.id} variant="liste" />
+          </div>
+          {docsVehicule.length < 3 && (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 10, border: '2px dashed #d1d5db', background: 'white', cursor: 'pointer', color: '#6b7280', fontSize: 14, fontWeight: 600 }}>
+              {uploadingPdf ? 'Chargement...' : '📎 Ajouter un PDF'}
+              <input type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} disabled={uploadingPdf} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadPdf(f); e.target.value = ''; }} />
+            </label>
           )}
         </div>
 
@@ -1242,7 +1100,6 @@ function FicheCamion({ vehicule: v, onClose, onMisAJour }: {
       </div>
 
       {/* ── Viewer document plein écran ── */}
-      {docOuvert && <ViewerDocument doc={docOuvert} onClose={() => setDocOuvert(null)} />}
     </div>
   );
 }

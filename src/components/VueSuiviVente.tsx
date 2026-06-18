@@ -11,7 +11,8 @@ import { supabase } from '../lib/supabase';
 import type { Item } from '../types/item.types';
 import { vendeurService, type Vendeur } from '../services/vendeurService';
 import { estVehiculePret, type VehiculeInventaire, type RoadMapEtape } from '../types/inventaireTypes';
-import { PanneauDetailVehicule, ModalPDF } from './PanneauDetailVehicule';
+import { PanneauDetailVehicule } from './PanneauDetailVehicule';
+import { DocumentsVehicule } from './DocumentsVehicule';
 import { PaiementsManager } from './PaiementsManager';
 import { LocationsManager } from './LocationsManager';
 import { canSeePaiements, canGererLocations } from '../lib/permissions';
@@ -56,7 +57,6 @@ function VueSuiviVenteDesktop() {
   const [now, setNow] = useState(() => new Date());
   const [tvMode, setTvMode] = useState(false);
   const [viewMode, setViewMode] = useState<'a-livrer' | 'prets'>('a-livrer');
-  const [pdfOuvert, setPdfOuvert] = useState<{ nom: string; base64: string } | null>(null);
   const [showPaiements,  setShowPaiements]  = useState(false);
   const [showLocManager, setShowLocManager] = useState(false);
 
@@ -289,7 +289,6 @@ function VueSuiviVenteDesktop() {
               onSavePrixDemande={isGestion ? updatePrixDemande : undefined}
               onLocalPrixDemande={isGestion ? setLocalPrixDemande : undefined}
               onClickNumero={() => setSelectedId(v.id === selectedId ? null : v.id)}
-              onClickPdf={setPdfOuvert}
               selected={selectedId === v.id} />
           ))}
         </div>
@@ -335,9 +334,6 @@ function VueSuiviVenteDesktop() {
       {selected && (
         <PanneauDetailVehicule key={selected.id} vehicule={selected} item={selectedItem} onClose={() => setSelectedId(null)} />
       )}
-
-      {/* Modal PDF */}
-      {pdfOuvert && <ModalPDF doc={pdfOuvert} onClose={() => setPdfOuvert(null)} />}
 
       {/* Modal contrats de location */}
       {showLocManager && (
@@ -440,101 +436,9 @@ function CellHeader({ children, align, style }: { children: React.ReactNode; ali
   );
 }
 
-// ── Cellule PDF (1 doc → ouvre direct, 2+ docs → popover liste) ──
-function PdfCell({ documents, onClickPdf }: {
-  documents: { nom: string; base64: string }[];
-  onClickPdf: (doc: { nom: string; base64: string }) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('click', close);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [open]);
-
-  if (documents.length === 0) {
-    return <span style={{ color: '#cbd5e1', fontSize: 'clamp(12px, 1.1vw, 16px)' }}>—</span>;
-  }
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (documents.length === 1) {
-      onClickPdf(documents[0]);
-      return;
-    }
-    if (open) { setOpen(false); return; }
-    const rect = btnRef.current?.getBoundingClientRect();
-    if (rect) {
-      setPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 });
-    }
-    setOpen(true);
-  };
-
-  return (
-    <>
-      <button ref={btnRef} onClick={handleClick}
-        title={documents.map(d => d.nom).join(' · ')}
-        style={{
-          background: '#fee2e2', border: '1px solid #fca5a5',
-          color: '#dc2626', borderRadius: 6,
-          padding: 'clamp(4px, 0.6vw, 8px) clamp(6px, 0.7vw, 10px)',
-          cursor: 'pointer', fontWeight: 700,
-          fontSize: 'clamp(11px, 1.1vw, 16px)',
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          whiteSpace: 'nowrap',
-        }}>
-        📄{documents.length > 1 && <span>{documents.length}</span>}
-      </button>
-
-      {open && pos && documents.length > 1 && createPortal(
-        <div onClick={(e) => e.stopPropagation()} style={{
-          position: 'fixed',
-          top: pos.top, left: pos.left, transform: 'translateX(-50%)',
-          zIndex: 9999,
-          background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          minWidth: 240, maxWidth: 380,
-          overflow: 'hidden',
-        }}>
-          {documents.map((doc, i) => (
-            <button key={i}
-              onClick={() => { setOpen(false); onClickPdf(doc); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', textAlign: 'left',
-                padding: '10px 12px',
-                background: 'white', border: 'none',
-                borderBottom: i < documents.length - 1 ? '1px solid #f1f5f9' : 'none',
-                cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, color: '#1e293b',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#fef2f2'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}>
-              <span style={{ fontSize: 16 }}>📄</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {doc.nom}
-              </span>
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
 
 // ── Ligne d'un véhicule vendu ────────────────────────────────────
-function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocalPrixDemande, onClickNumero, onClickPdf, selected }: {
+function LigneVente({ v, idx, vendeur, finData, onSavePrixDemande, onLocalPrixDemande, onClickNumero, selected }: {
   v: VehiculeInventaire;
   idx: number;
   vendeur?: Vendeur;
@@ -543,13 +447,11 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
   onSavePrixDemande?: (stockNumero: string, prix: number | null) => Promise<void>;
   onLocalPrixDemande?: (stockNumero: string, prix: number | null) => void;
   onClickNumero: () => void;
-  onClickPdf: (doc: { nom: string; base64: string }) => void;
   selected: boolean;
 }) {
   const dateStr = formatDate(v.dateLivraisonPlanifiee);
   const dateUrgence = urgenceDate(v.dateLivraisonPlanifiee);
   const equipement = formatEquipement(v);
-  const documents = item?.documents ?? [];
 
   // Zebra : alterner blanc / gris très pâle
   const zebraBg = idx % 2 === 0 ? 'white' : '#f3f4f6';
@@ -654,9 +556,9 @@ function LigneVente({ v, idx, vendeur, item, finData, onSavePrixDemande, onLocal
         </div>
       </Cell>
 
-      {/* PDF (compact) */}
+      {/* PDF (compact) — composant unique, ouvre l'éditeur modifiable */}
       <Cell align="center">
-        <PdfCell documents={documents} onClickPdf={onClickPdf} />
+        <DocumentsVehicule vehiculeId={v.id} variant="badge" />
       </Cell>
 
       {/* Stations */}
