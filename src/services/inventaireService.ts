@@ -481,6 +481,32 @@ export const inventaireService = {
     return { storagePath: aSupprimer?.storagePath ?? '' };
   },
 
+  /** Remplace l'URL/chemin du fichier d'un document (PDF formulaire rempli, sauvegardé dans le vrai fichier). */
+  async mettreAJourFichierDocument(
+    vehiculeId: string,
+    docId: string,
+    url: string,
+    storagePath: string,
+  ): Promise<{ ancienStoragePath: string }> {
+    const { data, error: fetchErr } = await supabase
+      .from('prod_inventaire')
+      .select('documents')
+      .eq('id', vehiculeId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const existants: DocumentVehicule[] = data?.documents ?? [];
+    const ancien = existants.find(d => d.id === docId);
+    const nouveaux = existants.map(d =>
+      d.id === docId ? { ...d, url, storagePath, base64: undefined } : d
+    );
+    const { error } = await supabase
+      .from('prod_inventaire')
+      .update({ documents: nouveaux, updated_at: new Date().toISOString() })
+      .eq('id', vehiculeId);
+    if (error) throw error;
+    return { ancienStoragePath: ancien?.storagePath ?? '' };
+  },
+
   /** Met à jour la couche d'annotations d'un document (PDF « vivant » remodifiable). */
   async mettreAJourAnnotations(
     vehiculeId: string,

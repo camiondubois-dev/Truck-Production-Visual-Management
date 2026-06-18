@@ -26,6 +26,7 @@ interface InventaireContextType {
   ajouterDocumentVehicule: (vehiculeId: string, fichier: File) => Promise<void>;
   supprimerDocumentVehicule: (vehiculeId: string, docId: string) => Promise<void>;
   sauverAnnotationsDocument: (vehiculeId: string, docId: string, annotations: DocumentAnnotations) => Promise<void>;
+  remplacerFichierDocument: (vehiculeId: string, docId: string, blob: Blob) => Promise<{ url: string }>;
 }
 
 const InventaireContext = createContext<InventaireContextType | null>(null);
@@ -407,6 +408,21 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
     ));
   };
 
+  // Sauvegarde le PDF formulaire rempli DANS le vrai fichier (Supabase Storage).
+  const remplacerFichierDocument = async (vehiculeId: string, docId: string, blob: Blob) => {
+    const { url, storagePath } = await photoService.uploaderDocumentBytes(blob);
+    const { ancienStoragePath } = await inventaireService.mettreAJourFichierDocument(vehiculeId, docId, url, storagePath);
+    if (ancienStoragePath && ancienStoragePath !== storagePath) {
+      await photoService.supprimerDocumentStorage(ancienStoragePath);
+    }
+    setVehicules(prev => prev.map(v =>
+      v.id === vehiculeId
+        ? { ...v, documents: (v.documents ?? []).map(d => d.id === docId ? { ...d, url, storagePath, base64: undefined } : d) }
+        : v
+    ));
+    return { url };
+  };
+
   return (
     <InventaireContext.Provider value={{
       vehicules, loading,
@@ -415,7 +431,7 @@ export const InventaireProvider = ({ children }: { children: ReactNode }) => {
       mettreAJourPhotoInventaire, mettreAJourType,
       mettreAJourEtapes, mettreAJourRoadMap, mettreAJourPriorites, mettreAJourReservoir,
       marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
-      ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument,
+      ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument, remplacerFichierDocument,
     }}>
       {children}
     </InventaireContext.Provider>

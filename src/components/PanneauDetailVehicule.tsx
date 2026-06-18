@@ -157,7 +157,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
     mettreAJourRoadMap, mettreAJourPhotoInventaire,
     marquerPret, mettreAJourCommercial, archiverVehicule, desarchiverVehicule, supprimerVehicule,
     marquerDisponible, mettreAJourReservoir, mettreAJourType,
-    ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument,
+    ajouterDocumentVehicule, supprimerDocumentVehicule, sauverAnnotationsDocument, remplacerFichierDocument,
   } = useInventaire();
   const { supprimerItem, assignerSlot, slotMap, rechargerItems } = useGarage();
   const { profile: session } = useAuth();
@@ -1100,6 +1100,10 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             onSave={async (annotations) => {
               await sauverAnnotationsDocument(v.id, docAEditer.id, annotations);
               setDocAEditer(prev => prev ? { ...prev, annotations } : prev);
+            }}
+            onRemplacerFichier={async (blob) => {
+              const { url } = await remplacerFichierDocument(v.id, docAEditer.id, blob);
+              setDocAEditer(prev => prev ? { ...prev, url, base64: undefined } : prev);
             }}
             onClose={() => setDocAEditer(null)}
           />

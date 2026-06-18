@@ -7,8 +7,9 @@ import { SignaturePad } from './SignaturePad';
 import type { DocumentVehicule, DocumentAnnotations } from '../types/inventaireTypes';
 
 type Outil = 'select' | 'text' | 'check' | 'date' | 'sign';
+type Mode  = 'detecting' | 'form' | 'annot';
 
-// Forme stockée par page : dimensions d'affichage + objets Fabric.
+// Forme stockée par page (mode annotation) : dimensions d'affichage + objets Fabric.
 interface PageData { w: number; h: number; objects: any | null; }
 
 const OUTILS: { id: Outil; label: string; emoji: string }[] = [
@@ -19,15 +20,17 @@ const OUTILS: { id: Outil; label: string; emoji: string }[] = [
   { id: 'sign',   label: 'Signature', emoji: '🖊️' },
 ];
 
-export function PDFEditor({ doc, onSave, onClose }: {
+export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
   doc: DocumentVehicule;
   onSave: (annotations: DocumentAnnotations) => Promise<void>;
+  onRemplacerFichier?: (blob: Blob) => Promise<void>;
   onClose: () => void;
 }) {
   const [numPages, setNumPages]   = useState(0);
   const [pageNum, setPageNum]     = useState(1);      // 1-based
   const [outil, setOutil]         = useState<Outil>('select');
   const [containerW, setContainerW] = useState(800);
+  const [mode, setMode]           = useState<Mode>('detecting');
   const [saving, setSaving]       = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showSign, setShowSign]   = useState(false);
@@ -42,16 +45,20 @@ export function PDFEditor({ doc, onSave, onClose }: {
   const outilRef   = useRef<Outil>('select');
   const pagesRef   = useRef<Record<number, PageData>>({});  // index 0-based
   const renduDims  = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  const pdfProxy   = useRef<any>(null);   // PDFDocumentProxy pdf.js (mode formulaire)
 
   outilRef.current = outil;
   const pageIdx = pageNum - 1;
 
-  // Source du PDF : URL Supabase (format actuel) OU base64 (ancien format encore lisible).
-  const fileSource = doc.url
-    ? doc.url
-    : doc.base64
-      ? (doc.base64.startsWith('data:') ? doc.base64 : `data:application/pdf;base64,${doc.base64}`)
-      : null;
+  // Source du PDF : URL Supabase (format actuel) OU base64 (ancien format).
+  // Épinglée une seule fois : sauvegarder (qui change doc.url) ne recharge pas la vue.
+  const [fileSource] = useState<string | null>(() =>
+    doc.url
+      ? doc.url
+      : doc.base64
+        ? (doc.base64.startsWith('data:') ? doc.base64 : `data:application/pdf;base64,${doc.base64}`)
+        : null
+  );
 
   // ── Mesure de la largeur disponible (responsive tablette/mobile) ──
   useEffect(() => {
@@ -64,20 +71,28 @@ export function PDFEditor({ doc, onSave, onClose }: {
     return () => window.removeEventListener('resize', maj);
   }, []);
 
-  // ── Sérialise l'état actuel du canvas dans pagesRef ──
-  // Utilise fabricPage (la page que le canvas détient vraiment) + ses propres
-  // dimensions, donc fiable même au resize ou au changement de page.
+  // ── Détection du type de PDF au chargement (a-t-il de vrais champs ?) ──
+  const onDocLoad = async (pdf: any) => {
+    pdfProxy.current = pdf;
+    setNumPages(pdf.numPages);
+    setChargement(false);
+    try {
+      const champs = await pdf.getFieldObjects();
+      const aDesChamps = !!champs && Object.keys(champs).length > 0;
+      setMode(aDesChamps && !!onRemplacerFichier ? 'form' : 'annot');
+    } catch {
+      setMode('annot');
+    }
+  };
+
+  // ════════════════ MODE ANNOTATION (Fabric) ════════════════
+
   const flushPage = useCallback(() => {
     const f = fabricRef.current;
     if (!f || fabricPage.current == null) return;
-    pagesRef.current[fabricPage.current] = {
-      w: f.getWidth(),
-      h: f.getHeight(),
-      objects: f.toJSON(),
-    };
+    pagesRef.current[fabricPage.current] = { w: f.getWidth(), h: f.getHeight(), objects: f.toJSON() };
   }, []);
 
-  // ── Ajout d'objets ──
   const ajouterTextbox = (texte: string, x: number, y: number, couleur = '#111827', taille = 16) => {
     const f = fabricRef.current;
     if (!f) return;
@@ -107,7 +122,6 @@ export function PDFEditor({ doc, onSave, onClose }: {
     setOutil('select');
   };
 
-  // ── Initialise / réinitialise Fabric après le rendu d'une page ──
   const onPageRendu = useCallback(() => {
     const holder = wrapRef.current?.querySelector('canvas.react-pdf__Page__canvas') as HTMLCanvasElement | null;
     if (!holder || !overlayRef.current) return;
@@ -115,22 +129,14 @@ export function PDFEditor({ doc, onSave, onClose }: {
     const h = holder.clientHeight;
     renduDims.current = { w, h };
 
-    // (Re)création du canvas Fabric — on sauvegarde d'abord l'état actuel
-    // dans la page que le canvas détient (préserve le travail au resize).
-    if (fabricRef.current) {
-      flushPage();
-      fabricRef.current.dispose();
-      fabricRef.current = null;
-    }
+    if (fabricRef.current) { flushPage(); fabricRef.current.dispose(); fabricRef.current = null; }
     const f = new fabric.Canvas(overlayRef.current, {
       width: w, height: h, backgroundColor: 'transparent',
-      selection: true, preserveObjectStacking: true,
-      allowTouchScrolling: true,   // défilement tactile possible sur tablette/téléphone
+      selection: true, preserveObjectStacking: true, allowTouchScrolling: true,
     });
     fabricRef.current = f;
     fabricPage.current = pageIdx;
 
-    // Placement d'objets selon l'outil actif
     f.on('mouse:down', (opt) => {
       const t = outilRef.current;
       if (t === 'select' || opt.target) return;
@@ -142,11 +148,9 @@ export function PDFEditor({ doc, onSave, onClose }: {
     });
     f.on('object:modified', () => setDirty(true));
 
-    // Chargement des annotations existantes de cette page
     const data = pagesRef.current[pageIdx];
     if (data?.objects) {
       f.loadFromJSON(data.objects).then(() => {
-        // Rééchelonne si l'affichage a changé (autre appareil / taille)
         if (data.w && Math.abs(data.w - w) > 1) {
           const fac = w / data.w;
           f.getObjects().forEach((o: any) => {
@@ -161,16 +165,13 @@ export function PDFEditor({ doc, onSave, onClose }: {
     }
   }, [pageIdx]);
 
-  // ── Suppression au clavier ──
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const f = fabricRef.current;
       if (!f) return;
       const actif = f.getActiveObject();
       if ((e.key === 'Delete' || e.key === 'Backspace') && actif && !(actif as any).isEditing) {
-        f.remove(actif);
-        f.requestRenderAll();
-        setDirty(true);
+        f.remove(actif); f.requestRenderAll(); setDirty(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -179,23 +180,20 @@ export function PDFEditor({ doc, onSave, onClose }: {
 
   useEffect(() => () => { fabricRef.current?.dispose(); }, []);
 
-  // ── Charge les annotations initiales en mémoire ──
   useEffect(() => {
     const pages = doc.annotations?.pages;
     if (pages) {
       const init: Record<number, PageData> = {};
       for (const [k, v] of Object.entries(pages)) {
         const pd = v as any;
-        // Compat : ancien format = JSON Fabric direct ; nouveau = { w,h,objects }
         init[Number(k)] = pd?.objects !== undefined ? pd : { w: 0, h: 0, objects: pd };
       }
       pagesRef.current = init;
     }
   }, [doc.annotations]);
 
-  // ── Navigation ──
   const changerPage = (delta: number) => {
-    flushPage();
+    if (mode === 'annot') flushPage();
     setPageNum(p => Math.min(numPages, Math.max(1, p + delta)));
   };
 
@@ -205,11 +203,10 @@ export function PDFEditor({ doc, onSave, onClose }: {
     if (f && actif) { f.remove(actif); f.requestRenderAll(); setDirty(true); }
   };
 
-  // ── Sauvegarde (JSON, PDF reste « vivant ») ──
-  const sauvegarder = async () => {
+  // Sauvegarde mode annotation : couche JSON (PDF reste « vivant »)
+  const sauverAnnotations = async () => {
     flushPage();
-    setSaving(true);
-    setErreur(null);
+    setSaving(true); setErreur(null);
     try {
       const pages: Record<number, unknown> = {};
       for (const [k, v] of Object.entries(pagesRef.current)) {
@@ -219,40 +216,60 @@ export function PDFEditor({ doc, onSave, onClose }: {
       setDirty(false);
     } catch (e: any) {
       setErreur(e?.message ?? 'Erreur lors de la sauvegarde.');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  // ── Export PDF aplati (figé pour impression / envoi) ──
-  const exporterAplati = async () => {
-    flushPage();
-    setExporting(true);
-    setErreur(null);
+  // ════════════════ MODE FORMULAIRE (vrais champs AcroForm) ════════════════
+
+  // saveDocument() de pdf.js bake les valeurs saisies DANS le vrai PDF.
+  const genererPdfRempli = async (): Promise<Blob> => {
+    const bytes = await pdfProxy.current.saveDocument();
+    return new Blob([bytes], { type: 'application/pdf' });
+  };
+
+  const sauverFormulaire = async () => {
+    if (!pdfProxy.current || !onRemplacerFichier) return;
+    setSaving(true); setErreur(null);
     try {
-      if (!fileSource) throw new Error('Document sans fichier source.');
-      const bytes = await fetch(fileSource).then(r => r.arrayBuffer());
-      const pdfDoc = await PDFDocument.load(bytes);
-      const pages = pdfDoc.getPages();
+      const blob = await genererPdfRempli();
+      await onRemplacerFichier(blob);
+      setDirty(false);
+    } catch (e: any) {
+      setErreur(e?.message ?? 'Erreur lors de la sauvegarde.');
+    } finally { setSaving(false); }
+  };
 
-      for (const [k, v] of Object.entries(pagesRef.current)) {
-        const idx = Number(k);
-        if (!v.objects || !v.objects.objects || v.objects.objects.length === 0) continue;
-        if (idx >= pages.length) continue;
+  // ── Sauvegarde / Export selon le mode ──
+  const sauvegarder = () => (mode === 'form' ? sauverFormulaire() : sauverAnnotations());
 
-        const off = new fabric.StaticCanvas(undefined, { width: v.w || 800, height: v.h || 1000 });
-        await off.loadFromJSON(v.objects);
-        off.renderAll();
-        const dataUrl = off.toDataURL({ format: 'png', multiplier: 2 });
-        off.dispose();
-
-        const png = await pdfDoc.embedPng(dataUrl);
-        const page = pages[idx];
-        page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+  const exporter = async () => {
+    setExporting(true); setErreur(null);
+    try {
+      let blob: Blob;
+      if (mode === 'form') {
+        blob = await genererPdfRempli();
+      } else {
+        flushPage();
+        if (!fileSource) throw new Error('Document sans fichier source.');
+        const bytes = await fetch(fileSource).then(r => r.arrayBuffer());
+        const pdfDoc = await PDFDocument.load(bytes);
+        const pages = pdfDoc.getPages();
+        for (const [k, v] of Object.entries(pagesRef.current)) {
+          const idx = Number(k);
+          if (!v.objects || !v.objects.objects || v.objects.objects.length === 0) continue;
+          if (idx >= pages.length) continue;
+          const off = new fabric.StaticCanvas(undefined, { width: v.w || 800, height: v.h || 1000 });
+          await off.loadFromJSON(v.objects);
+          off.renderAll();
+          const dataUrl = off.toDataURL({ format: 'png', multiplier: 2 });
+          off.dispose();
+          const png = await pdfDoc.embedPng(dataUrl);
+          const page = pages[idx];
+          page.drawImage(png, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+        }
+        const out = await pdfDoc.save();
+        blob = new Blob([out], { type: 'application/pdf' });
       }
-
-      const out = await pdfDoc.save();
-      const blob = new Blob([out], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -261,9 +278,7 @@ export function PDFEditor({ doc, onSave, onClose }: {
       URL.revokeObjectURL(url);
     } catch (e: any) {
       setErreur(e?.message ?? "Erreur lors de l'export.");
-    } finally {
-      setExporting(false);
-    }
+    } finally { setExporting(false); }
   };
 
   const fermer = () => {
@@ -281,40 +296,51 @@ export function PDFEditor({ doc, onSave, onClose }: {
           <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nom}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button onClick={exporterAplati} disabled={exporting} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #4b5563', background: 'transparent', color: 'white', fontSize: 13, fontWeight: 600, cursor: exporting ? 'wait' : 'pointer' }}>
+          <button onClick={exporter} disabled={exporting || mode === 'detecting'} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #4b5563', background: 'transparent', color: 'white', fontSize: 13, fontWeight: 600, cursor: exporting ? 'wait' : 'pointer' }}>
             {exporting ? '⏳…' : '⬇️ Exporter PDF'}
           </button>
-          <button onClick={sauvegarder} disabled={saving} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: dirty ? '#22c55e' : '#16a34a', color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+          <button onClick={sauvegarder} disabled={saving || mode === 'detecting'} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: dirty ? '#22c55e' : '#16a34a', color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
             {saving ? '⏳…' : dirty ? '💾 Sauvegarder' : '✓ Sauvegardé'}
           </button>
         </div>
       </div>
 
-      {/* Barre d'outils */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#1f2937', borderBottom: '1px solid #374151', flexWrap: 'wrap' }}>
-        {OUTILS.map(o => (
-          <button key={o.id}
-            onClick={() => { if (o.id === 'sign') { setShowSign(true); } else { setOutil(o.id); } }}
-            style={{
-              padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              border: outil === o.id ? '2px solid #3b82f6' : '1px solid #4b5563',
-              background: outil === o.id ? '#1e3a8a' : '#374151', color: 'white',
-            }}>
-            {o.emoji} {o.label}
+      {/* Barre d'outils — selon le mode */}
+      {mode === 'annot' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#1f2937', borderBottom: '1px solid #374151', flexWrap: 'wrap' }}>
+          {OUTILS.map(o => (
+            <button key={o.id}
+              onClick={() => { if (o.id === 'sign') { setShowSign(true); } else { setOutil(o.id); } }}
+              style={{
+                padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: outil === o.id ? '2px solid #3b82f6' : '1px solid #4b5563',
+                background: outil === o.id ? '#1e3a8a' : '#374151', color: 'white',
+              }}>
+              {o.emoji} {o.label}
+            </button>
+          ))}
+          <div style={{ width: 1, height: 24, background: '#4b5563', margin: '0 4px' }} />
+          <button onClick={supprimerActif} style={{ padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid #7f1d1d', background: '#374151', color: '#fca5a5' }}>
+            🗑 Supprimer
           </button>
-        ))}
-        <div style={{ width: 1, height: 24, background: '#4b5563', margin: '0 4px' }} />
-        <button onClick={supprimerActif} style={{ padding: '7px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid #7f1d1d', background: '#374151', color: '#fca5a5' }}>
-          🗑 Supprimer
-        </button>
-      </div>
+        </div>
+      )}
+      {mode === 'form' && (
+        <div style={{ padding: '8px 14px', background: '#1f2937', borderBottom: '1px solid #374151', fontSize: 12, color: '#93c5fd' }}>
+          ✏️ Formulaire détecté — remplis les champs et coche les cases directement dans le PDF, puis <strong>Sauvegarder</strong>.
+        </div>
+      )}
 
       {erreur && (
         <div style={{ padding: '8px 14px', background: '#7f1d1d', color: '#fecaca', fontSize: 12 }}>⚠️ {erreur}</div>
       )}
 
-      {/* Zone PDF + overlay */}
-      <div ref={wrapRef} style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}>
+      {/* Zone PDF */}
+      <div
+        ref={wrapRef}
+        onInput={() => { if (mode === 'form') setDirty(true); }}
+        style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}
+      >
         {!fileSource ? (
           <div style={{ color: '#fecaca', maxWidth: 460, textAlign: 'center', padding: 40, alignSelf: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
@@ -328,23 +354,28 @@ export function PDFEditor({ doc, onSave, onClose }: {
           <div style={{ position: 'relative', width: containerW, height: 'fit-content' }}>
             <Document
               file={fileSource}
-              onLoadSuccess={({ numPages }) => { setNumPages(numPages); setChargement(false); }}
+              onLoadSuccess={onDocLoad}
               onLoadError={(e) => { setErreur('Impossible de charger le PDF : ' + e.message); setChargement(false); }}
               loading={<div style={{ color: 'white', padding: 40 }}>⏳ Chargement du PDF…</div>}
             >
-              <Page
-                key={pageNum}
-                pageNumber={pageNum}
-                width={containerW}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                onRenderSuccess={onPageRendu}
-              />
+              {mode !== 'detecting' && (
+                <Page
+                  key={pageNum}
+                  pageNumber={pageNum}
+                  width={containerW}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={mode === 'form'}
+                  renderForms={mode === 'form'}
+                  onRenderSuccess={mode === 'annot' ? onPageRendu : undefined}
+                />
+              )}
             </Document>
-            {/* Canvas d'annotation par-dessus la page */}
-            <div style={{ position: 'absolute', top: 0, left: 0 }}>
-              <canvas ref={overlayRef} />
-            </div>
+            {/* Canvas d'annotation (uniquement mode annotation) */}
+            {mode === 'annot' && (
+              <div style={{ position: 'absolute', top: 0, left: 0 }}>
+                <canvas ref={overlayRef} />
+              </div>
+            )}
           </div>
         )}
       </div>
