@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useMoteurs } from '../contexts/MoteurContext';
 import { supabase } from '../lib/supabase';
-import { ENGINE_ETAPES, ENGINE_SLOTS, getEngineSlot, getEngineEtape } from '../data/engineStations';
+import { ENGINE_ETAPES, ENGINE_SLOTS, getEngineSlot, getEngineEtape, AFFICHER_EMPLACEMENT_MOTEUR } from '../data/engineStations';
 import { etapeEnCoursMoteur, prochaineEtapeMoteur, etapesRestantesMoteur, progressionMoteur } from '../types/engineTypes';
 import type { Moteur, ProprietaireMoteur, StatutMoteur } from '../types/engineTypes';
 import { WizardMoteur } from './WizardMoteur';
@@ -400,12 +400,14 @@ export function VueMoteurs({ mobile = false, onClose }: { mobile?: boolean; onCl
               <SelectMini label="Année" value={filtreAnnee} onChange={setFiltreAnnee}
                 options={[['tous', 'Toutes'], ...valeursDistinctes.annees.map(a => [String(a), String(a)] as [string, string])]} />
             )}
-            <SelectMini label="Emplacement" value={filtreSlot} onChange={setFiltreSlot}
-              options={[
-                ['tous', 'Tous'],
-                ['aucun', 'Aucun (à placer)'],
-                ...ENGINE_SLOTS.map(s => [s.id, s.label] as [string, string]),
-              ]} />
+            {AFFICHER_EMPLACEMENT_MOTEUR && (
+              <SelectMini label="Emplacement" value={filtreSlot} onChange={setFiltreSlot}
+                options={[
+                  ['tous', 'Tous'],
+                  ['aucun', 'Aucun (à placer)'],
+                  ...ENGINE_SLOTS.map(s => [s.id, s.label] as [string, string]),
+                ]} />
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>HP :</span>
               <input type="number" value={hpMin} onChange={e => setHpMin(e.target.value)} placeholder="min"
@@ -667,14 +669,16 @@ function CarteMoteur({ m, onClick, mobile, selected, employeIdHighlight }: {
             </div>
 
             {/* Emplacement */}
-            <div style={{ minWidth: 140 }}>
-              <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
-                Emplacement
+            {AFFICHER_EMPLACEMENT_MOTEUR && (
+              <div style={{ minWidth: 140 }}>
+                <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                  Emplacement
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: slot ? COULEUR_MOTEUR : '#9ca3af' }}>
+                  {slot ? `📍 ${slot.label}` : '— Aucun'}
+                </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: slot ? COULEUR_MOTEUR : '#9ca3af' }}>
-                {slot ? `📍 ${slot.label}` : '— Aucun'}
-              </div>
-            </div>
+            )}
           </div>
         </>
       )}
@@ -688,7 +692,7 @@ function CarteMoteur({ m, onClick, mobile, selected, employeIdHighlight }: {
               {etapeMeta.icon}
             </div>
           )}
-          {slot && (
+          {AFFICHER_EMPLACEMENT_MOTEUR && slot && (
             <div style={{ fontSize: 9, color: COULEUR_MOTEUR, fontWeight: 700 }}>📍 {slot.label.slice(0, 8)}</div>
           )}
         </div>

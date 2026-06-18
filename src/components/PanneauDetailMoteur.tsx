@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useMoteurs } from '../contexts/MoteurContext';
 import { AuthContext } from '../contexts/AuthContext';
-import { ENGINE_ETAPES, ENGINE_SLOTS, ENGINE_ZONES, getEngineEtape, getEngineSlot } from '../data/engineStations';
+import { ENGINE_ETAPES, ENGINE_SLOTS, ENGINE_ZONES, getEngineEtape, getEngineSlot, AFFICHER_EMPLACEMENT_MOTEUR } from '../data/engineStations';
 import { progressionMoteur } from '../types/engineTypes';
 import type { Moteur, ProprietaireMoteur, EtapeMoteur, StatutEtapeMoteur } from '../types/engineTypes';
 import { photoService } from '../services/photoService';
@@ -475,6 +475,7 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
             )}
           </Section>
 
+          {AFFICHER_EMPLACEMENT_MOTEUR && (
           <Section title="Emplacement actuel">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <span style={{ fontSize: 18 }}>📍</span>
@@ -510,6 +511,7 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
               ))}
             </div>
           </Section>
+          )}
 
           {/* Plan de production */}
           <Section title="Plan de production" right={

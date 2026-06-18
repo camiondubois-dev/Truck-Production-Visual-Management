@@ -16,6 +16,13 @@ export const ENGINE_ETAPES = [
 
 export type EngineEtapeId = typeof ENGINE_ETAPES[number]['id'];
 
+/**
+ * Affichage de l'emplacement physique (slots) — MASQUÉ pour l'instant.
+ * Le concept d'emplacement sera retravaillé plus tard ; mettre à `true`
+ * pour le réactiver (fiche détail + filtres + cartes du tableau).
+ */
+export const AFFICHER_EMPLACEMENT_MOTEUR = false;
+
 /** Zones physiques regroupant les slots. */
 export const ENGINE_ZONES = [
   { id: 'demarrage',        label: 'Démarrage',         color: '#f97316' },
