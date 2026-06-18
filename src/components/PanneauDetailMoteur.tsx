@@ -522,20 +522,30 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {moteur.roadMap.map((etape) => (
-                <EtapeCard key={etape.id} etape={etape}
-                  employes={employes}
-                  estAssigning={etapeAssign === etape.id}
-                  employeChoisi={employeChoisi}
-                  setEmployeChoisi={setEmployeChoisi}
-                  onAssign={() => setEtapeAssign(etape.id)}
-                  onCancelAssign={() => { setEtapeAssign(null); setEmployeChoisi(''); }}
-                  onDemarrer={() => handleDemarrerEtape(etape.id)}
-                  onTerminer={() => terminerEtape(moteur.id, etape.id)}
-                  onSauter={() => sauterEtape(moteur.id, etape.id)}
-                  onReplanifier={() => replanifierEtape(moteur.id, etape.id)}
-                />
-              ))}
+              {moteur.roadMap.map((etape) => {
+                if (etape.etapeId === 'prep-web' || etape.etapeId === 'validation-web') {
+                  return (
+                    <CheckboxEtapeWeb key={etape.id} etape={etape}
+                      onCocher={() => terminerEtape(moteur.id, etape.id)}
+                      onDecocher={() => replanifierEtape(moteur.id, etape.id)}
+                    />
+                  );
+                }
+                return (
+                  <EtapeCard key={etape.id} etape={etape}
+                    employes={employes}
+                    estAssigning={etapeAssign === etape.id}
+                    employeChoisi={employeChoisi}
+                    setEmployeChoisi={setEmployeChoisi}
+                    onAssign={() => setEtapeAssign(etape.id)}
+                    onCancelAssign={() => { setEtapeAssign(null); setEmployeChoisi(''); }}
+                    onDemarrer={() => handleDemarrerEtape(etape.id)}
+                    onTerminer={() => terminerEtape(moteur.id, etape.id)}
+                    onSauter={() => sauterEtape(moteur.id, etape.id)}
+                    onReplanifier={() => replanifierEtape(moteur.id, etape.id)}
+                  />
+                );
+              })}
             </div>
           </Section>
 
@@ -735,6 +745,51 @@ function EtapeCard({ etape, employes, estAssigning, employeChoisi, setEmployeCho
         {(etape.statut === 'termine' || etape.statut === 'saute') && (
           <button onClick={onReplanifier} style={btnAction('#9ca3af', true)}>↩ Re-planifier</button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Case à cocher étapes web ─────────────────────────────────────
+function CheckboxEtapeWeb({ etape, onCocher, onDecocher }: {
+  etape: EtapeMoteur;
+  onCocher: () => void;
+  onDecocher: () => void;
+}) {
+  const meta = getEngineEtape(etape.etapeId);
+  if (!meta) return null;
+  const fait = etape.statut === 'termine';
+
+  return (
+    <div
+      onClick={() => fait ? onDecocher() : onCocher()}
+      style={{
+        border: `1px solid ${fait ? '#86efac' : '#e5e7eb'}`,
+        borderRadius: 8,
+        padding: '10px 14px',
+        background: fait ? '#f0fdf4' : '#f8fafc',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        cursor: 'pointer',
+        userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: 18 }}>{meta.icon}</span>
+      <span style={{ fontSize: 14, fontWeight: 700, color: '#111827', flex: 1 }}>{meta.label}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
+        background: fait ? '#dcfce7' : '#f3f4f6',
+        color: fait ? '#166534' : '#6b7280',
+        textTransform: 'uppercase',
+      }}>#{etape.ordre}</span>
+      <div style={{
+        width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+        border: `2px solid ${fait ? '#22c55e' : '#d1d5db'}`,
+        background: fait ? '#22c55e' : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'all 0.15s',
+      }}>
+        {fait && <span style={{ color: 'white', fontSize: 14, lineHeight: 1 }}>✓</span>}
       </div>
     </div>
   );
