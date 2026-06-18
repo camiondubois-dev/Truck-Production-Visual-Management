@@ -1,0 +1,26 @@
+-- ════════════════════════════════════════════════════════════════
+-- Module Moteurs — Remise à zéro des étapes (passage aux 8 nouvelles étapes)
+--
+-- Le catalogue d'étapes est passé de 6 → 8 (a-faire, accessoires, demarrage,
+-- reparation, redemarrage, lavage-peinture, prep-web, validation-web).
+-- Les anciens road_map (accessoire-demancher, moteur-demarrer, etc.) ne
+-- correspondent plus → ils ne s'affichent plus. L'équipe va refaire les moteurs.
+--
+-- Option A (recommandée) : supprimer/recréer les moteurs de test via l'app
+-- (bouton 🗑 dans la fiche moteur), puis les recréer avec le wizard (8 étapes).
+--
+-- Option B : remise à zéro en lot ci-dessous (vide le plan de production de
+-- TOUS les moteurs pour qu'ils repartent propres). Décommenter pour exécuter.
+-- ════════════════════════════════════════════════════════════════
+
+-- UPDATE prod_moteurs
+-- SET road_map       = '[]'::jsonb,
+--     statut         = 'en-attente',
+--     poste_courant  = NULL,
+--     employe_courant = NULL,
+--     date_entree    = NULL,
+--     date_sortie    = NULL,
+--     updated_at     = now();
+
+-- Option C : tout supprimer (⚠️ destructif — uniquement si données 100% de test).
+-- DELETE FROM prod_moteurs;
