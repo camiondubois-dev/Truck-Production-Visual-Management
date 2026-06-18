@@ -42,6 +42,7 @@ interface FormAjout {
   descriptionTravaux: string;
   clientAcheteur: string;
   notes: string;
+  prixAchat: string;
   clientId?: string;
   email?: string;
 }
@@ -52,6 +53,7 @@ const FORM_DEFAUT: FormAjout = {
   nomClient: '', telephone: '', vehicule: '',
   descriptionTravail: '', descriptionTravaux: '',
   clientAcheteur: '', notes: '',
+  prixAchat: '',
   clientId: undefined, email: '',
 };
 
@@ -99,6 +101,7 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
       await ajouterClient(nouveauClient);
       clientIdFinal = nouveauClient.id;
     }
+    const prixAchatNum = parseFloat(form.prixAchat.replace(/\s/g, '').replace(/,/g, '.'));
     const nouveau: VehiculeInventaire = {
       id: generateVehId(), statut: 'disponible', dateImport: new Date().toISOString(),
       numero: form.numero.trim(), type: form.type,
@@ -108,6 +111,7 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
       nomClient: form.nomClient || undefined, telephone: form.telephone || undefined,
       vehicule: form.vehicule || undefined, descriptionTravail: form.descriptionTravail || undefined,
       descriptionTravaux: form.descriptionTravaux || undefined,
+      prixAchat: !isNaN(prixAchatNum) && prixAchatNum > 0 ? prixAchatNum : undefined,
     };
     onAjouter(nouveau);
     onClose();
@@ -192,6 +196,11 @@ function ModalAjoutInventaire({ onAjouter, onClose }: {
                   <textarea value={form.descriptionTravaux} onChange={e => setF({ descriptionTravaux: e.target.value })} placeholder="Ex: Vérifier les coulisses d'huile..." rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
                 </div>
               )}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>💰 Prix d'achat réel</label>
+                <input type="text" value={form.prixAchat} onChange={e => setF({ prixAchat: e.target.value })} placeholder="65 000" style={inputStyle} />
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Montant payé pour le camion — référence permanente dans la fiche</div>
+              </div>
             </>
           )}
           {form.type === 'client' && (

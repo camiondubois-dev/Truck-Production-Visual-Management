@@ -185,6 +185,11 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const [montantDepotInput, setMontantDepotInput] = useState('');
   const [modeDepotInput, setModeDepotInput]       = useState('');
   const [savingDepot, setSavingDepot]             = useState(false);
+  // Prix d'achat — affichage + édition inline
+  const [prixAchatLocal, setPrixAchatLocal]     = useState<number | undefined>(v.prixAchat);
+  const [editingPrixAchat, setEditingPrixAchat] = useState(false);
+  const [prixAchatInput, setPrixAchatInput]     = useState('');
+  const [savingPrixAchat, setSavingPrixAchat]   = useState(false);
 
   const typeColor = v.type === 'eau' ? '#f97316' : v.type === 'client' ? '#3b82f6' : '#22c55e';
   const isGestion = session?.role === 'gestion' || session?.role === 'admin';
@@ -220,6 +225,20 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
   const toggleAsap         = (val: boolean)                                       => updateChamp('livraison_asap',  val);
   const setLavageEtat      = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('lavage_etat',     val);
   const setRetoucheEtat    = (val: 'pas-requis' | 'a-faire' | 'fait')             => updateChamp('retouche_etat',   val);
+
+  const sauverPrixAchat = async () => {
+    const val = parseFloat(prixAchatInput.replace(/\s/g, '').replace(/,/g, '.'));
+    if (isNaN(val) || val <= 0) return;
+    setSavingPrixAchat(true);
+    try {
+      await updateChamp('prix_achat_reel', val);
+      setPrixAchatLocal(val);
+      setEditingPrixAchat(false);
+      setPrixAchatInput('');
+    } finally {
+      setSavingPrixAchat(false);
+    }
+  };
   const togglePaiementComplet = (val: boolean) => updateChamp('paiement_complet', val);
   const togglePaiementPo      = (val: boolean) => updateChamp('paiement_po',      val);
 
@@ -462,6 +481,49 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
               </label>
             )}
           </div>
+
+          {/* ── Prix d'achat réel ──────────────── */}
+          {(v.type === 'eau' || v.type === 'detail') && (
+            <div style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: '#fefce8', border: '1px solid #fde68a' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                💰 Prix d'achat réel
+              </div>
+              {!editingPrixAchat ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: prixAchatLocal ? '#111827' : '#9ca3af' }}>
+                    {prixAchatLocal
+                      ? new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(prixAchatLocal)
+                      : 'Non renseigné'}
+                  </div>
+                  {isGestion && (
+                    <button
+                      onClick={() => { setPrixAchatInput(prixAchatLocal ? String(Math.round(prixAchatLocal)) : ''); setEditingPrixAchat(true); }}
+                      style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #fde68a', background: 'white', color: '#92400e', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      ✏️ Modifier
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text" value={prixAchatInput} autoFocus
+                    onChange={e => setPrixAchatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') sauverPrixAchat(); if (e.key === 'Escape') setEditingPrixAchat(false); }}
+                    placeholder="65000"
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #fde68a', fontSize: 14, fontWeight: 600, outline: 'none' }}
+                  />
+                  <button onClick={sauverPrixAchat} disabled={savingPrixAchat}
+                    style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#f59e0b', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    {savingPrixAchat ? '…' : '✓'}
+                  </button>
+                  <button onClick={() => setEditingPrixAchat(false)}
+                    style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Bandeau financier (gestion only) ─── */}
           {isGestion && finData && (
