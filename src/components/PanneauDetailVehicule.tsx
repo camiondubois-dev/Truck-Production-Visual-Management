@@ -882,12 +882,8 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
                 )}
                 <button onClick={() => setDocAEditer(doc)}
                   style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #16a34a', background: '#16a34a', color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                  ✏️ Remplir
+                  ✏️ Ouvrir
                 </button>
-                <a href={doc.url ?? (doc.base64 ? (doc.base64.startsWith('data:') ? doc.base64 : `data:application/pdf;base64,${doc.base64}`) : '#')} target="_blank" rel="noopener noreferrer"
-                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0, textDecoration: 'none' }}>
-                  👁 Voir
-                </a>
                 <button onClick={() => supprimerDocumentVehicule(v.id, doc.id)}
                   style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
                   🗑

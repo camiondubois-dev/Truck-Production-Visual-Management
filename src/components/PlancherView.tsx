@@ -1260,6 +1260,11 @@ function SlotCardSimple({ slot, item, accentColor, onSlotClick, isOptional, onOp
               }
             </div>
           )}
+          {item.inventaireId && (
+            <span style={{ flexShrink: 0, display: 'inline-flex', marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
+              <DocumentsVehicule vehiculeId={item.inventaireId} variant="badge" vide={null} />
+            </span>
+          )}
         </>
       ) : (
         <span style={{ fontSize: 'clamp(9px, 0.85vw, 11px)', color: 'rgba(255,255,255,0.18)', marginTop: 'auto' }}>
