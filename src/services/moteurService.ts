@@ -23,6 +23,9 @@ export function fromDB(row: any): Moteur {
     nomClient: row.nom_client ?? undefined,
     etatCommercial: row.etat_commercial ?? undefined,
     notes: row.notes ?? undefined,
+    millage: row.millage ?? undefined,
+    infoWeb: row.info_web ?? undefined,
+    lienWeb: row.lien_web ?? undefined,
     photoUrl: row.photo_url ?? undefined,
     statut: (row.statut ?? 'en-attente') as StatutMoteur,
     posteCourant: row.poste_courant ?? undefined,
@@ -66,6 +69,9 @@ function toDB(m: Partial<Moteur>): any {
   if (m.nomClient         !== undefined) out.nom_client          = m.nomClient ?? null;
   if (m.etatCommercial    !== undefined) out.etat_commercial     = m.etatCommercial ?? null;
   if (m.notes             !== undefined) out.notes               = m.notes ?? null;
+  if (m.millage           !== undefined) out.millage             = m.millage ?? null;
+  if (m.infoWeb           !== undefined) out.info_web            = m.infoWeb ?? null;
+  if (m.lienWeb           !== undefined) out.lien_web            = m.lienWeb ?? null;
   if (m.photoUrl          !== undefined) out.photo_url           = m.photoUrl ?? null;
   if (m.statut            !== undefined) out.statut              = m.statut;
   if (m.posteCourant      !== undefined) out.poste_courant       = m.posteCourant ?? null;

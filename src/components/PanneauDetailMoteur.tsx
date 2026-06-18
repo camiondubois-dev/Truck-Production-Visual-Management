@@ -31,6 +31,13 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const [etatCommercial, setEtatCommercial] = useState(moteur.etatCommercial ?? '');
   const [notes, setNotes] = useState(moteur.notes ?? '');
 
+  // Préparation site Web (étape 7)
+  const [millage, setMillage] = useState(moteur.millage ? String(moteur.millage) : '');
+  const [infoWeb, setInfoWeb] = useState(moteur.infoWeb ?? '');
+  const [lienWeb, setLienWeb] = useState(moteur.lienWeb ?? '');
+  const [savingWeb, setSavingWeb] = useState(false);
+  const [webSauve, setWebSauve] = useState(false);
+
   const [employes, setEmployes] = useState<ProfileLite[]>([]);
   const [employeChoisi, setEmployeChoisi] = useState<string>('');
   const [etapeAssign, setEtapeAssign] = useState<string | null>(null);
@@ -116,6 +123,24 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     setNotes(moteur.notes ?? '');
     setEditing(false);
     setErreur(null);
+  };
+
+  const saveWeb = async () => {
+    setSavingWeb(true);
+    setErreur(null);
+    try {
+      await mettreAJour(moteur.id, {
+        millage: millage.trim() ? parseInt(millage.replace(/[^\d]/g, '')) : undefined,
+        infoWeb: infoWeb.trim() || undefined,
+        lienWeb: lienWeb.trim() || undefined,
+      });
+      setWebSauve(true);
+      setTimeout(() => setWebSauve(false), 2000);
+    } catch (e: any) {
+      setErreur(String(e?.message ?? e));
+    } finally {
+      setSavingWeb(false);
+    }
   };
 
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -447,6 +472,45 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
               ))}
             </div>
           </Section>
+
+          {/* Préparation site Web — visible si l'étape web fait partie du plan */}
+          {moteur.roadMap.some(e => e.etapeId === 'prep-web' || e.etapeId === 'validation-web') && (
+            <Section title="🌐 Préparation site Web" right={
+              <span style={{ fontSize: 11, color: webSauve ? '#16a34a' : '#9ca3af' }}>
+                {webSauve ? '✓ Sauvé' : (savingWeb ? '⏳…' : '')}
+              </span>
+            }>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Millage</div>
+                  <input type="text" inputMode="numeric" value={millage}
+                    onChange={e => setMillage(e.target.value)}
+                    placeholder="ex. 450 000" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Description / notes web</div>
+                  <textarea value={infoWeb} onChange={e => setInfoWeb(e.target.value)}
+                    placeholder="Description de l'annonce, état, particularités à publier…"
+                    rows={4} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Lien de l'annonce</div>
+                  <input type="url" value={lienWeb} onChange={e => setLienWeb(e.target.value)}
+                    placeholder="https://…" style={inputStyle} />
+                  {moteur.lienWeb && (
+                    <a href={moteur.lienWeb} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-block', marginTop: 6, fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
+                      🔗 Ouvrir l'annonce publiée
+                    </a>
+                  )}
+                </div>
+                <button onClick={saveWeb} disabled={savingWeb}
+                  style={{ padding: '10px', borderRadius: 8, border: 'none', background: '#ec4899', color: 'white', fontWeight: 700, fontSize: 13, cursor: savingWeb ? 'wait' : 'pointer' }}>
+                  {savingWeb ? '⏳ Sauvegarde…' : '💾 Sauvegarder les infos web'}
+                </button>
+              </div>
+            </Section>
+          )}
 
           {/* Tracking temps */}
           <Section title="Suivi temps">

@@ -43,6 +43,11 @@ export interface Moteur {
   etatCommercial?: string;    // libre 'VENDU URGENT', etc.
   notes?: string;
 
+  // Préparation site Web (étape 7)
+  millage?: number;           // kilométrage/millage du moteur
+  infoWeb?: string;           // description / notes de l'annonce
+  lienWeb?: string;           // URL de l'annonce publiée (sert à l'étape 8)
+
   // Média
   photoUrl?: string;
 
