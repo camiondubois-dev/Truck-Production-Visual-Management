@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useGarage } from '../hooks/useGarage';
 import { useInventaire } from '../contexts/InventaireContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -1093,7 +1094,7 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
         )}
       </div>
 
-      {docAEditer && (
+      {docAEditer && createPortal(
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15 }}>⏳ Chargement de l'éditeur…</div>}>
           <PDFEditor
             doc={docAEditer}
@@ -1107,7 +1108,8 @@ export function PanneauDetailVehicule({ vehicule: v, item, onClose }: {
             }}
             onClose={() => setDocAEditer(null)}
           />
-        </Suspense>
+        </Suspense>,
+        document.body
       )}
 
     </>

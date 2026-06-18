@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Document, Page } from 'react-pdf';
 import * as fabric from 'fabric';
 import { PDFDocument } from 'pdf-lib';
@@ -308,7 +309,9 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
   };
 
   // ─────────────────────────────────────────────────────────────
-  return (
+  // Portail vers <body> : l'éditeur s'affiche TOUJOURS en plein écran, même
+  // ouvert depuis une carte/un panneau ayant un transform (sinon piégé dedans).
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, height: '100dvh', zIndex: 2500, background: '#1f2937', display: 'flex', flexDirection: 'column', overscrollBehavior: 'contain' }}>
       {/* Barre supérieure — paddingTop = sous l'encoche/barre d'état iPhone (safe-area) */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', background: '#111827', borderBottom: '1px solid #374151', gap: 10, flexWrap: 'wrap' }}>
@@ -459,6 +462,7 @@ export function PDFEditor({ doc, onSave, onRemplacerFichier, onClose }: {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

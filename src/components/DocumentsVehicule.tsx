@@ -35,7 +35,7 @@ export function DocumentsVehicule({ vehiculeId, variant = 'badge', vide }: {
     else setPicker(true);
   };
 
-  const editeur = docAEditer && v && (
+  const editeur = docAEditer && v && createPortal(
     <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>⏳ Chargement de l'éditeur…</div>}>
       <PDFEditor
         doc={docAEditer}
@@ -49,7 +49,8 @@ export function DocumentsVehicule({ vehiculeId, variant = 'badge', vide }: {
         }}
         onClose={() => setDocAEditer(null)}
       />
-    </Suspense>
+    </Suspense>,
+    document.body
   );
 
   const pickerModal = picker && createPortal(
