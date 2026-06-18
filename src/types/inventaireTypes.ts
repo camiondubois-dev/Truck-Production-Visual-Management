@@ -18,8 +18,9 @@ export interface DocumentVehicule {
   nom:          string;   // nom original du fichier
   taille:       string;   // ex: "1.2 MB"
   dateUpload:   string;   // ISO
-  url:          string;   // URL publique Supabase Storage
-  storagePath:  string;   // chemin dans le bucket (pour supprimer)
+  url?:         string;   // URL publique Supabase Storage (format actuel)
+  storagePath?: string;   // chemin dans le bucket (pour supprimer)
+  base64?:      string;   // ⚠️ ancien format (data URL) — encore lisible, plus produit
   annotations?: DocumentAnnotations; // couche d'annotations remodifiable
 }
 

@@ -46,6 +46,13 @@ export function PDFEditor({ doc, onSave, onClose }: {
   outilRef.current = outil;
   const pageIdx = pageNum - 1;
 
+  // Source du PDF : URL Supabase (format actuel) OU base64 (ancien format encore lisible).
+  const fileSource = doc.url
+    ? doc.url
+    : doc.base64
+      ? (doc.base64.startsWith('data:') ? doc.base64 : `data:application/pdf;base64,${doc.base64}`)
+      : null;
+
   // ── Mesure de la largeur disponible (responsive tablette/mobile) ──
   useEffect(() => {
     const maj = () => {
@@ -223,7 +230,8 @@ export function PDFEditor({ doc, onSave, onClose }: {
     setExporting(true);
     setErreur(null);
     try {
-      const bytes = await fetch(doc.url).then(r => r.arrayBuffer());
+      if (!fileSource) throw new Error('Document sans fichier source.');
+      const bytes = await fetch(fileSource).then(r => r.arrayBuffer());
       const pdfDoc = await PDFDocument.load(bytes);
       const pages = pdfDoc.getPages();
 
@@ -307,27 +315,38 @@ export function PDFEditor({ doc, onSave, onClose }: {
 
       {/* Zone PDF + overlay */}
       <div ref={wrapRef} style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', padding: 16 }}>
-        <div style={{ position: 'relative', width: containerW, height: 'fit-content' }}>
-          <Document
-            file={doc.url}
-            onLoadSuccess={({ numPages }) => { setNumPages(numPages); setChargement(false); }}
-            onLoadError={(e) => { setErreur('Impossible de charger le PDF : ' + e.message); setChargement(false); }}
-            loading={<div style={{ color: 'white', padding: 40 }}>⏳ Chargement du PDF…</div>}
-          >
-            <Page
-              key={pageNum}
-              pageNumber={pageNum}
-              width={containerW}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-              onRenderSuccess={onPageRendu}
-            />
-          </Document>
-          {/* Canvas d'annotation par-dessus la page */}
-          <div style={{ position: 'absolute', top: 0, left: 0 }}>
-            <canvas ref={overlayRef} />
+        {!fileSource ? (
+          <div style={{ color: '#fecaca', maxWidth: 460, textAlign: 'center', padding: 40, alignSelf: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Ce document n'a pas de fichier lisible</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+              Il a probablement été ajouté avant la mise à jour du stockage des PDF.
+              Supprime-le et ré-importe-le pour pouvoir le remplir.
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ position: 'relative', width: containerW, height: 'fit-content' }}>
+            <Document
+              file={fileSource}
+              onLoadSuccess={({ numPages }) => { setNumPages(numPages); setChargement(false); }}
+              onLoadError={(e) => { setErreur('Impossible de charger le PDF : ' + e.message); setChargement(false); }}
+              loading={<div style={{ color: 'white', padding: 40 }}>⏳ Chargement du PDF…</div>}
+            >
+              <Page
+                key={pageNum}
+                pageNumber={pageNum}
+                width={containerW}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                onRenderSuccess={onPageRendu}
+              />
+            </Document>
+            {/* Canvas d'annotation par-dessus la page */}
+            <div style={{ position: 'absolute', top: 0, left: 0 }}>
+              <canvas ref={overlayRef} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation pages */}
@@ -346,7 +365,7 @@ export function PDFEditor({ doc, onSave, onClose }: {
         />
       )}
 
-      {chargement && !erreur && (
+      {chargement && !erreur && fileSource && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', pointerEvents: 'none' }}>⏳ Chargement…</div>
       )}
     </div>
