@@ -13,10 +13,19 @@ export function fromDB(row: any): Moteur {
     marque: row.marque ?? undefined,
     modele: row.modele ?? undefined,
     serie: row.serie ?? undefined,
+    esn: row.esn ?? undefined,
+    cpl: row.cpl ?? undefined,
     annee: row.annee ?? undefined,
+    cylindree: row.cylindree ?? undefined,
+    configuration: row.configuration ?? undefined,
     epa: row.epa ?? undefined,
     ghg: row.ghg ?? undefined,
     puissanceHp: row.puissance_hp ?? undefined,
+    coupleLbFt: row.couple_lb_ft ?? undefined,
+    rpm: row.rpm ?? undefined,
+    heures: row.heures ?? undefined,
+    conditionMoteur: row.condition_moteur ?? undefined,
+    freinMoteur: row.frein_moteur ?? undefined,
     codeMoteur: row.code_moteur ?? undefined,
     descriptionMoteur: row.description_moteur ?? undefined,
     proprietaire: (row.proprietaire ?? 'interne') as ProprietaireMoteur,
@@ -59,10 +68,19 @@ function toDB(m: Partial<Moteur>): any {
   if (m.marque            !== undefined) out.marque               = m.marque ?? null;
   if (m.modele            !== undefined) out.modele               = m.modele ?? null;
   if (m.serie             !== undefined) out.serie                = m.serie ?? null;
+  if (m.esn               !== undefined) out.esn                  = m.esn ?? null;
+  if (m.cpl               !== undefined) out.cpl                  = m.cpl ?? null;
   if (m.annee             !== undefined) out.annee                = m.annee ?? null;
+  if (m.cylindree         !== undefined) out.cylindree            = m.cylindree ?? null;
+  if (m.configuration     !== undefined) out.configuration        = m.configuration ?? null;
   if (m.epa               !== undefined) out.epa                  = m.epa ?? null;
   if (m.ghg               !== undefined) out.ghg                  = m.ghg ?? null;
   if (m.puissanceHp       !== undefined) out.puissance_hp         = m.puissanceHp ?? null;
+  if (m.coupleLbFt        !== undefined) out.couple_lb_ft         = m.coupleLbFt ?? null;
+  if (m.rpm               !== undefined) out.rpm                  = m.rpm ?? null;
+  if (m.heures            !== undefined) out.heures               = m.heures ?? null;
+  if (m.conditionMoteur   !== undefined) out.condition_moteur     = m.conditionMoteur ?? null;
+  if (m.freinMoteur       !== undefined) out.frein_moteur         = m.freinMoteur ?? null;
   if (m.codeMoteur        !== undefined) out.code_moteur          = m.codeMoteur ?? null;
   if (m.descriptionMoteur !== undefined) out.description_moteur  = m.descriptionMoteur ?? null;
   if (m.proprietaire      !== undefined) out.proprietaire        = m.proprietaire;

@@ -27,14 +27,23 @@ export interface Moteur {
   stkNumero: string;          // unique, saisi (ex. '35030')
   workOrder?: string;         // unique, saisi (ex. '1-32491')
 
-  // Description (champs structurés)
+  // Description (champs structurés) — TOUS optionnels
   marque?: string;            // ex 'PACCAR', 'CUMMINS', 'DETROIT'
   modele?: string;            // ex 'MX-13', 'ISX', 'DD16'
-  serie?: string;             // ex 'CM2350', 'CM871' (souvent Cummins/Paccar)
+  serie?: string;             // ex 'CM2350', 'CM871' (famille moteur)
+  esn?: string;               // N° de série moteur (Engine Serial Number)
+  cpl?: string;               // CPL / N° d'arrangement (Cummins, etc.)
   annee?: number;             // ex 2000
+  cylindree?: string;         // ex '12.9L', '15L'
+  configuration?: string;     // ex 'L6', 'V8'
   epa?: string;               // ex 'EPA10', 'EPA13', 'EPA17'
   ghg?: string;               // ex 'GHG17' (surtout Detroit)
   puissanceHp?: number;       // ex 510, 300
+  coupleLbFt?: number;        // couple (lb-pi)
+  rpm?: number;               // régime max
+  heures?: number;            // heures moteur
+  conditionMoteur?: string;   // ex 'Running takeout', 'Rebuild', 'Core', 'Testé'
+  freinMoteur?: string;       // 'oui' | 'non' (frein moteur / Jake)
   codeMoteur?: string;        // ex 'CMK', 'HEP', 'KBC' (codes CAT)
   descriptionMoteur?: string; // texte libre / fallback / auto-généré
 

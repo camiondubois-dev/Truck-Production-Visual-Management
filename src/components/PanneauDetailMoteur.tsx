@@ -21,10 +21,19 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
   const [marque, setMarque] = useState(moteur.marque ?? '');
   const [modele, setModele] = useState(moteur.modele ?? '');
   const [serie, setSerie] = useState(moteur.serie ?? '');
+  const [esn, setEsn] = useState(moteur.esn ?? '');
+  const [cpl, setCpl] = useState(moteur.cpl ?? '');
   const [annee, setAnnee] = useState(moteur.annee ? String(moteur.annee) : '');
+  const [cylindree, setCylindree] = useState(moteur.cylindree ?? '');
+  const [configuration, setConfiguration] = useState(moteur.configuration ?? '');
   const [epa, setEpa] = useState(moteur.epa ?? '');
   const [ghg, setGhg] = useState(moteur.ghg ?? '');
   const [puissanceHp, setPuissanceHp] = useState(moteur.puissanceHp ? String(moteur.puissanceHp) : '');
+  const [coupleLbFt, setCoupleLbFt] = useState(moteur.coupleLbFt ? String(moteur.coupleLbFt) : '');
+  const [rpm, setRpm] = useState(moteur.rpm ? String(moteur.rpm) : '');
+  const [heures, setHeures] = useState(moteur.heures ? String(moteur.heures) : '');
+  const [conditionMoteur, setConditionMoteur] = useState(moteur.conditionMoteur ?? '');
+  const [freinMoteur, setFreinMoteur] = useState(moteur.freinMoteur ?? '');
   const [codeMoteur, setCodeMoteur] = useState(moteur.codeMoteur ?? '');
   const [proprietaire, setProprietaire] = useState<ProprietaireMoteur>(moteur.proprietaire);
   const [nomClient, setNomClient] = useState(moteur.nomClient ?? '');
@@ -83,16 +92,27 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
         codeMoteur.trim() ? `(${codeMoteur.trim()})` : '',
       ].filter(Boolean);
 
+      const num = (s: string) => s.trim() ? parseInt(s.replace(/[^\d]/g, '')) : undefined;
       await mettreAJour(moteur.id, {
         stkNumero: stkNumero.trim(),
         workOrder: workOrder.trim() || undefined,
         marque: marque.trim() ? marque.trim().toUpperCase() : undefined,
         modele: modele.trim() || undefined,
         serie: serie.trim() || undefined,
+        esn: esn.trim() || undefined,
+        cpl: cpl.trim() || undefined,
         annee: annee.trim() ? parseInt(annee.trim()) : undefined,
+        cylindree: cylindree.trim() || undefined,
+        configuration: configuration.trim() || undefined,
         epa: epa.trim() ? epa.trim().toUpperCase() : undefined,
         ghg: ghg.trim() ? ghg.trim().toUpperCase() : undefined,
-        puissanceHp: puissanceHp.trim() ? parseInt(puissanceHp.trim()) : undefined,
+        puissanceHp: num(puissanceHp),
+        coupleLbFt: num(coupleLbFt),
+        rpm: num(rpm),
+        heures: num(heures),
+        millage: num(millage),
+        conditionMoteur: conditionMoteur.trim() || undefined,
+        freinMoteur: freinMoteur || undefined,
         codeMoteur: codeMoteur.trim() || undefined,
         descriptionMoteur: descParts.join(' ') || undefined,
         proprietaire,
@@ -112,10 +132,20 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     setMarque(moteur.marque ?? '');
     setModele(moteur.modele ?? '');
     setSerie(moteur.serie ?? '');
+    setEsn(moteur.esn ?? '');
+    setCpl(moteur.cpl ?? '');
     setAnnee(moteur.annee ? String(moteur.annee) : '');
+    setCylindree(moteur.cylindree ?? '');
+    setConfiguration(moteur.configuration ?? '');
     setEpa(moteur.epa ?? '');
     setGhg(moteur.ghg ?? '');
     setPuissanceHp(moteur.puissanceHp ? String(moteur.puissanceHp) : '');
+    setCoupleLbFt(moteur.coupleLbFt ? String(moteur.coupleLbFt) : '');
+    setRpm(moteur.rpm ? String(moteur.rpm) : '');
+    setHeures(moteur.heures ? String(moteur.heures) : '');
+    setMillage(moteur.millage ? String(moteur.millage) : '');
+    setConditionMoteur(moteur.conditionMoteur ?? '');
+    setFreinMoteur(moteur.freinMoteur ?? '');
     setCodeMoteur(moteur.codeMoteur ?? '');
     setProprietaire(moteur.proprietaire);
     setNomClient(moteur.nomClient ?? '');
@@ -130,7 +160,6 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
     setErreur(null);
     try {
       await mettreAJour(moteur.id, {
-        millage: millage.trim() ? parseInt(millage.replace(/[^\d]/g, '')) : undefined,
         infoWeb: infoWeb.trim() || undefined,
         lienWeb: lienWeb.trim() || undefined,
       });
@@ -293,10 +322,20 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
                 <KV label="Marque" value={moteur.marque ?? '—'} />
                 <KV label="Modèle" value={moteur.modele ?? '—'} />
                 <KV label="Série" value={moteur.serie ?? '—'} />
+                <KV label="N° série (ESN)" value={moteur.esn ?? '—'} />
+                <KV label="CPL / Arr." value={moteur.cpl ?? '—'} />
                 <KV label="Année" value={moteur.annee ? String(moteur.annee) : '—'} />
+                <KV label="Cylindrée" value={moteur.cylindree ?? '—'} />
+                <KV label="Config." value={moteur.configuration ?? '—'} />
                 <KV label="EPA" value={moteur.epa ?? '—'} />
                 <KV label="GHG" value={moteur.ghg ?? '—'} />
                 <KV label="Force" value={moteur.puissanceHp ? `${moteur.puissanceHp} HP` : '—'} />
+                <KV label="Couple" value={moteur.coupleLbFt ? `${moteur.coupleLbFt} lb-pi` : '—'} />
+                <KV label="RPM" value={moteur.rpm ? String(moteur.rpm) : '—'} />
+                <KV label="Millage" value={moteur.millage ? `${moteur.millage.toLocaleString('fr-CA')}` : '—'} />
+                <KV label="Heures" value={moteur.heures ? `${moteur.heures.toLocaleString('fr-CA')} h` : '—'} />
+                <KV label="Condition" value={moteur.conditionMoteur ?? '—'} />
+                <KV label="Frein moteur" value={moteur.freinMoteur ? (moteur.freinMoteur === 'oui' ? 'Oui' : 'Non') : '—'} />
                 <KV label="Code" value={moteur.codeMoteur ?? '—'} />
                 <KV label="Propriétaire" value={moteur.proprietaire + (moteur.nomClient ? ` · ${moteur.nomClient}` : '')} />
                 <KV label="État" value={moteur.etatCommercial ?? '—'} />
@@ -316,14 +355,41 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
                   <option value="PACCAR" /><option value="CUMMINS" /><option value="DETROIT" /><option value="CATERPILLAR" /><option value="INTER" /><option value="MACK" /><option value="VOLVO" />
                 </datalist>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <input value={serie} onChange={e => setSerie(e.target.value)} placeholder="Série (CM2350...)" style={inputStyle} />
+                  <input value={serie} onChange={e => setSerie(e.target.value)} placeholder="Série / famille (CM2350...)" style={inputStyle} />
                   <input type="number" value={annee} onChange={e => setAnnee(e.target.value)} placeholder="Année" min={1980} max={2030} style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={esn} onChange={e => setEsn(e.target.value)} placeholder="N° série moteur (ESN)" style={inputStyle} />
+                  <input value={cpl} onChange={e => setCpl(e.target.value)} placeholder="CPL / N° arrangement" style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={cylindree} onChange={e => setCylindree(e.target.value)} placeholder="Cylindrée (ex. 12.9L)" style={inputStyle} />
+                  <input value={configuration} onChange={e => setConfiguration(e.target.value)} placeholder="Config. (ex. L6)" style={inputStyle} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <input value={epa} onChange={e => setEpa(e.target.value)} placeholder="EPA" style={inputStyle} />
                   <input value={ghg} onChange={e => setGhg(e.target.value)} placeholder="GHG" style={inputStyle} />
                   <input type="number" value={puissanceHp} onChange={e => setPuissanceHp(e.target.value)} placeholder="HP" style={inputStyle} />
                 </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input type="number" value={coupleLbFt} onChange={e => setCoupleLbFt(e.target.value)} placeholder="Couple (lb-pi)" style={inputStyle} />
+                  <input type="number" value={rpm} onChange={e => setRpm(e.target.value)} placeholder="RPM" style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input type="text" inputMode="numeric" value={millage} onChange={e => setMillage(e.target.value)} placeholder="Millage" style={inputStyle} />
+                  <input type="text" inputMode="numeric" value={heures} onChange={e => setHeures(e.target.value)} placeholder="Heures" style={inputStyle} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input value={conditionMoteur} onChange={e => setConditionMoteur(e.target.value)} placeholder="Condition (Running takeout...)" list="moteur-conditions" style={inputStyle} />
+                  <select value={freinMoteur} onChange={e => setFreinMoteur(e.target.value)} style={inputStyle}>
+                    <option value="">Frein moteur ?</option>
+                    <option value="oui">Frein moteur : Oui</option>
+                    <option value="non">Frein moteur : Non</option>
+                  </select>
+                </div>
+                <datalist id="moteur-conditions">
+                  <option value="Running takeout" /><option value="Testé" /><option value="Rebuild" /><option value="Core" /><option value="À inspecter" />
+                </datalist>
                 <input value={codeMoteur} onChange={e => setCodeMoteur(e.target.value)} placeholder="Code moteur (CMK, HEP...)" style={inputStyle} />
                 <select value={proprietaire} onChange={e => setProprietaire(e.target.value as ProprietaireMoteur)} style={inputStyle}>
                   <option value="interne">Interne</option>
@@ -481,11 +547,9 @@ export function PanneauDetailMoteur({ moteur, onClose }: { moteur: Moteur; onClo
               </span>
             }>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Millage</div>
-                  <input type="text" inputMode="numeric" value={millage}
-                    onChange={e => setMillage(e.target.value)}
-                    placeholder="ex. 450 000" style={inputStyle} />
+                <div style={{ fontSize: 12, color: '#6b7280', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px' }}>
+                  Millage : <strong>{moteur.millage ? moteur.millage.toLocaleString('fr-CA') : '—'}</strong>
+                  <span style={{ color: '#9ca3af' }}> · modifiable dans Identification</span>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Description / notes web</div>
